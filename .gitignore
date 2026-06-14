@@ -6,3 +6,5 @@ cmake-build-*/
 .vscode/
 .idea/
 dist/
+
+.claude/
