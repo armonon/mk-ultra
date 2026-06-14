@@ -46,6 +46,7 @@ jobs:
         run: ctest --preset ci
 
       - name: Upload plugin artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: MK-Ultra-${{ runner.os }}

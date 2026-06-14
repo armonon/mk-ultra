@@ -38,6 +38,7 @@
     {
       "name": "ci",
       "configurePreset": "ci",
+      "configuration": "Release",
       "output": { "outputOnFailure": true },
       "execution": { "noTestsAction": "error", "stopOnFailure": false }
     }
