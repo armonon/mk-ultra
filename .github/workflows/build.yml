@@ -45,6 +45,29 @@ jobs:
       - name: Test
         run: ctest --preset ci
 
+      # Actually load + exercise the built plugin (instantiate, open/close the
+      # editor, sweep parameters, process audio, save/restore state) on a real
+      # Windows / macOS machine. This is the "does it work in a host" check that
+      # plain compilation can't give us. Runs on the two platforms we ship.
+      - name: Validate plugin (pluginval)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PV_VER=1.0.3
+          VST3="build/ci/plugin/Entropy_artefacts/Release/VST3/MK Ultra.vst3"
+          [ -e "$VST3" ] || VST3="$(find build/ci -name 'MK Ultra.vst3' | head -1)"
+          echo "Validating: $VST3"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            curl -sL -o pv.zip "https://github.com/Tracktion/pluginval/releases/download/v${PV_VER}/pluginval_Windows.zip"
+            7z x -y -opv pv.zip >/dev/null
+            ./pv/pluginval.exe --strictness-level 5 --validate "$VST3"
+          else
+            curl -sL -o pv.zip "https://github.com/Tracktion/pluginval/releases/download/v${PV_VER}/pluginval_macOS.zip"
+            unzip -q pv.zip -d pv
+            ./pv/pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate "$VST3"
+          fi
+
       - name: Upload plugin artifacts
         if: always()
         uses: actions/upload-artifact@v4
