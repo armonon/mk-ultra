@@ -870,15 +870,14 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     setSize (1020, 860);
     updateTabVisibility();
 
-    // macOS 26 (Tahoe) glyph-flip workaround: render via OpenGL to bypass the
-    // broken CoreGraphics text path. Attach last, after children exist and the
-    // size is set. Detached in the destructor. Remove once Apple/JUCE fix lands.
-    // Only do this on Tahoe — forcing an OpenGL-backed editor inside some hosts'
-    // plugin wrappers on older macOS (e.g. FL Studio's AU wrapper on Catalina)
-    // crashes with an access violation during "Insert effect plugin".
+    // macOS render workaround: drive the editor through OpenGL to bypass the
+    // broken native CoreGraphics path inside some hosts' plugin wrappers (FL
+    // Studio etc.). Without it the layout renders scrambled / glyphs flip.
+    // Attach last, after children exist and the size is set; detached in the dtor.
+    // (The earlier Catalina "access violation on insert" was NOT this — it was the
+    // missing CMAKE_OSX_DEPLOYMENT_TARGET stamping minos=26, now fixed in CMake.)
    #if JUCE_MAC
-    if (juce::SystemStats::getOperatingSystemType() >= juce::SystemStats::MacOS_26)
-        openGLContext.attachTo (*this);
+    openGLContext.attachTo (*this);
    #endif
 
     startTimerHz (60); // drive the modulation rings + scopes (smoother readouts)
