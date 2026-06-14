@@ -178,7 +178,11 @@ void BiohazardLookAndFeel::drawDiamondFace (juce::Graphics& g, juce::Rectangle<f
     const juce::Colour mid   { 0xffd4e4f7 };  // lit facet
     const juce::Colour bright { 0xffffffff };  // specular white
 
-    juce::Graphics::ScopedSaveState save (g);
+    // Manual save/restore (paired with g.restoreState() below, before the rim is
+    // drawn unclipped). Do NOT use ScopedSaveState here: it would auto-restore a
+    // SECOND time at method exit, underflowing the graphics-state stack. Harmless
+    // on CoreGraphics but a hard crash under Direct2D (Windows).
+    g.saveState();
     juce::Path clip;
     clip.addEllipse (bounds);
     g.reduceClipRegion (clip);
