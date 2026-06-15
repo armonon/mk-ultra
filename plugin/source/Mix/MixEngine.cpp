@@ -140,22 +140,27 @@ void MixEngine::prepare (double sampleRate, int samplesPerBlock, int numChannels
 void MixEngine::updateEq (const Params& params)
 {
     using Coeffs = juce::dsp::IIR::Coefficients<float>;
-    if (params.eqLow != lastEqLow)
+    auto changed = [] (float a, float b)
+    {
+        return std::abs (a - b) > 1.0e-6f;
+    };
+
+    if (changed (params.eqLow, lastEqLow))
     {
         *eqLowShelf.state = *Coeffs::makeLowShelf (sampleRateHz, 150.0f, 0.7f, juce::Decibels::decibelsToGain (params.eqLow));
         lastEqLow = params.eqLow;
     }
-    if (params.eqMid != lastEqMid)
+    if (changed (params.eqMid, lastEqMid))
     {
         *eqMidPeak.state = *Coeffs::makePeakFilter (sampleRateHz, 1000.0f, 0.8f, juce::Decibels::decibelsToGain (params.eqMid));
         lastEqMid = params.eqMid;
     }
-    if (params.eqHigh != lastEqHigh)
+    if (changed (params.eqHigh, lastEqHigh))
     {
         *eqHighShelf.state = *Coeffs::makeHighShelf (sampleRateHz, 5000.0f, 0.7f, juce::Decibels::decibelsToGain (params.eqHigh));
         lastEqHigh = params.eqHigh;
     }
-    if (params.eqLoFi != lastEqLoFi)
+    if (changed (params.eqLoFi, lastEqLoFi))
     {
         // 0 = transparent (cutoff above audible), 1 = heavily band-limited (~1.2 kHz).
         const float cutoff = juce::jmap (params.eqLoFi, 0.0f, 1.0f, 18000.0f, 1200.0f);
