@@ -1,0 +1,10 @@
+build/
+build-*/
+cmake-build-*/
+*.user
+.DS_Store
+.vscode/
+.idea/
+dist/
+
+.claude/
