@@ -74,8 +74,16 @@ void GranularEngine::spawnGrain()
 {
     // Find a free voice.
     Grain* slot = nullptr;
+    int activeCount = 0;
+    const int activeLimit = maxActiveGrains.load();
     for (auto& g : grains)
-        if (! g.active) { slot = &g; break; }
+    {
+        if (g.active)
+            ++activeCount;
+        else if (slot == nullptr)
+            slot = &g;
+    }
+    if (activeCount >= activeLimit) return;
     if (slot == nullptr) return; // pool exhausted; drop the grain
 
     const bool  isFrozen = frozen.load();

@@ -26,13 +26,13 @@ void EntropyEngine::addParameters (juce::AudioProcessorValueTreeState::Parameter
 {
     using namespace juce;
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { pid::frozen, 1 },      "Freeze", false));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::grainSize, 1 },   "Grain Size", NormalisableRange<float> (10.0f, 400.0f, 1.0f), 120.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::density, 1 },     "Density", NormalisableRange<float> (2.0f, 80.0f, 1.0f), 28.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::pitch, 1 },       "Pitch", NormalisableRange<float> (-24.0f, 24.0f, 1.0f), 0.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::spray, 1 },       "Spray", NormalisableRange<float> (0.0f, 300.0f, 1.0f), 30.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::grainSize, 1 },   "Grain Size", NormalisableRange<float> (1.0f, 2000.0f, 1.0f), 120.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::density, 1 },     "Density", NormalisableRange<float> (2.0f, 300.0f, 1.0f), 28.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::pitch, 1 },       "Pitch", NormalisableRange<float> (-60.0f, 60.0f, 1.0f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::spray, 1 },       "Spray", NormalisableRange<float> (0.0f, 4000.0f, 1.0f), 30.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::spread, 1 },      "Stereo Spread", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.4f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::position, 1 },    "Position", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::pitchJitter, 1 }, "Pitch Jitter", NormalisableRange<float> (0.0f, 12.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::pitchJitter, 1 }, "Pitch Jitter", NormalisableRange<float> (0.0f, 48.0f, 0.1f), 0.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::reverbMix, 1 },   "Reverb Mix", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.25f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::output, 1 },      "Output", NormalisableRange<float> (0.0f, 1.5f, 0.01f), 0.75f));
 
@@ -103,14 +103,23 @@ void EntropyEngine::process (juce::AudioBuffer<float>& buffer, const Params& par
     granular.setPosition (params.position);
     granular.setPitchJitter (params.pitchJitter);
     granular.setOutputGain (params.output);
+    granular.setMaxActiveGrains (params.maxGrains);
     granular.setVelocity (params.velocity);
     granular.setVelocityToAmp (params.velToAmp);
     granular.process (buffer);
 
-    spectral.setFrozen (params.spectralFreeze);
-    spectral.setMix (params.spectralMix);
-    spectral.setShimmer (params.spectralShimmer);
-    spectral.process (buffer);
+    if (params.spectralMix > 0.001f)
+    {
+        spectral.setFrozen (params.spectralFreeze);
+        spectral.setMix (params.spectralMix);
+        spectral.setShimmer (params.spectralShimmer);
+        spectral.process (buffer);
+    }
+    else
+    {
+        spectral.setFrozen (false);
+        spectral.setMix (0.0f);
+    }
 
     if (params.reverbMix > 0.001f)
     {

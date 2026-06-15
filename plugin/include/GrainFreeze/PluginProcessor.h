@@ -13,6 +13,13 @@
 #include "GrainFreeze/Randomizer.h"
 #include "GrainFreeze/SampleFreeze.h"
 
+#ifndef MKULTRA_ENABLE_EXPERIMENTAL_INPUT_TOOLS
+#define MKULTRA_ENABLE_EXPERIMENTAL_INPUT_TOOLS 0
+#endif
+
+inline constexpr bool kMkUltraExperimentalInputTools =
+    MKULTRA_ENABLE_EXPERIMENTAL_INPUT_TOOLS != 0;
+
 class GrainFreezeProcessor : public juce::AudioProcessor,
                              private juce::AudioProcessorValueTreeState::Listener,
                              private juce::AsyncUpdater
@@ -29,8 +36,8 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
 
-    const juce::String getName() const override { return "GrainFreeze"; }
-    bool acceptsMidi() const override  { return true; }
+    const juce::String getName() const override { return "MK-ULTRA"; }
+    bool acceptsMidi() const override  { return kMkUltraExperimentalInputTools; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 4.0; }
@@ -106,7 +113,7 @@ private:
 
     // Returns the parameter's base value with the mod-matrix offset applied,
     // clamped to the parameter's real range.
-    float modulated (gf::ParamId id, const char* paramID);
+    float modulated (gf::ParamId id);
 
     // Copy modulation parameters from the APVTS into the mod-matrix slots.
     void syncModMatrix();
@@ -115,6 +122,170 @@ private:
     // (called at control rate) does no string building or map lookups on the
     // audio thread.
     void cacheModPointers();
+    void cacheParameterPointers();
+
+    struct ControlSnapshot
+    {
+        bool pluginOn = true;
+        bool beautySpaceOn = true;
+        bool textureGrainOn = true;
+        bool identityLossOn = true;
+        bool spectralOn = false;
+        bool pitchFormantOn = false;
+        bool timeBreakerOn = false;
+        bool damageOn = false;
+        bool motionMatrixOn = true;
+        bool analyzerOn = true;
+        bool waveformOn = true;
+        bool modScopeOn = true;
+        bool inputToolsOn = false;
+        bool sampleModeOn = false;
+        bool midiEnabled = false;
+        bool tempoLockOn = false;
+
+        int performanceMode = 1;
+        int maxGrains = 32;
+        int oversamplingMode = 1;
+
+        float identityLoss = 0.0f;
+        float mutationAmount = 0.35f;
+        float beauty = 0.0f;
+        float texture = 0.0f;
+        float space = 0.0f;
+        float motion = 0.0f;
+        float damage = 0.0f;
+        float chaos = 0.0f;
+        float dryWet = 1.0f;
+        float outputLevel = 1.0f;
+    };
+    ControlSnapshot makeControlSnapshot() const;
+
+    struct ParameterPointers
+    {
+        std::atomic<float>* panic = nullptr;
+        std::atomic<float>* pluginOn = nullptr;
+        std::atomic<float>* performanceMode = nullptr;
+        std::atomic<float>* analyzerOn = nullptr;
+        std::atomic<float>* waveformOn = nullptr;
+        std::atomic<float>* modScopeOn = nullptr;
+        std::atomic<float>* ecoUiMode = nullptr;
+        std::atomic<float>* oversamplingMode = nullptr;
+        std::atomic<float>* experimentalInputToolsOn = nullptr;
+
+        std::atomic<float>* beautySpaceOn = nullptr;
+        std::atomic<float>* beautySpaceMix = nullptr;
+        std::atomic<float>* beautySpaceAmount = nullptr;
+        std::atomic<float>* textureGrainOn = nullptr;
+        std::atomic<float>* textureGrainMix = nullptr;
+        std::atomic<float>* textureGrainAmount = nullptr;
+        std::atomic<float>* identityLossOn = nullptr;
+        std::atomic<float>* identityLossMix = nullptr;
+        std::atomic<float>* identityLoss = nullptr;
+        std::atomic<float>* identityLossAmount = nullptr;
+        std::atomic<float>* spectralOn = nullptr;
+        std::atomic<float>* spectralMix = nullptr;
+        std::atomic<float>* spectralAmount = nullptr;
+        std::atomic<float>* pitchFormantOn = nullptr;
+        std::atomic<float>* pitchFormantMix = nullptr;
+        std::atomic<float>* timeBreakerOn = nullptr;
+        std::atomic<float>* timeBreakerMix = nullptr;
+        std::atomic<float>* damageOn = nullptr;
+        std::atomic<float>* damageMix = nullptr;
+        std::atomic<float>* damageAmount = nullptr;
+        std::atomic<float>* motionMatrixOn = nullptr;
+        std::atomic<float>* dryWet = nullptr;
+
+        std::atomic<float>* macroBeauty = nullptr;
+        std::atomic<float>* macroChaos = nullptr;
+        std::atomic<float>* macroGlue = nullptr;
+        std::atomic<float>* macroTexture = nullptr;
+        std::atomic<float>* macroSpace = nullptr;
+        std::atomic<float>* macroMotion = nullptr;
+        std::atomic<float>* macroDamage = nullptr;
+        std::atomic<float>* mutationAmount = nullptr;
+        std::atomic<float>* globalRate = nullptr;
+        std::atomic<float>* globalShape = nullptr;
+        std::atomic<float>* globalModOn = nullptr;
+
+        std::atomic<float>* sampleMode = nullptr;
+        std::atomic<float>* sampleWindow = nullptr;
+        std::atomic<float>* sampleSource = nullptr;
+        std::atomic<float>* sampleLevel = nullptr;
+        std::atomic<float>* midiEnable = nullptr;
+        std::atomic<float>* midiRoot = nullptr;
+        std::atomic<float>* glideTime = nullptr;
+        std::atomic<float>* velToAmp = nullptr;
+
+        std::atomic<float>* frozen = nullptr;
+        std::atomic<float>* specFreeze = nullptr;
+        std::atomic<float>* specMix = nullptr;
+        std::atomic<float>* specShimmer = nullptr;
+        std::atomic<float>* satOn = nullptr;
+        std::atomic<float>* satType = nullptr;
+        std::atomic<float>* satDrive = nullptr;
+        std::atomic<float>* satMix = nullptr;
+
+        std::atomic<float>* prettifierEnabled = nullptr;
+        std::atomic<float>* prettifierInTrim = nullptr;
+        std::atomic<float>* prettifierOutTrim = nullptr;
+        std::atomic<float>* echoOn = nullptr;
+        std::atomic<float>* reverbOn = nullptr;
+        std::atomic<float>* prettyReverbOn = nullptr;
+        std::atomic<float>* prettyReverbSize = nullptr;
+        std::atomic<float>* prettyReverbDamping = nullptr;
+        std::atomic<float>* chorusOn = nullptr;
+        std::atomic<float>* chorusMix = nullptr;
+        std::atomic<float>* beautyOn = nullptr;
+        std::atomic<float>* beautyAir = nullptr;
+        std::atomic<float>* beautyWarmth = nullptr;
+        std::atomic<float>* polishOn = nullptr;
+        std::atomic<float>* polishAir = nullptr;
+        std::atomic<float>* polishWarmth = nullptr;
+        std::atomic<float>* polishHarshnessTame = nullptr;
+        std::atomic<float>* polishMix = nullptr;
+        std::atomic<float>* crushOn = nullptr;
+        std::atomic<float>* crushMix = nullptr;
+        std::atomic<float>* dnaCharacter = nullptr;
+        std::atomic<float>* dnaAge = nullptr;
+        std::atomic<float>* dnaWarmth = nullptr;
+        std::atomic<float>* dnaWidth = nullptr;
+        std::atomic<float>* dnaRandomness = nullptr;
+        std::atomic<float>* dnaAnalog = nullptr;
+        std::atomic<float>* dnaDigital = nullptr;
+        std::atomic<float>* dnaSmoothness = nullptr;
+        std::atomic<float>* dnaMotion = nullptr;
+        std::atomic<float>* dnaShine = nullptr;
+
+        std::atomic<float>* routingMode = nullptr;
+        std::atomic<float>* entropyOn = nullptr;
+        std::atomic<float>* prettifierOn = nullptr;
+        std::atomic<float>* limiterOn = nullptr;
+        std::atomic<float>* mixEqOn = nullptr;
+        std::atomic<float>* pitchMatchOn = nullptr;
+        std::atomic<float>* tempoLockOn = nullptr;
+        std::atomic<float>* dryLevel = nullptr;
+        std::atomic<float>* entropySend = nullptr;
+        std::atomic<float>* entropyReturn = nullptr;
+        std::atomic<float>* prettifierSend = nullptr;
+        std::atomic<float>* prettifierReturn = nullptr;
+        std::atomic<float>* mixOutput = nullptr;
+        std::atomic<float>* chaosBeauty = nullptr;
+        std::atomic<float>* ceilingDb = nullptr;
+        std::atomic<float>* eqLow = nullptr;
+        std::atomic<float>* eqMid = nullptr;
+        std::atomic<float>* eqHigh = nullptr;
+        std::atomic<float>* eqLoFi = nullptr;
+        std::atomic<float>* mixWidth = nullptr;
+        std::atomic<float>* mixGlue = nullptr;
+        std::atomic<float>* pitchLockOn = nullptr;
+        std::atomic<float>* pitchLockMode = nullptr;
+        std::atomic<float>* pitchLockKey = nullptr;
+        std::atomic<float>* pitchLockScale = nullptr;
+        std::atomic<float>* pitchLockAmount = nullptr;
+        std::atomic<float>* pitchLockFormant = nullptr;
+    };
+    ParameterPointers paramPtrs;
+    juce::RangedAudioParameter* panicParameter = nullptr;
     struct ModSlotPtrs
     {
         std::atomic<float>* lfoRate = nullptr; std::atomic<float>* lfoDepth = nullptr;
@@ -124,6 +295,8 @@ private:
         std::atomic<float>* rangeMax = nullptr; std::atomic<float>* skew = nullptr;
     };
     std::array<ModSlotPtrs, (size_t) gf::kNumModParams> modPtrs;
+    std::array<std::atomic<float>*, (size_t) gf::kNumModParams> modTargetPtrs {};
+    std::array<juce::NormalisableRange<float>, (size_t) gf::kNumModParams> modTargetRanges {};
 
     // Latency reporting: the formant-preserving shifter adds lookahead when on.
     void parameterChanged (const juce::String& id, float value) override;

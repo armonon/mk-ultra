@@ -507,14 +507,14 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     undoButton.setTooltip ("Undo last parameter change");
     redoButton.setTooltip ("Redo");
     initButton.setTooltip ("Reset all parameters to their defaults");
-    randomizeAllButton.setTooltip ("Randomize every Entropy + Prettifier parameter at once");
+    randomizeAllButton.setTooltip ("Randomize every Texture / Grain + Beauty & Space parameter at once");
     randomizeAllButton.onClick = [this]
     {
         const int modeIdx  = (int) proc.apvts.getRawParameterValue ("randomMode")->load();
         const float amount = proc.apvts.getRawParameterValue ("mutationAmount")->load();
-        const auto mode    = (gf::Randomizer::Mode) juce::jlimit (0, 10, modeIdx);
+        const auto mode    = (gf::Randomizer::Mode) juce::jlimit (0, (int) gf::Randomizer::Mode::identityLoss, modeIdx);
         proc.undoManager.beginNewTransaction ("Randomize All");
-        // Whole ParamId span = Entropy (grainSize..output) + Prettifier (echoTime..bitCrush).
+        // Whole ParamId span = Texture / Grain (grainSize..output) + Beauty & Space (echoTime..bitCrush).
         proc.randomizer.randomize (mode, amount, (int) gf::ParamId::grainSize, (int) gf::ParamId::bitCrush);
     };
     undoButton.onClick = [this] { proc.undoManager.undo(); };
@@ -537,20 +537,20 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         addKnob (prettyKnobs[(size_t) i], kPrettyDefs[i].id, kPrettyDefs[i].paramID, kPrettyDefs[i].name);
 
     addAndMakeVisible (randomizeButton);
-    randomizeButton.setTooltip ("Randomize this tab's controls (Entropy / Mix / Prettifier independently)");
+    randomizeButton.setTooltip ("Randomize this tab's controls (Transform / Out / Beauty & Space independently)");
     randomizeButton.onClick = [this]
     {
         const int modeIdx = (int) proc.apvts.getRawParameterValue ("randomMode")->load();
         const float amount = proc.apvts.getRawParameterValue ("mutationAmount")->load();
-        const auto mode = (gf::Randomizer::Mode) juce::jlimit (0, 10, modeIdx);
+        const auto mode = (gf::Randomizer::Mode) juce::jlimit (0, (int) gf::Randomizer::Mode::identityLoss, modeIdx);
         proc.undoManager.beginNewTransaction ("Randomize");
 
         // Each tab rolls only its own controls, so the dice are independent.
         if (currentTab == 1)        // Mix console
             proc.randomizer.randomizeMix (amount);
-        else if (currentTab == 2)   // Prettifier knobs
+        else if (currentTab == 2)   // Beauty & Space knobs
             proc.randomizer.randomize (mode, amount, (int) gf::ParamId::echoTime, (int) gf::ParamId::bitCrush);
-        else                        // Entropy knobs
+        else                        // Texture / Grain knobs
             proc.randomizer.randomize (mode, amount, (int) gf::ParamId::grainSize, (int) gf::ParamId::output);
     };
 
@@ -698,7 +698,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     }
     mixCeiling.textFromValueFunction = [] (double v) { return juce::String (v, 1) + " dB"; };
     mixCeiling.updateText();
-    routingMode.addItemList ({ "Parallel", "Entropy->Prettifier", "Prettifier->Entropy", "Multiband" }, 1);
+    routingMode.addItemList ({ "Parallel", "Texture->Beauty", "Beauty->Texture", "Multiband" }, 1);
     addAndMakeVisible (routingMode);
 
     dryLevelAttach = std::make_unique<SliderAttachment> (proc.apvts, "dryLevel", dryLevel);
@@ -713,15 +713,15 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     mixCeilingAttach = std::make_unique<SliderAttachment> (proc.apvts, "ceilingDb", mixCeiling);
     routingModeAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "routingMode", routingMode);
 
-    setupSectionLabel (prettifierHeader, "BEAUTY MACHINES", 14.0f);
+    setupSectionLabel (prettifierHeader, "BEAUTY & SPACE", 14.0f);
 
     setupSectionLabel (mixHeader, "MIX CONSOLE", 14.0f);
     routingLabel.setText ("Routing", juce::dontSendNotification);
     routingLabel.setJustificationType (juce::Justification::centredLeft);
     routingLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
     addAndMakeVisible (routingLabel);
-    const char* mixNames[] = { "Dry", "Ent Send", "Ent Return", "Pret Send",
-                               "Pret Return", "Output", "Chaos <-> Beauty", "Width", "Glue", "Ceiling" };
+    const char* mixNames[] = { "Dry", "Texture Send", "Texture Return", "Beauty Send",
+                               "Beauty Return", "Output", "Chaos <-> Beauty", "Width", "Glue", "Ceiling" };
     for (size_t i = 0; i < mixLabels.size(); ++i)
         setupDialLabel (mixLabels[i], mixNames[i]);
 
@@ -828,7 +828,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         const char* modIds[4] = { "echoOn", "prettyReverbOn", "chorusOn", "crushOn" };
         for (int i = 0; i < 4; ++i)
         {
-            mods[i]->setTooltip ("Enable/disable this Prettifier module");
+            mods[i]->setTooltip ("Enable/disable this Beauty & Space module");
             addAndMakeVisible (*mods[i]);
             moduleAttach[(size_t) i] = std::make_unique<ButtonAttachment> (proc.apvts, modIds[i], *mods[i]);
         }
@@ -1073,6 +1073,7 @@ void GrainFreezeEditor::updateTabVisibility()
     const bool entropyTab = currentTab == 0;
     const bool mixTab = currentTab == 1;
     const bool prettifierTab = currentTab == 2;
+    constexpr bool inputToolsVisible = kMkUltraExperimentalInputTools;
 
     tabEntropy.setToggleState (entropyTab, juce::dontSendNotification);
     tabMix.setToggleState (mixTab, juce::dontSendNotification);
@@ -1110,11 +1111,11 @@ void GrainFreezeEditor::updateTabVisibility()
     specMix.setVisible (entropyTab);
     specShimmer.setVisible (entropyTab);
 
-    midiEnableButton.setVisible (entropyTab);
+    midiEnableButton.setVisible (entropyTab && inputToolsVisible);
     for (auto* c : { &midiRootSlider, &midiGlideSlider, &midiVelAmpSlider })
-        c->setVisible (entropyTab);
+        c->setVisible (entropyTab && inputToolsVisible);
     for (auto* l : { &midiRootLabel, &midiGlideLabel, &midiVelAmpLabel })
-        l->setVisible (entropyTab);
+        l->setVisible (entropyTab && inputToolsVisible);
 
     for (auto* c : { &dryLevel, &entropySend, &entropyReturn, &prettifierSend, &prettifierReturn, &mixOutput, &chaosBeauty, &mixWidth, &mixGlue, &mixCeiling })
         c->setVisible (mixTab);
@@ -1130,14 +1131,14 @@ void GrainFreezeEditor::updateTabVisibility()
                      &pitchMatchOnButton, &tempoLockOnButton })
         c->setVisible (mixTab);
 
-    sampleHeader.setVisible (mixTab);
-    sampleModeButton.setVisible (mixTab);
-    sampleFreezeButton.setVisible (mixTab);
-    sampleSourceBox.setVisible (mixTab);
+    sampleHeader.setVisible (mixTab && inputToolsVisible);
+    sampleModeButton.setVisible (mixTab && inputToolsVisible);
+    sampleFreezeButton.setVisible (mixTab && inputToolsVisible);
+    sampleSourceBox.setVisible (mixTab && inputToolsVisible);
     for (auto* c : { &sampleWindowSlider, &sampleLevelSlider })
-        c->setVisible (mixTab);
+        c->setVisible (mixTab && inputToolsVisible);
     for (auto* l : { &sampleSourceLabel, &sampleWindowLabel, &sampleLevelLabel })
-        l->setVisible (mixTab);
+        l->setVisible (mixTab && inputToolsVisible);
 
     pitchLockHeader.setVisible (false); // cluster now lives on the routing band
     pitchLockButton.setVisible (mixTab);
@@ -1168,7 +1169,7 @@ void GrainFreezeEditor::updateTabVisibility()
         b->setVisible (prettifierTab);
 
     if (keyboard != nullptr)
-        keyboard->setVisible (true);
+        keyboard->setVisible (inputToolsVisible);
 }
 
 void GrainFreezeEditor::paint (juce::Graphics& g)
@@ -1360,6 +1361,7 @@ void GrainFreezeEditor::resized()
 {
     constexpr int pad = 20;
     constexpr int gap = 10;
+    constexpr bool inputToolsVisible = kMkUltraExperimentalInputTools;
     fadeOverlay.setBounds (getLocalBounds());
     auto area = getLocalBounds().reduced (pad);
 
@@ -1373,9 +1375,9 @@ void GrainFreezeEditor::resized()
         b.setBounds (header.removeFromLeft (w).withSizeKeepingCentre (w, tabH));
         header.removeFromLeft (gap);
     };
-    placeTab (tabEntropy, 120);
-    placeTab (tabMix, 96);
-    placeTab (tabPrettifier, 140);
+    placeTab (tabEntropy, 132);
+    placeTab (tabMix, 82);
+    placeTab (tabPrettifier, 184);
 
     area.removeFromTop (gap);
 
@@ -1428,27 +1430,27 @@ void GrainFreezeEditor::resized()
 
     area.removeFromTop (gap + 4);
 
-    // Shared bottom rows on every tab: live waveform + MIDI keyboard.
-    auto keyboardArea = area.removeFromBottom (76);
-    if (currentTab == 0)
+    if (inputToolsVisible)
     {
-        // Entropy: the MIDI play controls sit to the left of the piano roll so
-        // the keyboard and its transpose/glide settings read as one unit.
-        auto midiStrip = keyboardArea.removeFromLeft (372);
-        keyboardArea.removeFromLeft (gap);
-        midiEnableButton.setBounds (midiStrip.removeFromLeft (88).withSizeKeepingCentre (84, 30));
-        auto midiCell = [&] (juce::Slider& s, juce::Label& l)
+        auto keyboardArea = area.removeFromBottom (76);
+        if (currentTab == 0)
         {
-            auto c = midiStrip.removeFromLeft (92).reduced (4, 4);
-            l.setBounds (c.removeFromBottom (16));
-            s.setBounds (c);
-        };
-        midiCell (midiRootSlider, midiRootLabel);
-        midiCell (midiGlideSlider, midiGlideLabel);
-        midiCell (midiVelAmpSlider, midiVelAmpLabel);
+            auto midiStrip = keyboardArea.removeFromLeft (372);
+            keyboardArea.removeFromLeft (gap);
+            midiEnableButton.setBounds (midiStrip.removeFromLeft (88).withSizeKeepingCentre (84, 30));
+            auto midiCell = [&] (juce::Slider& s, juce::Label& l)
+            {
+                auto c = midiStrip.removeFromLeft (92).reduced (4, 4);
+                l.setBounds (c.removeFromBottom (16));
+                s.setBounds (c);
+            };
+            midiCell (midiRootSlider, midiRootLabel);
+            midiCell (midiGlideSlider, midiGlideLabel);
+            midiCell (midiVelAmpSlider, midiVelAmpLabel);
+        }
+        if (keyboard != nullptr)
+            keyboard->setBounds (keyboardArea.reduced (4));
     }
-    if (keyboard != nullptr)
-        keyboard->setBounds (keyboardArea.reduced (4));
 
     auto waveArea = area.removeFromBottom (66);
     if (waveformDisplay != nullptr)
@@ -1564,29 +1566,31 @@ void GrainFreezeEditor::resized()
         topToggles.removeFromLeft (gap);
         tempoLockOnButton.setBounds (topToggles.removeFromLeft (108).reduced (2, 4));
 
-        // Sample Mode strip: toggle, freeze, capture source, window, level.
-        area.removeFromTop (gap);
-        sampleHeader.setBounds (area.removeFromTop (18).reduced (4, 0));
-        area.removeFromTop (2);
-        auto sampleRow = area.removeFromTop (48);
-        sampleModeButton.setBounds (sampleRow.removeFromLeft (130).withSizeKeepingCentre (126, 30));
-        sampleRow.removeFromLeft (gap);
-        sampleFreezeButton.setBounds (sampleRow.removeFromLeft (96).withSizeKeepingCentre (96, 32));
-        sampleRow.removeFromLeft (gap * 2);
+        if (inputToolsVisible)
         {
-            auto c = sampleRow.removeFromLeft (110);
-            sampleSourceLabel.setBounds (c.removeFromTop (14));
-            sampleSourceBox.setBounds (c.withSizeKeepingCentre (106, 28));
+            area.removeFromTop (gap);
+            sampleHeader.setBounds (area.removeFromTop (18).reduced (4, 0));
+            area.removeFromTop (2);
+            auto sampleRow = area.removeFromTop (48);
+            sampleModeButton.setBounds (sampleRow.removeFromLeft (130).withSizeKeepingCentre (126, 30));
+            sampleRow.removeFromLeft (gap);
+            sampleFreezeButton.setBounds (sampleRow.removeFromLeft (96).withSizeKeepingCentre (96, 32));
+            sampleRow.removeFromLeft (gap * 2);
+            {
+                auto c = sampleRow.removeFromLeft (110);
+                sampleSourceLabel.setBounds (c.removeFromTop (14));
+                sampleSourceBox.setBounds (c.withSizeKeepingCentre (106, 28));
+            }
+            sampleRow.removeFromLeft (gap);
+            auto sampleKnob = [&] (juce::Slider& s, juce::Label& l)
+            {
+                auto c = sampleRow.removeFromLeft (80);
+                l.setBounds (c.removeFromBottom (14));
+                s.setBounds (c.reduced (2, 0));
+            };
+            sampleKnob (sampleWindowSlider, sampleWindowLabel);
+            sampleKnob (sampleLevelSlider, sampleLevelLabel);
         }
-        sampleRow.removeFromLeft (gap);
-        auto sampleKnob = [&] (juce::Slider& s, juce::Label& l)
-        {
-            auto c = sampleRow.removeFromLeft (80);
-            l.setBounds (c.removeFromBottom (14));
-            s.setBounds (c.reduced (2, 0));
-        };
-        sampleKnob (sampleWindowSlider, sampleWindowLabel);
-        sampleKnob (sampleLevelSlider, sampleLevelLabel);
 
         area.removeFromTop (gap + 6);
         const int dialW = juce::jmax (84, area.getWidth() / 10);

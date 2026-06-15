@@ -55,21 +55,21 @@ void MixEngine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayo
 {
     using namespace juce;
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "pluginOn", 1 }, "Plugin On", true));
-    layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "entropyOn", 1 }, "Entropy On", true));
-    layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "prettifierOn", 1 }, "Prettifier On", true));
+    layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "entropyOn", 1 }, "Texture / Grain On", true));
+    layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "prettifierOn", 1 }, "Beauty & Space On", true));
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "mixEqOn", 1 }, "Mix EQ On", true));
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "pitchMatchOn", 1 }, "Pitch Match On", false));
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "tempoLockOn", 1 }, "Tempo Lock On", false));
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "limiterOn", 1 }, "Limiter On", true));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "dryLevel", 1 }, "Dry Level", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "entropySend", 1 }, "Entropy Send", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 1.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "entropyReturn", 1 }, "Entropy Return", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 1.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierSend", 1 }, "Prettifier Send", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 1.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierReturn", 1 }, "Prettifier Return", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 1.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "entropySend", 1 }, "Texture / Grain Send", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 1.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "entropyReturn", 1 }, "Texture / Grain Return", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 1.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierSend", 1 }, "Beauty & Space Send", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 1.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierReturn", 1 }, "Beauty & Space Return", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 1.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "mixOutput", 1 }, "Output Level", NormalisableRange<float> (0.0f, 2.0f, 0.001f), 1.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "chaosBeauty", 1 }, "Chaos Beauty", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
     layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "routingMode", 1 }, "Routing Mode",
-                                                         StringArray { "Parallel", "Entropy -> Prettifier", "Prettifier -> Entropy", "Multiband" }, 0));
+                                                         StringArray { "Parallel", "Texture / Grain -> Beauty & Space", "Beauty & Space -> Texture / Grain", "Multiband" }, 0));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "ceilingDb", 1 }, "Ceiling",
                                                         NormalisableRange<float> (-20.0f, 0.0f, 0.01f), -0.1f));
     // Mix EQ: 3-band tone shaping + a lo-fi band-limit, all gated by mixEqOn.

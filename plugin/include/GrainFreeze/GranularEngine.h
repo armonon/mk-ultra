@@ -51,6 +51,7 @@ public:
     void setOutputGain  (float n)       { outputGain.store (n); }
     void setVelocity    (float n)       { velocity.store (juce::jlimit (0.0f, 1.0f, n)); }
     void setVelocityToAmp (float n)     { velocityToAmp.store (juce::jlimit (0.0f, 1.0f, n)); }
+    void setMaxActiveGrains (int n)     { maxActiveGrains.store (juce::jlimit (1, kMaxGrains, n)); }
 
     bool isPrepared() const { return prepared; }
 
@@ -58,7 +59,7 @@ private:
     void spawnGrain();
     inline float readInterpolated (int channel, double pos) const;
 
-    static constexpr int kMaxGrains    = 64;
+    static constexpr int kMaxGrains    = 128;
     static constexpr int kWindowPoints = 2048;       // Hann lookup table size
     double captureSeconds              = 4.0;        // length of capture buffer
 
@@ -92,6 +93,7 @@ private:
     std::atomic<float> outputGain  { 0.75f };
     std::atomic<float> velocity    { 1.0f };
     std::atomic<float> velocityToAmp { 0.0f };
+    std::atomic<int>   maxActiveGrains { 32 };
 
     // Frozen snapshot: the read window is locked to where freeze engaged.
     int  frozenAnchor = 0;

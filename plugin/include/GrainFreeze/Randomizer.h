@@ -32,6 +32,7 @@ inline const char* paramIdString (ParamId id)
         case ParamId::beautyAmount:    return "beautyAmount";
         case ParamId::polishWidth:     return "polishWidth";
         case ParamId::bitCrush:        return "crushBits";
+        case ParamId::numParams:       return "";
         default:                   return "";
     }
 }
@@ -44,16 +45,16 @@ inline MusicalRange musicalRange (ParamId id)
 {
     switch (id)
     {
-        case ParamId::grainSize:   return { 40.0f, 250.0f };   // ms
-        case ParamId::density:     return { 12.0f, 60.0f };    // grains/s
-        case ParamId::pitch:       return { -12.0f, 12.0f };   // semis
-        case ParamId::spray:       return { 0.0f, 120.0f };    // ms
+        case ParamId::grainSize:   return { 12.0f, 900.0f };   // ms
+        case ParamId::density:     return { 12.0f, 180.0f };   // grains/s; active voices are performance-capped
+        case ParamId::pitch:       return { -36.0f, 36.0f };   // semis
+        case ParamId::spray:       return { 0.0f, 1600.0f };   // ms
         case ParamId::spread:      return { 0.2f, 0.9f };
         case ParamId::position:    return { 0.0f, 1.0f };
-        case ParamId::pitchJitter: return { 0.0f, 4.0f };      // semis
+        case ParamId::pitchJitter: return { 0.0f, 32.0f };     // semis
         case ParamId::reverbMix:   return { 0.0f, 0.6f };
         case ParamId::output:      return { 0.55f, 0.9f };
-        case ParamId::echoTime:        return { 80.0f, 600.0f }; // ms
+        case ParamId::echoTime:        return { 30.0f, 2400.0f }; // ms
         case ParamId::echoFeedback:    return { 0.1f, 0.6f };
         case ParamId::echoMix:         return { 0.0f, 0.5f };
         case ParamId::prettyReverbMix: return { 0.0f, 0.5f };
@@ -61,7 +62,8 @@ inline MusicalRange musicalRange (ParamId id)
         case ParamId::chorusDepth:     return { 0.0f, 0.6f };
         case ParamId::beautyAmount:    return { 0.0f, 0.6f };
         case ParamId::polishWidth:     return { 0.0f, 0.6f };
-        case ParamId::bitCrush:        return { 6.0f, 16.0f }; // bits
+        case ParamId::bitCrush:        return { 1.0f, 18.0f }; // bits
+        case ParamId::numParams:       return { 0.0f, 1.0f };
         default:                   return { 0.0f, 1.0f };
     }
 }
@@ -81,7 +83,10 @@ public:
         beautiful,
         dream,
         angel,
-        vintage
+        vintage,
+        alien,
+        machine,
+        identityLoss
     };
 
     explicit Randomizer (juce::AudioProcessorValueTreeState& state) : apvts (state) {}
@@ -121,6 +126,13 @@ public:
             else if (mode == Mode::destroyed) r = { r.lo + width * 0.4f, r.hi };
             else if (mode == Mode::beautiful) r = { r.lo + width * 0.2f, r.lo + width * 0.7f };
             else if (mode == Mode::dream || mode == Mode::angel) r = { r.lo + width * 0.15f, r.lo + width * 0.65f };
+            else if (mode == Mode::alien || mode == Mode::machine || mode == Mode::identityLoss)
+            {
+                if (id == ParamId::pitch || id == ParamId::pitchJitter || id == ParamId::spray || id == ParamId::density || id == ParamId::bitCrush)
+                    r = { r.lo + width * 0.65f, r.hi };
+                else
+                    r = { r.lo, r.hi };
+            }
 
             const float current = apvts.getRawParameterValue (paramIdString (id))->load();
             const float candidate = r.lo + rand01() * (r.hi - r.lo);

@@ -206,9 +206,9 @@ private:
     juce::TextButton nextButton      { ">" };
     juce::ComboBox   presetBox;
     juce::TextEditor presetName;
-    juce::TextButton tabEntropy { "ENTROPY" };
-    juce::TextButton tabMix { "MIX" };
-    juce::TextButton tabPrettifier { "PRETTIFIER" };
+    juce::TextButton tabEntropy { "TRANSFORM" };
+    juce::TextButton tabMix { "OUT" };
+    juce::TextButton tabPrettifier { "BEAUTY & SPACE" };
     int currentTab = 0;
     int undoTxnCounter = 0;   // coarse undo-transaction grouping in the timer
     bool sampleReadyShown = false; // tracks the FREEZE button's armed-state tint
@@ -305,8 +305,8 @@ private:
 
     // Global toggles.
     juce::ToggleButton pluginOnButton { "Plugin" };
-    juce::ToggleButton entropyOnButton { "Entropy" };
-    juce::ToggleButton prettifierOnButton { "Prettifier" };
+    juce::ToggleButton entropyOnButton { "Texture / Grain" };
+    juce::ToggleButton prettifierOnButton { "Beauty & Space" };
     juce::ToggleButton limiterOnButton { "Limiter" };
     juce::ToggleButton mixEqOnButton { "EQ" };
     juce::ToggleButton pitchMatchOnButton { "Pitch Match" };

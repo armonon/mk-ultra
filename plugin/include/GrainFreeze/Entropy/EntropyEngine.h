@@ -23,6 +23,7 @@ struct Params
     float position = 0.5f;
     float pitchJitter = 0.0f;
     float output = 0.75f;
+    int maxGrains = 32;
     float velocity = 1.0f;
     float velToAmp = 0.0f;
 

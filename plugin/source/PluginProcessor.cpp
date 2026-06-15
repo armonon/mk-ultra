@@ -2,22 +2,27 @@
 #include "GrainFreeze/PluginEditor.h"
 #include <array>
 
-namespace pid
+namespace
 {
-constexpr auto grainSize = "grainSize";
-constexpr auto density = "density";
-constexpr auto pitch = "pitch";
-constexpr auto spray = "spray";
-constexpr auto spread = "spread";
-constexpr auto position = "position";
-constexpr auto pitchJitter = "pitchJitter";
-constexpr auto reverbMix = "reverbMix";
-constexpr auto output = "output";
+float loadParam (const std::atomic<float>* p, float fallback = 0.0f) noexcept
+{
+    return p != nullptr ? p->load (std::memory_order_relaxed) : fallback;
+}
 
-template <typename T>
-T param (juce::AudioProcessorValueTreeState& apvts, const char* id)
+bool isOn (const std::atomic<float>* p, bool fallback = false) noexcept
 {
-    return (T) apvts.getRawParameterValue (id)->load();
+    return loadParam (p, fallback ? 1.0f : 0.0f) > 0.5f;
+}
+
+int maxGrainsForPerformanceMode (int mode) noexcept
+{
+    switch (juce::jlimit (0, 3, mode))
+    {
+        case 0:  return 16;  // Eco
+        case 2:  return 64;  // Studio
+        case 3:  return 128; // Render
+        default: return 32;  // Live
+    }
 }
 }
 
@@ -29,6 +34,7 @@ GrainFreezeProcessor::GrainFreezeProcessor()
 {
     slotA = apvts.copyState();
     slotB = apvts.copyState();
+    cacheParameterPointers();
     cacheModPointers();
     apvts.addParameterListener ("pitchLockFormant", this);
 }
@@ -38,12 +44,148 @@ GrainFreezeProcessor::~GrainFreezeProcessor()
     apvts.removeParameterListener ("pitchLockFormant", this);
 }
 
+void GrainFreezeProcessor::cacheParameterPointers()
+{
+    auto bind = [this] (std::atomic<float>*& dst, const char* id)
+    {
+        dst = apvts.getRawParameterValue (id);
+        jassert (dst != nullptr);
+    };
+
+    bind (paramPtrs.panic, "panic");
+    bind (paramPtrs.pluginOn, "pluginOn");
+    bind (paramPtrs.performanceMode, "performanceMode");
+    bind (paramPtrs.analyzerOn, "analyzerOn");
+    bind (paramPtrs.waveformOn, "waveformOn");
+    bind (paramPtrs.modScopeOn, "modScopeOn");
+    bind (paramPtrs.ecoUiMode, "ecoUiMode");
+    bind (paramPtrs.oversamplingMode, "oversamplingMode");
+    bind (paramPtrs.experimentalInputToolsOn, "experimentalInputToolsOn");
+
+    bind (paramPtrs.beautySpaceOn, "beautySpaceOn");
+    bind (paramPtrs.beautySpaceMix, "beautySpaceMix");
+    bind (paramPtrs.beautySpaceAmount, "beautySpaceAmount");
+    bind (paramPtrs.textureGrainOn, "textureGrainOn");
+    bind (paramPtrs.textureGrainMix, "textureGrainMix");
+    bind (paramPtrs.textureGrainAmount, "textureGrainAmount");
+    bind (paramPtrs.identityLossOn, "identityLossOn");
+    bind (paramPtrs.identityLossMix, "identityLossMix");
+    bind (paramPtrs.identityLoss, "identityLoss");
+    bind (paramPtrs.identityLossAmount, "identityLossAmount");
+    bind (paramPtrs.spectralOn, "spectralOn");
+    bind (paramPtrs.spectralMix, "spectralMix");
+    bind (paramPtrs.spectralAmount, "spectralAmount");
+    bind (paramPtrs.pitchFormantOn, "pitchFormantOn");
+    bind (paramPtrs.pitchFormantMix, "pitchFormantMix");
+    bind (paramPtrs.timeBreakerOn, "timeBreakerOn");
+    bind (paramPtrs.timeBreakerMix, "timeBreakerMix");
+    bind (paramPtrs.damageOn, "damageOn");
+    bind (paramPtrs.damageMix, "damageMix");
+    bind (paramPtrs.damageAmount, "damageAmount");
+    bind (paramPtrs.motionMatrixOn, "motionMatrixOn");
+    bind (paramPtrs.dryWet, "dryWet");
+
+    bind (paramPtrs.macroBeauty, "macroBeauty");
+    bind (paramPtrs.macroChaos, "macroChaos");
+    bind (paramPtrs.macroGlue, "macroGlue");
+    bind (paramPtrs.macroTexture, "macroTexture");
+    bind (paramPtrs.macroSpace, "macroSpace");
+    bind (paramPtrs.macroMotion, "macroMotion");
+    bind (paramPtrs.macroDamage, "macroDamage");
+    bind (paramPtrs.mutationAmount, "mutationAmount");
+    bind (paramPtrs.globalRate, "globalRate");
+    bind (paramPtrs.globalShape, "globalShape");
+    bind (paramPtrs.globalModOn, "globalModOn");
+
+    bind (paramPtrs.sampleMode, "sampleMode");
+    bind (paramPtrs.sampleWindow, "sampleWindow");
+    bind (paramPtrs.sampleSource, "sampleSource");
+    bind (paramPtrs.sampleLevel, "sampleLevel");
+    bind (paramPtrs.midiEnable, "midiEnable");
+    bind (paramPtrs.midiRoot, "midiRoot");
+    bind (paramPtrs.glideTime, "glideTime");
+    bind (paramPtrs.velToAmp, "velToAmp");
+
+    bind (paramPtrs.frozen, "frozen");
+    bind (paramPtrs.specFreeze, "specFreeze");
+    bind (paramPtrs.specMix, "specMix");
+    bind (paramPtrs.specShimmer, "specShimmer");
+    bind (paramPtrs.satOn, "satOn");
+    bind (paramPtrs.satType, "satType");
+    bind (paramPtrs.satDrive, "satDrive");
+    bind (paramPtrs.satMix, "satMix");
+
+    bind (paramPtrs.prettifierEnabled, "prettifierEnabled");
+    bind (paramPtrs.prettifierInTrim, "prettifierInTrim");
+    bind (paramPtrs.prettifierOutTrim, "prettifierOutTrim");
+    bind (paramPtrs.echoOn, "echoOn");
+    bind (paramPtrs.reverbOn, "reverbOn");
+    bind (paramPtrs.prettyReverbOn, "prettyReverbOn");
+    bind (paramPtrs.prettyReverbSize, "prettyReverbSize");
+    bind (paramPtrs.prettyReverbDamping, "prettyReverbDamping");
+    bind (paramPtrs.chorusOn, "chorusOn");
+    bind (paramPtrs.chorusMix, "chorusMix");
+    bind (paramPtrs.beautyOn, "beautyOn");
+    bind (paramPtrs.beautyAir, "beautyAir");
+    bind (paramPtrs.beautyWarmth, "beautyWarmth");
+    bind (paramPtrs.polishOn, "polishOn");
+    bind (paramPtrs.polishAir, "polishAir");
+    bind (paramPtrs.polishWarmth, "polishWarmth");
+    bind (paramPtrs.polishHarshnessTame, "polishHarshnessTame");
+    bind (paramPtrs.polishMix, "polishMix");
+    bind (paramPtrs.crushOn, "crushOn");
+    bind (paramPtrs.crushMix, "crushMix");
+    bind (paramPtrs.dnaCharacter, "dnaCharacter");
+    bind (paramPtrs.dnaAge, "dnaAge");
+    bind (paramPtrs.dnaWarmth, "dnaWarmth");
+    bind (paramPtrs.dnaWidth, "dnaWidth");
+    bind (paramPtrs.dnaRandomness, "dnaRandomness");
+    bind (paramPtrs.dnaAnalog, "dnaAnalog");
+    bind (paramPtrs.dnaDigital, "dnaDigital");
+    bind (paramPtrs.dnaSmoothness, "dnaSmoothness");
+    bind (paramPtrs.dnaMotion, "dnaMotion");
+    bind (paramPtrs.dnaShine, "dnaShine");
+
+    bind (paramPtrs.routingMode, "routingMode");
+    bind (paramPtrs.entropyOn, "entropyOn");
+    bind (paramPtrs.prettifierOn, "prettifierOn");
+    bind (paramPtrs.limiterOn, "limiterOn");
+    bind (paramPtrs.mixEqOn, "mixEqOn");
+    bind (paramPtrs.pitchMatchOn, "pitchMatchOn");
+    bind (paramPtrs.tempoLockOn, "tempoLockOn");
+    bind (paramPtrs.dryLevel, "dryLevel");
+    bind (paramPtrs.entropySend, "entropySend");
+    bind (paramPtrs.entropyReturn, "entropyReturn");
+    bind (paramPtrs.prettifierSend, "prettifierSend");
+    bind (paramPtrs.prettifierReturn, "prettifierReturn");
+    bind (paramPtrs.mixOutput, "mixOutput");
+    bind (paramPtrs.chaosBeauty, "chaosBeauty");
+    bind (paramPtrs.ceilingDb, "ceilingDb");
+    bind (paramPtrs.eqLow, "eqLow");
+    bind (paramPtrs.eqMid, "eqMid");
+    bind (paramPtrs.eqHigh, "eqHigh");
+    bind (paramPtrs.eqLoFi, "eqLoFi");
+    bind (paramPtrs.mixWidth, "mixWidth");
+    bind (paramPtrs.mixGlue, "mixGlue");
+    bind (paramPtrs.pitchLockOn, "pitchLockOn");
+    bind (paramPtrs.pitchLockMode, "pitchLockMode");
+    bind (paramPtrs.pitchLockKey, "pitchLockKey");
+    bind (paramPtrs.pitchLockScale, "pitchLockScale");
+    bind (paramPtrs.pitchLockAmount, "pitchLockAmount");
+    bind (paramPtrs.pitchLockFormant, "pitchLockFormant");
+
+    panicParameter = apvts.getParameter ("panic");
+    jassert (panicParameter != nullptr);
+}
+
 void GrainFreezeProcessor::cacheModPointers()
 {
     for (int i = 0; i < gf::kNumModParams; ++i)
     {
         const juce::String base (gf::paramIdString ((gf::ParamId) i));
         auto& p = modPtrs[(size_t) i];
+        modTargetPtrs[(size_t) i] = apvts.getRawParameterValue (base);
+        modTargetRanges[(size_t) i] = apvts.getParameterRange (base);
         p.lfoRate   = apvts.getRawParameterValue (base + "_lfoRate");
         p.lfoDepth  = apvts.getRawParameterValue (base + "_lfoDepth");
         p.lfoShape  = apvts.getRawParameterValue (base + "_lfoShape");
@@ -80,6 +222,208 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     gf::entropy::EntropyEngine::addParameters (layout);
     gf::mix::MixEngine::addParameters (layout);
     gf::pretty::PrettifierEngine::addParameters (layout);
+
+    auto addBool = [&layout] (const juce::String& id, const juce::String& name, bool defaultValue)
+    {
+        layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, defaultValue));
+    };
+    auto addFloat = [&layout] (const juce::String& id, const juce::String& name,
+                               NormalisableRange<float> range, float defaultValue)
+    {
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, range, defaultValue));
+    };
+    auto addChoice = [&layout] (const juce::String& id, const juce::String& name,
+                                const StringArray& choices, int defaultIndex)
+    {
+        layout.add (std::make_unique<AudioParameterChoice> (ParameterID { id, 1 }, name, choices, defaultIndex));
+    };
+    auto addInt = [&layout] (const juce::String& id, const juce::String& name,
+                             int minValue, int maxValue, int defaultValue)
+    {
+        layout.add (std::make_unique<AudioParameterInt> (ParameterID { id, 1 }, name, minValue, maxValue, defaultValue));
+    };
+    auto addMachine = [&] (const juce::String& stem, const juce::String& name, bool defaultOn)
+    {
+        addBool  (stem + "On",     name + " On", defaultOn);
+        addFloat (stem + "Mix",    name + " Mix",    NormalisableRange<float> (0.0f, 1.0f, 0.001f), defaultOn ? 1.0f : 0.0f);
+        addFloat (stem + "Amount", name + " Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), defaultOn ? 0.5f : 0.0f);
+        addBool  (stem + "ModOn",  name + " Mod On", true);
+        addBool  (stem + "Lock",   name + " Randomize Lock", false);
+    };
+    auto addModLock = [&] (const juce::String& stem, const juce::String& name)
+    {
+        addBool (stem + "ModOn", name + " Mod On", true);
+        addBool (stem + "Lock",  name + " Randomize Lock", false);
+    };
+
+    addChoice ("performanceMode", "Performance Mode", StringArray { "Eco", "Live", "Studio", "Render" }, 1);
+    addBool ("analyzerOn", "Analyzer On", true);
+    addBool ("waveformOn", "Waveform On", true);
+    addBool ("modScopeOn", "Mod Scope On", true);
+    addBool ("animationsOn", "Animations On", true);
+    addBool ("ecoUiMode", "Eco UI Mode", false);
+    addBool ("experimentalInputToolsOn", "Experimental MIDI / Sample Tools", false);
+    addFloat ("analyzerFps", "Analyzer FPS", NormalisableRange<float> (5.0f, 60.0f, 1.0f), 30.0f);
+    addChoice ("oversamplingMode", "Oversampling Mode", StringArray { "Off", "Auto", "Always" }, 1);
+    addFloat ("dryWet", "Dry/Wet", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
+
+    addMachine ("beautySpace", "Beauty & Space", true);
+    addMachine ("textureGrain", "Texture / Grain", true);
+    addMachine ("identityLoss", "Identity Loss", true);
+    addMachine ("spectral", "Spectral", false);
+    addMachine ("pitchFormant", "Pitch / Formant", false);
+    addMachine ("timeBreaker", "Time Breaker", false);
+    addMachine ("damage", "Damage", false);
+    addMachine ("motionMatrix", "Motion Matrix", true);
+    addFloat ("analyzerScopeMix", "Analyzer / Scopes Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
+    addFloat ("analyzerScopeAmount", "Analyzer / Scopes Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
+    addBool ("analyzerScopeModOn", "Analyzer / Scopes Mod On", true);
+    addBool ("analyzerScopeLock", "Analyzer / Scopes Randomize Lock", false);
+
+    addFloat ("identityLoss", "Identity Loss", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addInt ("mutationSeed", "Mutation Seed", 0, 999999, 0);
+    addChoice ("mutationMode", "Mutation Mode",
+               StringArray { "Beautiful", "Glitch", "Horror", "Alien", "Dream", "Broken", "Machine", "Cinematic", "Identity Loss" }, 0);
+    addBool ("mutationTempoSync", "Mutation Tempo Sync", false);
+    addFloat ("mutationSmoothing", "Mutation Smoothing", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.25f);
+
+    for (const auto& stemAndName : {
+        std::pair<const char*, const char*> { "echo", "Echo" },
+        { "reverb", "Reverb" },
+        { "chorus", "Chorus" },
+        { "beauty", "Beauty" },
+        { "polish", "Polish" },
+    })
+        addModLock (stemAndName.first, stemAndName.second);
+
+    addBool ("grainReverseOn", "Grain Reverse On", false);
+    addFloat ("grainReverseChance", "Grain Reverse Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addChoice ("grainShape", "Grain Shape", StringArray { "Hann", "Tukey", "Gaussian", "Rect", "Ramp", "Random" }, 0);
+    addFloat ("grainSkew", "Grain Skew", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("grainChaos", "Grain Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("grainStartJitter", "Grain Start Jitter", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("grainStretch", "Grain Stretch", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("grainBlur", "Grain Blur", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("grainFeedbackOn", "Grain Feedback On", false);
+    addFloat ("grainFeedback", "Grain Feedback", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("grainFilterOn", "Grain Filter On", false);
+    addChoice ("grainFilterType", "Grain Filter Type", StringArray { "LP", "BP", "HP", "Notch", "Comb" }, 0);
+    addFloat ("grainFilterCutoff", "Grain Filter Cutoff", NormalisableRange<float> (20.0f, 20000.0f, 1.0f, 0.35f), 12000.0f);
+    addFloat ("grainFilterResonance", "Grain Filter Resonance", NormalisableRange<float> (0.1f, 12.0f, 0.001f), 0.7f);
+    addFloat ("grainFilterChaos", "Grain Filter Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("grainDrive", "Grain Drive", NormalisableRange<float> (0.0f, 24.0f, 0.001f), 0.0f);
+    addBool ("grainOctaveCloudOn", "Grain Octave Cloud On", false);
+    addFloat ("grainOctaveCloud", "Grain Octave Cloud", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("grainAmpChaos", "Grain Amp Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    for (const auto& stemAndName : {
+        std::pair<const char*, const char*> { "grainReverse", "Grain Reverse" },
+        { "grainFeedback", "Grain Feedback" },
+        { "grainFilter", "Grain Filter" },
+        { "grainOctaveCloud", "Grain Octave Cloud" },
+        { "grainStretch", "Grain Stretch" },
+    })
+        addModLock (stemAndName.first, stemAndName.second);
+
+    addBool ("spectralWarpOn", "Spectral Warp On", false);
+    addFloat ("spectralWarp", "Spectral Warp", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("spectralSmearOn", "Spectral Smear On", false);
+    addFloat ("spectralSmear", "Spectral Smear", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("spectralTilt", "Spectral Tilt", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("spectralMaskOn", "Spectral Mask On", false);
+    addFloat ("spectralMask", "Spectral Mask", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("spectralShuffleOn", "Spectral Shuffle On", false);
+    addFloat ("spectralShuffle", "Spectral Shuffle", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("spectralPhaseChaos", "Spectral Phase Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("spectralRobot", "Spectral Robot", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("spectralVowel", "Spectral Vowel", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("spectralResonance", "Spectral Resonance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addChoice ("spectralQuality", "Spectral Quality", StringArray { "Eco", "Live", "Studio", "Render" }, 1);
+    for (const auto& stemAndName : {
+        std::pair<const char*, const char*> { "spectralWarp", "Spectral Warp" },
+        { "spectralSmear", "Spectral Smear" },
+        { "spectralShuffle", "Spectral Shuffle" },
+        { "spectralMask", "Spectral Mask" },
+        { "spectralRobot", "Spectral Robot" },
+    })
+        addModLock (stemAndName.first, stemAndName.second);
+
+    addFloat ("pitchSpread", "Pitch Spread", NormalisableRange<float> (0.0f, 48.0f, 0.001f), 0.0f);
+    addBool ("pitchQuantizeOn", "Pitch Quantize On", false);
+    addFloat ("pitchQuantize", "Pitch Quantize", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("pitchRandomOn", "Pitch Random On", false);
+    addFloat ("pitchRandom", "Pitch Random", NormalisableRange<float> (0.0f, 48.0f, 0.001f), 0.0f);
+    addBool ("formantShiftOn", "Formant Shift On", false);
+    addFloat ("formantShift", "Formant Shift", NormalisableRange<float> (-24.0f, 24.0f, 0.001f), 0.0f);
+    addFloat ("formantSmear", "Formant Smear", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("ringModOn", "Ring Mod On", false);
+    addFloat ("ringModFreq", "Ring Mod Frequency", NormalisableRange<float> (0.1f, 8000.0f, 0.001f, 0.35f), 220.0f);
+    addFloat ("ringModMix", "Ring Mod Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("frequencyShiftOn", "Frequency Shift On", false);
+    addFloat ("frequencyShiftHz", "Frequency Shift Hz", NormalisableRange<float> (-5000.0f, 5000.0f, 0.001f), 0.0f);
+    addFloat ("frequencyShiftMix", "Frequency Shift Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("inharmonicity", "Inharmonicity", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    for (const auto& stemAndName : {
+        std::pair<const char*, const char*> { "formantShift", "Formant Shift" },
+        { "ringMod", "Ring Mod" },
+        { "frequencyShift", "Frequency Shift" },
+        { "pitchRandom", "Pitch Random" },
+        { "pitchQuantize", "Pitch Quantize" },
+    })
+        addModLock (stemAndName.first, stemAndName.second);
+
+    addBool ("stutterOn", "Stutter On", false);
+    addFloat ("stutterRate", "Stutter Rate", NormalisableRange<float> (0.25f, 64.0f, 0.001f), 8.0f);
+    addFloat ("stutterSize", "Stutter Size", NormalisableRange<float> (1.0f, 1000.0f, 1.0f), 80.0f);
+    addFloat ("stutterChance", "Stutter Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("gateChance", "Gate Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("reverseChance", "Reverse Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("reverseChanceOn", "Reverse Chance On", false);
+    addFloat ("tapeStopAmount", "Tape Stop Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("tapeStopOn", "Tape Stop On", false);
+    addFloat ("tapeStartAmount", "Tape Start Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("scrubSpeed", "Scrub Speed", NormalisableRange<float> (-4.0f, 4.0f, 0.001f), 1.0f);
+    addFloat ("scrubJitter", "Scrub Jitter", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("bufferJumpOn", "Buffer Jump On", false);
+    addFloat ("bufferJumpChance", "Buffer Jump Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("bufferJumpSize", "Buffer Jump Size", NormalisableRange<float> (1.0f, 4000.0f, 1.0f), 250.0f);
+    addBool ("gateOn", "Gate On", false);
+    for (const auto& stemAndName : {
+        std::pair<const char*, const char*> { "stutter", "Stutter" },
+        { "reverseChance", "Reverse Chance" },
+        { "tapeStop", "Tape Stop" },
+        { "bufferJump", "Buffer Jump" },
+        { "gate", "Gate" },
+    })
+        addModLock (stemAndName.first, stemAndName.second);
+
+    addBool ("bitCrushOn", "Bit Crush On", false);
+    addFloat ("bitDepth", "Bit Depth", NormalisableRange<float> (1.0f, 24.0f, 0.001f), 16.0f);
+    addBool ("sampleRateOn", "Sample Rate On", false);
+    addFloat ("sampleRateHz", "Sample Rate Hz", NormalisableRange<float> (250.0f, 48000.0f, 1.0f, 0.45f), 48000.0f);
+    addFloat ("sampleRateMix", "Sample Rate Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("aliasMix", "Alias Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("wavefoldOn", "Wavefold On", false);
+    addFloat ("wavefoldAmount", "Wavefold Amount", NormalisableRange<float> (0.0f, 24.0f, 0.001f), 0.0f);
+    addFloat ("wavefoldSymmetry", "Wavefold Symmetry", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("rectifyAmount", "Rectify Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("zeroCrossMangle", "Zero Cross Mangle", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("dropoutOn", "Dropout On", false);
+    addFloat ("dropoutChance", "Dropout Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("dropoutLength", "Dropout Length", NormalisableRange<float> (1.0f, 1000.0f, 1.0f), 20.0f);
+    addFloat ("digitalClipping", "Digital Clipping", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat ("speakerBreakup", "Speaker Breakup", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("speakerBreakupOn", "Speaker Breakup On", false);
+    addFloat ("codecCrush", "Codec Crush", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addBool ("codecCrushOn", "Codec Crush On", false);
+    for (const auto& stemAndName : {
+        std::pair<const char*, const char*> { "bitCrush", "Bit Crush" },
+        { "sampleRate", "Sample Rate" },
+        { "wavefold", "Wavefold" },
+        { "dropout", "Dropout" },
+        { "codecCrush", "Codec Crush" },
+        { "speakerBreakup", "Speaker Breakup" },
+    })
+        addModLock (stemAndName.first, stemAndName.second);
 
     // Modulation parameters, per modulatable knob. These live in the APVTS so
     // they are automatable AND captured by the .preset files automatically.
@@ -138,11 +482,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
 
     static constexpr const char* macroIds[] = {
         "macroBeauty", "macroChaos", "macroEmotion", "macroDamage",
-        "macroMotion", "macroSpace", "macroGlue", "macroMorph"
+        "macroMotion", "macroSpace", "macroTexture", "macroGlue", "macroMorph"
     };
     static constexpr const char* macroNames[] = {
         "Macro Beauty", "Macro Chaos", "Macro Emotion", "Macro Damage",
-        "Macro Motion", "Macro Space", "Macro Glue", "Macro Morph"
+        "Macro Motion", "Macro Space", "Macro Texture", "Macro Glue", "Macro Morph"
     };
     for (size_t i = 0; i < std::size (macroIds); ++i)
         layout.add (std::make_unique<AudioParameterFloat> (
@@ -151,7 +495,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
 
     layout.add (std::make_unique<AudioParameterChoice> (
         ParameterID { "randomMode", 1 }, "Random Mode",
-        StringArray { "Subtle", "Musical", "Glitch", "Ambient", "Horror", "Destroyed", "Cinematic", "Beautiful", "Dream", "Angel", "Vintage" }, 1));
+        StringArray { "Subtle", "Musical", "Glitch", "Ambient", "Horror", "Destroyed", "Cinematic", "Beautiful", "Dream", "Angel", "Vintage", "Alien", "Machine", "Identity Loss" }, 1));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "mutationAmount", 1 }, "Mutation Amount",
                                                         NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.35f));
 
@@ -176,7 +520,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     sampleEngine.prepare (sampleRate, getTotalNumOutputChannels());
 
     // Report the formant shifter's lookahead so the host can compensate.
-    formantLatencyActive.store (apvts.getRawParameterValue ("pitchLockFormant")->load() > 0.5f,
+    formantLatencyActive.store (isOn (paramPtrs.pitchLockFormant),
                                 std::memory_order_relaxed);
     setLatencySamples (formantLatencyActive.load (std::memory_order_relaxed)
                        ? gf::FormantShifter::kLatency : 0);
@@ -204,11 +548,67 @@ bool GrainFreezeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
     return layouts.getMainInputChannelSet() == out;
 }
 
-float GrainFreezeProcessor::modulated (gf::ParamId id, const char* paramID)
+GrainFreezeProcessor::ControlSnapshot GrainFreezeProcessor::makeControlSnapshot() const
 {
-    const float base   = apvts.getRawParameterValue (paramID)->load();
+    ControlSnapshot s;
+    s.pluginOn = isOn (paramPtrs.pluginOn, true);
+    s.performanceMode = (int) loadParam (paramPtrs.performanceMode, 1.0f);
+    s.maxGrains = maxGrainsForPerformanceMode (s.performanceMode);
+    s.oversamplingMode = (int) loadParam (paramPtrs.oversamplingMode, 1.0f);
+
+    s.identityLoss = loadParam (paramPtrs.identityLoss, 0.0f);
+    s.mutationAmount = loadParam (paramPtrs.mutationAmount, 0.35f);
+    s.beauty = loadParam (paramPtrs.macroBeauty, 0.0f);
+    s.texture = loadParam (paramPtrs.macroTexture, 0.0f);
+    s.space = loadParam (paramPtrs.macroSpace, 0.0f);
+    s.motion = loadParam (paramPtrs.macroMotion, 0.0f);
+    s.damage = juce::jmax (loadParam (paramPtrs.macroDamage, 0.0f), loadParam (paramPtrs.damageAmount, 0.0f));
+    s.chaos = loadParam (paramPtrs.macroChaos, 0.0f);
+    s.dryWet = loadParam (paramPtrs.dryWet, 1.0f);
+    s.outputLevel = loadParam (paramPtrs.mixOutput, 1.0f);
+
+    const bool ecoUi = isOn (paramPtrs.ecoUiMode);
+    s.analyzerOn = isOn (paramPtrs.analyzerOn, true) && ! ecoUi;
+    s.waveformOn = isOn (paramPtrs.waveformOn, true) && ! ecoUi;
+    s.modScopeOn = isOn (paramPtrs.modScopeOn, true) && ! ecoUi;
+    s.motionMatrixOn = isOn (paramPtrs.motionMatrixOn, true);
+    s.inputToolsOn = kMkUltraExperimentalInputTools || isOn (paramPtrs.experimentalInputToolsOn);
+    s.sampleModeOn = s.inputToolsOn && isOn (paramPtrs.sampleMode);
+    s.midiEnabled = s.inputToolsOn && isOn (paramPtrs.midiEnable);
+    s.tempoLockOn = isOn (paramPtrs.tempoLockOn);
+
+    const bool oldBeautyOn = isOn (paramPtrs.prettifierOn, true) && isOn (paramPtrs.prettifierEnabled, true);
+    const bool oldTextureOn = isOn (paramPtrs.entropyOn, true);
+    const bool identityActive = isOn (paramPtrs.identityLossOn, true)
+                             && loadParam (paramPtrs.identityLossMix, 1.0f) > 0.001f
+                             && s.identityLoss > 0.001f;
+
+    s.beautySpaceOn = oldBeautyOn
+                   && isOn (paramPtrs.beautySpaceOn, true)
+                   && loadParam (paramPtrs.beautySpaceMix, 1.0f) > 0.001f;
+    s.textureGrainOn = (oldTextureOn
+                    && isOn (paramPtrs.textureGrainOn, true)
+                    && loadParam (paramPtrs.textureGrainMix, 1.0f) > 0.001f)
+                    || identityActive;
+    s.identityLossOn = identityActive;
+    s.spectralOn = isOn (paramPtrs.spectralOn)
+                && loadParam (paramPtrs.spectralMix, 0.0f) > 0.001f;
+    s.pitchFormantOn = isOn (paramPtrs.pitchFormantOn)
+                    && loadParam (paramPtrs.pitchFormantMix, 0.0f) > 0.001f;
+    s.timeBreakerOn = isOn (paramPtrs.timeBreakerOn)
+                   && loadParam (paramPtrs.timeBreakerMix, 0.0f) > 0.001f;
+    s.damageOn = isOn (paramPtrs.damageOn)
+              && loadParam (paramPtrs.damageMix, 0.0f) > 0.001f;
+
+    return s;
+}
+
+float GrainFreezeProcessor::modulated (gf::ParamId id)
+{
+    const auto idx = (size_t) id;
+    const float base = loadParam (modTargetPtrs[idx]);
     const float offset = modMatrix.getOffset (id);            // -1..1
-    const auto& range  = apvts.getParameterRange (paramID);
+    const auto& range  = modTargetRanges[idx];
     const float span   = range.end - range.start;
 
     float value = base + offset * span * 0.5f;
@@ -240,45 +640,61 @@ void GrainFreezeProcessor::syncModMatrix()
         s.rangeMax.store  (p.rangeMax->load());
         s.skew.store      (p.skew->load());
     }
-    modMatrix.setGlobalRate    (apvts.getRawParameterValue ("globalRate")->load());
-    modMatrix.setGlobalShape   ((int) apvts.getRawParameterValue ("globalShape")->load());
-    modMatrix.setGlobalEnabled (apvts.getRawParameterValue ("globalModOn")->load() > 0.5f);
+    modMatrix.setGlobalRate    (loadParam (paramPtrs.globalRate, 0.5f));
+    modMatrix.setGlobalShape   ((int) loadParam (paramPtrs.globalShape, 0.0f));
+    modMatrix.setGlobalEnabled (isOn (paramPtrs.globalModOn, true));
 }
 
 void GrainFreezeProcessor::pullParameters()
 {
     using PI = gf::ParamId;
-    juce::ignoreUnused (modulated (PI::grainSize,   pid::grainSize));
-    juce::ignoreUnused (modulated (PI::density,     pid::density));
-    juce::ignoreUnused (modulated (PI::pitch,       pid::pitch));
-    juce::ignoreUnused (modulated (PI::spray,       pid::spray));
-    juce::ignoreUnused (modulated (PI::spread,      pid::spread));
-    juce::ignoreUnused (modulated (PI::position,    pid::position));
-    juce::ignoreUnused (modulated (PI::pitchJitter, pid::pitchJitter));
-    juce::ignoreUnused (modulated (PI::output,      pid::output));
+    juce::ignoreUnused (modulated (PI::grainSize));
+    juce::ignoreUnused (modulated (PI::density));
+    juce::ignoreUnused (modulated (PI::pitch));
+    juce::ignoreUnused (modulated (PI::spray));
+    juce::ignoreUnused (modulated (PI::spread));
+    juce::ignoreUnused (modulated (PI::position));
+    juce::ignoreUnused (modulated (PI::pitchJitter));
+    juce::ignoreUnused (modulated (PI::output));
 }
 
 void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    const auto ctl = makeControlSnapshot();
+    const auto& p = paramPtrs;
     const int channels = buffer.getNumChannels();
     const int n = buffer.getNumSamples();
-    keyboardState.processNextMidiBuffer (midi, 0, n, true);
 
-    if (apvts.getRawParameterValue ("panic")->load() > 0.5f)
+    if (isOn (p.panic))
     {
         panicKillTail();
-        if (auto* p = apvts.getParameter ("panic"))
-            p->setValueNotifyingHost (0.0f);
+        if (panicParameter != nullptr)
+            panicParameter->setValueNotifyingHost (0.0f);
     }
 
-    dryInBuffer.makeCopyOf (buffer, true);
-    entropyBuffer.makeCopyOf (buffer, true);
-    prettifierBuffer.makeCopyOf (buffer, true);
+    if (! ctl.pluginOn)
+        return;
 
-    // Sample Mode records the raw input continuously so Freeze can grab it.
-    const bool sampleModeOn = apvts.getRawParameterValue ("sampleMode")->load() > 0.5f;
-    sampleEngine.pushInput (dryInBuffer);
+    if (! ctl.inputToolsOn)
+        sampleFreezeRequested.store (false, std::memory_order_release);
+
+    const bool sampleFreezePending = ctl.inputToolsOn && sampleFreezeRequested.load (std::memory_order_acquire);
+    const bool textureActive = ctl.textureGrainOn || ctl.identityLossOn;
+    const bool beautyActive = ctl.beautySpaceOn;
+    const int routingModeValue = (int) loadParam (p.routingMode, 0.0f);
+    const bool pitchMatchOn = isOn (p.pitchMatchOn);
+    const bool needsDry = loadParam (p.dryLevel) > 0.001f
+                       || ctl.dryWet < 0.999f
+                       || pitchMatchOn
+                       || ctl.sampleModeOn
+                       || sampleFreezePending
+                       || (! textureActive && ! beautyActive);
+    if (needsDry)
+        dryInBuffer.makeCopyOf (buffer, true);
+
+    if (ctl.sampleModeOn || sampleFreezePending)
+        sampleEngine.pushInput (needsDry ? dryInBuffer : buffer);
 
     // Advance the mod matrix in control-rate steps across the block. We tick at
     // least once per block, and pull modulated parameters after each tick so the
@@ -286,14 +702,14 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     int processed = 0;
     float noteOffset = 0.0f;
     float midiVelocity = 1.0f;
-    const bool midiEnabled = apvts.getRawParameterValue ("midiEnable")->load() > 0.5f;
     // The keyboard drives the grains (when MIDI is enabled) and/or the frozen
     // sample (when Sample Mode is on), so run the note controller for either.
-    const bool keyboardActive = midiEnabled || sampleModeOn;
+    const bool keyboardActive = ctl.midiEnabled || ctl.sampleModeOn;
     if (keyboardActive)
     {
-        midiCtrl.setRoot ((int) apvts.getRawParameterValue ("midiRoot")->load());
-        midiCtrl.setGlideMs (apvts.getRawParameterValue ("glideTime")->load());
+        keyboardState.processNextMidiBuffer (midi, 0, n, true);
+        midiCtrl.setRoot ((int) loadParam (p.midiRoot, 60.0f));
+        midiCtrl.setGlideMs (loadParam (p.glideTime));
         midiCtrl.updateGlideTime();
         for (const auto meta : midi)
             midiCtrl.handleMessage (meta.getMessage());
@@ -301,98 +717,110 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         midiVelocity = midiCtrl.getVelocity();
     }
 
-    do
+    if (ctl.motionMatrixOn)
     {
-        if (controlRateDivider <= 0)
+        do
         {
-            syncModMatrix();
-            modMatrix.tick();
-            const float gmv = modMatrix.getGlobalValue();
-            globalModValue.store (gmv, std::memory_order_relaxed);
+            if (controlRateDivider <= 0)
+            {
+                syncModMatrix();
+                modMatrix.tick();
+                const float gmv = modMatrix.getGlobalValue();
+                globalModValue.store (gmv, std::memory_order_relaxed);
 
-            // Push the mod value into the scope ring at the true control rate.
-            int mh = modScopeHead.load (std::memory_order_relaxed);
-            modScopeHistory[(size_t) mh].store (gmv, std::memory_order_relaxed);
-            modScopeHead.store ((mh + 1) % 256, std::memory_order_relaxed);
+                if (ctl.modScopeOn)
+                {
+                    int mh = modScopeHead.load (std::memory_order_relaxed);
+                    modScopeHistory[(size_t) mh].store (gmv, std::memory_order_relaxed);
+                    modScopeHead.store ((mh + 1) % 256, std::memory_order_relaxed);
+                }
 
-            pullParameters();
-            controlRateDivider = controlRateSamples;
-            if (keyboardActive)
-                noteOffset = midiCtrl.nextOffsetSemis();
-        }
-        const int step = juce::jmin (controlRateDivider, n - processed);
-        controlRateDivider -= step;
-        processed += step;
-    } while (processed < n);
+                pullParameters();
+                controlRateDivider = controlRateSamples;
+                if (keyboardActive)
+                    noteOffset = midiCtrl.nextOffsetSemis();
+            }
+            const int step = juce::jmin (controlRateDivider, n - processed);
+            controlRateDivider -= step;
+            processed += step;
+        } while (processed < n);
+    }
+    else
+    {
+        globalModValue.store (0.0f, std::memory_order_relaxed);
+    }
+
+    auto target = [this, &ctl] (gf::ParamId id)
+    {
+        const auto idx = (size_t) id;
+        return ctl.motionMatrixOn ? modulated (id) : loadParam (modTargetPtrs[idx]);
+    };
 
     gf::entropy::Params entropyParams;
-    const float macroBeauty = apvts.getRawParameterValue ("macroBeauty")->load();
-    const float macroChaos = apvts.getRawParameterValue ("macroChaos")->load();
-    const float macroGlue = apvts.getRawParameterValue ("macroGlue")->load();
-    entropyParams.frozen = apvts.getRawParameterValue ("frozen")->load() > 0.5f;
-    entropyParams.grainSize = modulated (gf::ParamId::grainSize, pid::grainSize);
-    entropyParams.density = modulated (gf::ParamId::density, pid::density) * (1.0f + macroChaos * 0.5f);
-    entropyParams.pitch = modulated (gf::ParamId::pitch, pid::pitch);
-    entropyParams.noteOffset = midiEnabled ? noteOffset : 0.0f; // grains only follow MIDI when enabled
-    entropyParams.spray = modulated (gf::ParamId::spray, pid::spray) * (1.0f + macroChaos * 0.6f);
-    entropyParams.spread = modulated (gf::ParamId::spread, pid::spread);
-    entropyParams.position = modulated (gf::ParamId::position, pid::position);
-    entropyParams.pitchJitter = modulated (gf::ParamId::pitchJitter, pid::pitchJitter) + macroChaos * 2.0f;
-    entropyParams.output = modulated (gf::ParamId::output, pid::output);
+    const float identity = ctl.identityLossOn ? juce::jlimit (0.0f, 1.0f, ctl.identityLoss * loadParam (p.identityLossMix, 1.0f)) : 0.0f;
+    entropyParams.frozen = isOn (p.frozen);
+    entropyParams.grainSize = target (gf::ParamId::grainSize) * (1.0f + identity * 0.35f);
+    entropyParams.density = target (gf::ParamId::density) * (1.0f + ctl.chaos * 0.5f + ctl.texture * 0.75f + identity * 0.8f);
+    entropyParams.pitch = target (gf::ParamId::pitch);
+    entropyParams.noteOffset = ctl.midiEnabled ? noteOffset : 0.0f; // grains only follow MIDI when enabled
+    entropyParams.spray = target (gf::ParamId::spray) * (1.0f + ctl.chaos * 0.6f) + ctl.texture * 300.0f + identity * 1200.0f;
+    entropyParams.spread = target (gf::ParamId::spread);
+    entropyParams.position = target (gf::ParamId::position);
+    entropyParams.pitchJitter = target (gf::ParamId::pitchJitter) + ctl.chaos * 2.0f + identity * 24.0f;
+    entropyParams.output = target (gf::ParamId::output);
+    entropyParams.maxGrains = ctl.maxGrains;
     entropyParams.velocity = midiVelocity;
-    entropyParams.velToAmp = apvts.getRawParameterValue ("velToAmp")->load();
-    entropyParams.spectralFreeze = apvts.getRawParameterValue ("specFreeze")->load() > 0.5f;
-    entropyParams.spectralMix = apvts.getRawParameterValue ("specMix")->load();
-    entropyParams.spectralShimmer = apvts.getRawParameterValue ("specShimmer")->load();
-    entropyParams.reverbMix = apvts.getRawParameterValue (pid::reverbMix)->load();
-    entropyParams.satOn = apvts.getRawParameterValue ("satOn")->load() > 0.5f;
-    entropyParams.satType = (int) apvts.getRawParameterValue ("satType")->load();
-    entropyParams.satDrive = apvts.getRawParameterValue ("satDrive")->load();
-    entropyParams.satMix = apvts.getRawParameterValue ("satMix")->load();
-
-    entropyEngine.pushInput (entropyBuffer);
-    const int routingModeValue = (int) apvts.getRawParameterValue ("routingMode")->load();
-    entropyEngine.process (entropyBuffer, entropyParams);
+    entropyParams.velToAmp = loadParam (p.velToAmp);
+    const float oldSpecMix = isOn (p.specFreeze) ? loadParam (p.specMix) : 0.0f;
+    const float newSpecMix = ctl.spectralOn ? loadParam (p.spectralMix) * juce::jmax (0.001f, loadParam (p.spectralAmount, 1.0f)) : 0.0f;
+    entropyParams.spectralFreeze = isOn (p.specFreeze) || ctl.spectralOn || identity > 0.65f;
+    entropyParams.spectralMix = juce::jmax (oldSpecMix, juce::jmax (newSpecMix, identity * 0.45f));
+    entropyParams.spectralShimmer = juce::jlimit (0.0f, 1.0f, loadParam (p.specShimmer, 0.2f) + identity * 0.35f);
+    entropyParams.reverbMix = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::reverbMix) + ctl.space * 0.35f);
+    entropyParams.satOn = isOn (p.satOn) || ctl.damageOn || identity > 0.5f;
+    entropyParams.satType = (int) loadParam (p.satType);
+    entropyParams.satDrive = loadParam (p.satDrive, 1.0f) * (1.0f + ctl.damage * 4.0f + identity * 3.0f);
+    entropyParams.satMix = juce::jmax (loadParam (p.satMix), juce::jmax (ctl.damage * 0.35f, identity * 0.25f));
 
     gf::pretty::Params prettyParams;
-    prettyParams.enabled = apvts.getRawParameterValue ("prettifierEnabled")->load() > 0.5f;
-    prettyParams.inputTrim = apvts.getRawParameterValue ("prettifierInTrim")->load();
-    prettyParams.outputTrim = apvts.getRawParameterValue ("prettifierOutTrim")->load();
-    prettyParams.echoOn = apvts.getRawParameterValue ("echoOn")->load() > 0.5f;
-    prettyParams.echoTimeMs = modulated (gf::ParamId::echoTime, "echoTimeMs");
-    prettyParams.echoFeedback = modulated (gf::ParamId::echoFeedback, "echoFeedback");
-    prettyParams.echoMix = modulated (gf::ParamId::echoMix, "echoMix");
-    prettyParams.reverbOn = apvts.getRawParameterValue ("prettyReverbOn")->load() > 0.5f;
-    prettyParams.reverbSize = apvts.getRawParameterValue ("prettyReverbSize")->load();
-    prettyParams.reverbDamping = apvts.getRawParameterValue ("prettyReverbDamping")->load();
-    prettyParams.reverbMix = modulated (gf::ParamId::prettyReverbMix, "prettyReverbMix");
-    prettyParams.chorusOn = apvts.getRawParameterValue ("chorusOn")->load() > 0.5f;
-    prettyParams.chorusRate = modulated (gf::ParamId::chorusRate, "chorusRate");
-    prettyParams.chorusDepth = modulated (gf::ParamId::chorusDepth, "chorusDepth");
-    prettyParams.chorusMix = apvts.getRawParameterValue ("chorusMix")->load();
-    prettyParams.beautyOn = apvts.getRawParameterValue ("beautyOn")->load() > 0.5f;
-    prettyParams.beautyAmount = juce::jlimit (0.0f, 1.0f, modulated (gf::ParamId::beautyAmount, "beautyAmount") + macroBeauty * 0.5f);
-    prettyParams.beautyAir = apvts.getRawParameterValue ("beautyAir")->load();
-    prettyParams.beautyWarmth = apvts.getRawParameterValue ("beautyWarmth")->load();
-    prettyParams.polishOn = apvts.getRawParameterValue ("polishOn")->load() > 0.5f;
-    prettyParams.width = modulated (gf::ParamId::polishWidth, "polishWidth");
-    prettyParams.crushOn = apvts.getRawParameterValue ("crushOn")->load() > 0.5f;
-    prettyParams.crushBits = modulated (gf::ParamId::bitCrush, "crushBits");
-    prettyParams.crushMix = apvts.getRawParameterValue ("crushMix")->load();
-    prettyParams.air = apvts.getRawParameterValue ("polishAir")->load();
-    prettyParams.warmth = apvts.getRawParameterValue ("polishWarmth")->load();
-    prettyParams.harshnessTame = apvts.getRawParameterValue ("polishHarshnessTame")->load();
-    prettyParams.polishMix = apvts.getRawParameterValue ("polishMix")->load();
-    prettyParams.dnaCharacter = apvts.getRawParameterValue ("dnaCharacter")->load();
-    prettyParams.dnaAge = apvts.getRawParameterValue ("dnaAge")->load();
-    prettyParams.dnaWarmth = apvts.getRawParameterValue ("dnaWarmth")->load();
-    prettyParams.dnaWidth = apvts.getRawParameterValue ("dnaWidth")->load();
-    prettyParams.dnaRandomness = apvts.getRawParameterValue ("dnaRandomness")->load();
-    prettyParams.dnaAnalog = apvts.getRawParameterValue ("dnaAnalog")->load();
-    prettyParams.dnaDigital = apvts.getRawParameterValue ("dnaDigital")->load();
-    prettyParams.dnaSmoothness = apvts.getRawParameterValue ("dnaSmoothness")->load();
-    prettyParams.dnaMotion = apvts.getRawParameterValue ("dnaMotion")->load();
-    prettyParams.dnaShine = apvts.getRawParameterValue ("dnaShine")->load();
+    prettyParams.enabled = beautyActive;
+    prettyParams.inputTrim = loadParam (p.prettifierInTrim, 1.0f);
+    prettyParams.outputTrim = loadParam (p.prettifierOutTrim, 1.0f);
+    prettyParams.echoOn = isOn (p.echoOn) && beautyActive;
+    prettyParams.echoTimeMs = target (gf::ParamId::echoTime);
+    prettyParams.echoFeedback = target (gf::ParamId::echoFeedback);
+    prettyParams.echoMix = target (gf::ParamId::echoMix);
+    prettyParams.reverbOn = isOn (p.prettyReverbOn) && isOn (p.reverbOn, true) && beautyActive;
+    prettyParams.reverbSize = loadParam (p.prettyReverbSize, 0.65f);
+    prettyParams.reverbDamping = loadParam (p.prettyReverbDamping, 0.4f);
+    prettyParams.reverbMix = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::prettyReverbMix) + ctl.space * 0.45f);
+    prettyParams.chorusOn = isOn (p.chorusOn) && beautyActive;
+    prettyParams.chorusRate = target (gf::ParamId::chorusRate);
+    prettyParams.chorusDepth = target (gf::ParamId::chorusDepth);
+    prettyParams.chorusMix = juce::jlimit (0.0f, 1.0f, loadParam (p.chorusMix) + ctl.motion * 0.25f);
+    prettyParams.beautyOn = isOn (p.beautyOn) && beautyActive;
+    prettyParams.beautyAmount = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::beautyAmount) + ctl.beauty * 0.5f);
+    prettyParams.beautyAir = loadParam (p.beautyAir, 0.3f);
+    prettyParams.beautyWarmth = loadParam (p.beautyWarmth, 0.35f);
+    prettyParams.polishOn = isOn (p.polishOn) && beautyActive;
+    prettyParams.width = target (gf::ParamId::polishWidth);
+    prettyParams.crushOn = isOn (p.crushOn) || ctl.damageOn || identity > 0.55f;
+    prettyParams.crushBits = juce::jmin (target (gf::ParamId::bitCrush), 24.0f - (ctl.damage * 12.0f + identity * 16.0f));
+    prettyParams.crushMix = juce::jmax (loadParam (p.crushMix), juce::jmax (ctl.damage * 0.75f, identity * 0.55f));
+    prettyParams.air = loadParam (p.polishAir, 0.2f);
+    prettyParams.warmth = loadParam (p.polishWarmth, 0.2f);
+    prettyParams.harshnessTame = loadParam (p.polishHarshnessTame, 0.1f);
+    prettyParams.polishMix = loadParam (p.polishMix, 1.0f);
+    prettyParams.dnaCharacter = loadParam (p.dnaCharacter, 0.5f);
+    prettyParams.dnaAge = loadParam (p.dnaAge, 0.2f);
+    prettyParams.dnaWarmth = loadParam (p.dnaWarmth, 0.5f);
+    prettyParams.dnaWidth = loadParam (p.dnaWidth, 0.5f);
+    prettyParams.dnaRandomness = loadParam (p.dnaRandomness);
+    prettyParams.dnaAnalog = loadParam (p.dnaAnalog, 0.5f);
+    prettyParams.dnaDigital = loadParam (p.dnaDigital, 0.5f);
+    prettyParams.dnaSmoothness = loadParam (p.dnaSmoothness, 0.5f);
+    prettyParams.dnaMotion = loadParam (p.dnaMotion, 0.5f);
+    prettyParams.dnaShine = loadParam (p.dnaShine, 0.5f);
 
     double hostBpm = 120.0;
     if (auto* ph = getPlayHead())
@@ -401,73 +829,96 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         if (ph->getCurrentPosition (info) && info.bpm > 0.0)
             hostBpm = info.bpm;
     }
-    const bool tempoLockOn = apvts.getRawParameterValue ("tempoLockOn")->load() > 0.5f;
-    if (routingModeValue == 1) // Entropy -> Prettifier
+    if (textureActive && beautyActive && routingModeValue == 1) // Texture / Grain -> Beauty & Space
     {
+        entropyBuffer.makeCopyOf (buffer, true);
+        entropyEngine.pushInput (entropyBuffer);
+        entropyEngine.process (entropyBuffer, entropyParams);
         prettifierBuffer.makeCopyOf (entropyBuffer, true);
-        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, tempoLockOn);
+        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn);
     }
-    else if (routingModeValue == 2) // Prettifier -> Entropy
+    else if (textureActive && beautyActive && routingModeValue == 2) // Beauty & Space -> Texture / Grain
     {
-        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, tempoLockOn);
+        prettifierBuffer.makeCopyOf (buffer, true);
+        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn);
         entropyBuffer.makeCopyOf (prettifierBuffer, true);
         entropyEngine.pushInput (entropyBuffer);
         entropyEngine.process (entropyBuffer, entropyParams);
     }
     else
     {
-        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, tempoLockOn);
+        if (textureActive)
+        {
+            entropyBuffer.makeCopyOf (buffer, true);
+            entropyEngine.pushInput (entropyBuffer);
+            entropyEngine.process (entropyBuffer, entropyParams);
+        }
+        if (beautyActive)
+        {
+            prettifierBuffer.makeCopyOf (buffer, true);
+            prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn);
+        }
     }
 
     gf::mix::Params mixParams;
-    mixParams.pluginOn = apvts.getRawParameterValue ("pluginOn")->load() > 0.5f;
-    mixParams.entropyOn = apvts.getRawParameterValue ("entropyOn")->load() > 0.5f;
-    mixParams.prettifierOn = apvts.getRawParameterValue ("prettifierOn")->load() > 0.5f;
-    mixParams.mixEqOn = apvts.getRawParameterValue ("mixEqOn")->load() > 0.5f;
-    mixParams.pitchMatchOn = apvts.getRawParameterValue ("pitchMatchOn")->load() > 0.5f;
-    mixParams.tempoLockOn = tempoLockOn;
-    mixParams.limiterOn = apvts.getRawParameterValue ("limiterOn")->load() > 0.5f;
-    mixParams.dryLevel = apvts.getRawParameterValue ("dryLevel")->load();
-    mixParams.entropySend = apvts.getRawParameterValue ("entropySend")->load();
-    mixParams.entropyReturn = apvts.getRawParameterValue ("entropyReturn")->load();
-    mixParams.prettifierSend = apvts.getRawParameterValue ("prettifierSend")->load();
-    mixParams.prettifierReturn = apvts.getRawParameterValue ("prettifierReturn")->load();
-    mixParams.outputLevel = apvts.getRawParameterValue ("mixOutput")->load();
-    mixParams.chaosBeauty = apvts.getRawParameterValue ("chaosBeauty")->load();
-    mixParams.routing = (gf::mix::RoutingMode) (int) apvts.getRawParameterValue ("routingMode")->load();
-    mixParams.ceilingDb = apvts.getRawParameterValue ("ceilingDb")->load() - macroGlue * 2.0f;
-    mixParams.eqLow  = apvts.getRawParameterValue ("eqLow")->load();
-    mixParams.eqMid  = apvts.getRawParameterValue ("eqMid")->load();
-    mixParams.eqHigh = apvts.getRawParameterValue ("eqHigh")->load();
-    mixParams.eqLoFi = apvts.getRawParameterValue ("eqLoFi")->load();
-    mixParams.width  = apvts.getRawParameterValue ("mixWidth")->load();
-    mixParams.pitchLockOn     = apvts.getRawParameterValue ("pitchLockOn")->load() > 0.5f;
-    mixParams.pitchLockMode   = (int) apvts.getRawParameterValue ("pitchLockMode")->load();
-    mixParams.pitchLockKey    = (int) apvts.getRawParameterValue ("pitchLockKey")->load();
-    mixParams.pitchLockScale  = (int) apvts.getRawParameterValue ("pitchLockScale")->load();
-    mixParams.pitchLockAmount = apvts.getRawParameterValue ("pitchLockAmount")->load();
-    mixParams.pitchLockFormant = apvts.getRawParameterValue ("pitchLockFormant")->load() > 0.5f;
+    mixParams.pluginOn = true;
+    mixParams.entropyOn = textureActive;
+    mixParams.prettifierOn = beautyActive;
+    mixParams.mixEqOn = isOn (p.mixEqOn);
+    mixParams.pitchMatchOn = pitchMatchOn;
+    mixParams.tempoLockOn = ctl.tempoLockOn;
+    mixParams.limiterOn = isOn (p.limiterOn, true);
+    mixParams.dryLevel = juce::jmax (loadParam (p.dryLevel), 1.0f - ctl.dryWet);
+    if (! textureActive && ! beautyActive)
+        mixParams.dryLevel = 1.0f;
+    mixParams.dryLevel *= 1.0f - identity * 0.75f;
+    mixParams.entropySend = loadParam (p.entropySend, 1.0f);
+    mixParams.entropyReturn = loadParam (p.entropyReturn, 1.0f) * juce::jmax (loadParam (p.textureGrainMix, 1.0f), identity);
+    mixParams.prettifierSend = loadParam (p.prettifierSend, 1.0f);
+    mixParams.prettifierReturn = loadParam (p.prettifierReturn, 1.0f) * loadParam (p.beautySpaceMix, 1.0f);
+    mixParams.outputLevel = ctl.outputLevel;
+    mixParams.chaosBeauty = juce::jlimit (0.0f, 1.0f, loadParam (p.chaosBeauty, 0.5f) + ctl.beauty * 0.25f - ctl.chaos * 0.25f);
+    mixParams.routing = (gf::mix::RoutingMode) routingModeValue;
+    mixParams.ceilingDb = loadParam (p.ceilingDb, -0.1f) - loadParam (p.macroGlue) * 2.0f;
+    mixParams.eqLow  = loadParam (p.eqLow);
+    mixParams.eqMid  = loadParam (p.eqMid);
+    mixParams.eqHigh = loadParam (p.eqHigh);
+    mixParams.eqLoFi = juce::jlimit (0.0f, 1.0f, loadParam (p.eqLoFi) + identity * 0.35f);
+    mixParams.width  = juce::jlimit (0.0f, 2.0f, loadParam (p.mixWidth, 1.0f) + ctl.space * 0.35f);
+    mixParams.pitchLockOn     = isOn (p.pitchLockOn) || ctl.pitchFormantOn;
+    mixParams.pitchLockMode   = (int) loadParam (p.pitchLockMode, 1.0f);
+    mixParams.pitchLockKey    = (int) loadParam (p.pitchLockKey);
+    mixParams.pitchLockScale  = (int) loadParam (p.pitchLockScale, 1.0f);
+    mixParams.pitchLockAmount = juce::jmax (loadParam (p.pitchLockAmount, 1.0f), ctl.pitchFormantOn ? loadParam (p.pitchFormantMix, 0.0f) : 0.0f);
+    mixParams.pitchLockFormant = isOn (p.pitchLockFormant);
 
 
     // Master bus, minus the final dynamics (deferred until after Sample Mode).
-    mixEngine.processParallel (buffer, dryInBuffer, entropyBuffer, prettifierBuffer, mixParams);
+    mixEngine.processParallel (buffer,
+                               needsDry ? dryInBuffer : buffer,
+                               entropyBuffer,
+                               prettifierBuffer,
+                               mixParams);
 
     // Sample Mode: capture the clean master (before our own playback, so the loop
     // can't feed back), service a pending Freeze, then layer the looping sample.
-    sampleEngine.pushOutput (buffer);
-    if (sampleFreezeRequested.exchange (false, std::memory_order_acquire))
-        sampleEngine.freeze (apvts.getRawParameterValue ("sampleWindow")->load(),
-                             (int) apvts.getRawParameterValue ("sampleSource")->load());
-    if (sampleModeOn)
+    if (ctl.sampleModeOn || sampleFreezePending)
     {
-        const float rate  = std::pow (2.0f, noteOffset / 12.0f); // keyboard transposes the loop
-        const float level = apvts.getRawParameterValue ("sampleLevel")->load();
-        sampleEngine.render (buffer, rate, level);
+        sampleEngine.pushOutput (buffer);
+        if (sampleFreezeRequested.exchange (false, std::memory_order_acquire))
+            sampleEngine.freeze (loadParam (p.sampleWindow, 4.0f),
+                                 (int) loadParam (p.sampleSource));
+        if (ctl.sampleModeOn)
+        {
+            const float rate  = std::pow (2.0f, noteOffset / 12.0f); // keyboard transposes the loop
+            const float level = loadParam (p.sampleLevel, 1.0f);
+            sampleEngine.render (buffer, rate, level);
+        }
     }
 
     // Final master dynamics over the whole program (mix + Sample Mode): glue
     // bus-comp then the ceiling limiter, so nothing escapes the ceiling.
-    const float glueAmount = apvts.getRawParameterValue ("mixGlue")->load();
+    const float glueAmount = loadParam (p.mixGlue);
     mixEngine.processMasterDynamics (buffer, glueAmount, mixParams.ceilingDb, mixParams.limiterOn);
 
     // Output metering: peak per channel with a smooth decay, read by the UI.
@@ -484,7 +935,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     outLevelR.store (juce::jmax (pR, outLevelR.load (std::memory_order_relaxed) * decay),
                      std::memory_order_relaxed);
 
-    if (channels > 0 && n > 0)
+    if (ctl.waveformOn && channels > 0 && n > 0)
     {
         // Decimate at a fixed rate so the 256-point scope always spans the same
         // ~50 ms window, no matter what block size the host hands us.
@@ -505,7 +956,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     // Spectrum analyzer: accumulate output samples and run an FFT each time the
     // fifo fills, mapping the magnitudes onto log-spaced bins for the display.
-    if (channels > 0 && n > 0)
+    if (ctl.analyzerOn && channels > 0 && n > 0)
     {
         for (int i = 0; i < n; ++i)
         {

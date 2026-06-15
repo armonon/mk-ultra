@@ -11,16 +11,17 @@ namespace pretty
 void PrettifierEngine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
 {
     using namespace juce;
-    layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "prettifierEnabled", 1 }, "Prettifier Enabled", true));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierInTrim", 1 }, "Prettifier In", NormalisableRange<float> (0.0f, 2.0f, 0.001f), 1.0f));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierOutTrim", 1 }, "Prettifier Out", NormalisableRange<float> (0.0f, 2.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "prettifierEnabled", 1 }, "Beauty & Space Enabled", true));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierInTrim", 1 }, "Beauty & Space In", NormalisableRange<float> (0.0f, 2.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierOutTrim", 1 }, "Beauty & Space Out", NormalisableRange<float> (0.0f, 2.0f, 0.001f), 1.0f));
 
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "echoOn", 1 }, "Echo On", true));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "echoTimeMs", 1 }, "Echo Time", NormalisableRange<float> (1.0f, 2000.0f, 1.0f), 280.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "echoTimeMs", 1 }, "Echo Time", NormalisableRange<float> (1.0f, 8000.0f, 1.0f), 280.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "echoFeedback", 1 }, "Echo Feedback", NormalisableRange<float> (0.0f, 0.98f, 0.001f), 0.35f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "echoMix", 1 }, "Echo Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.25f));
 
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "prettyReverbOn", 1 }, "Reverb On", true));
+    layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "reverbOn", 1 }, "Reverb On", true));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettyReverbSize", 1 }, "Reverb Size", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.65f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettyReverbDamping", 1 }, "Reverb Damping", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.4f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettyReverbMix", 1 }, "Reverb Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.2f));
@@ -44,7 +45,7 @@ void PrettifierEngine::addParameters (juce::AudioProcessorValueTreeState::Parame
 
     // Bit-depth crusher: 16 bits = transparent, lower = lo-fi crush.
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "crushOn", 1 }, "Crush On", true));
-    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "crushBits", 1 }, "Bit Crush", NormalisableRange<float> (2.0f, 16.0f, 0.01f), 16.0f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "crushBits", 1 }, "Bit Crush", NormalisableRange<float> (1.0f, 24.0f, 0.01f), 16.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "crushMix", 1 }, "Crush Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
 
     // DNA controls.
@@ -61,7 +62,7 @@ void PrettifierEngine::addParameters (juce::AudioProcessorValueTreeState::Parame
 
     // Advanced machine placeholders (Phase 5+).
     static constexpr const char* machineIds[] = {
-        "harmony", "dream", "angel", "texture", "bitcrush", "sampleRate", "phaser", "flanger", "space", "spectral"
+        "harmony", "dream", "angel", "texture", "bitcrush", "prettySampleRate", "phaser", "flanger", "space", "prettySpectral"
     };
     static constexpr const char* machineNames[] = {
         "Harmony", "Dream", "Angel", "Texture", "Bitcrush", "Sample Rate", "Phaser", "Flanger", "Space", "Spectral"
@@ -79,7 +80,7 @@ void PrettifierEngine::addParameters (juce::AudioProcessorValueTreeState::Parame
 void PrettifierEngine::prepare (double sampleRate, int samplesPerBlock, int numChannels)
 {
     sr = sampleRate;
-    maxDelaySamples = (int) std::ceil (sampleRate * 2.2);
+    maxDelaySamples = (int) std::ceil (sampleRate * 8.2);
     delayLine.setSize (numChannels, maxDelaySamples);
     delayLine.clear();
     delayWrite = 0;
@@ -212,7 +213,7 @@ void PrettifierEngine::process (juce::AudioBuffer<float>& buffer, const Params& 
     // Bit-depth crusher: quantize to 2^bits levels for a lo-fi/digital edge.
     if (params.crushOn && params.crushBits < 15.99f && params.crushMix > 0.001f)
     {
-        const float bits   = juce::jlimit (2.0f, 16.0f, params.crushBits);
+        const float bits   = juce::jlimit (1.0f, 24.0f, params.crushBits);
         const float levels = std::pow (2.0f, bits);
         const float step   = 2.0f / (levels - 1.0f);   // signal assumed in [-1, 1]
         const float mix    = juce::jlimit (0.0f, 1.0f, params.crushMix);
