@@ -37,11 +37,13 @@ GrainFreezeProcessor::GrainFreezeProcessor()
     cacheParameterPointers();
     cacheModPointers();
     apvts.addParameterListener ("pitchLockFormant", this);
+    apvts.addParameterListener ("pitchFormantOn", this);
 }
 
 GrainFreezeProcessor::~GrainFreezeProcessor()
 {
     apvts.removeParameterListener ("pitchLockFormant", this);
+    apvts.removeParameterListener ("pitchFormantOn", this);
 }
 
 void GrainFreezeProcessor::cacheParameterPointers()
@@ -79,6 +81,10 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.pitchFormantMix, "pitchFormantMix");
     bind (paramPtrs.timeBreakerOn, "timeBreakerOn");
     bind (paramPtrs.timeBreakerMix, "timeBreakerMix");
+    bind (paramPtrs.stutterRate, "stutterRate");
+    bind (paramPtrs.stutterSize, "stutterSize");
+    bind (paramPtrs.stutterChance, "stutterChance");
+    bind (paramPtrs.reverseChance, "reverseChance");
     bind (paramPtrs.damageOn, "damageOn");
     bind (paramPtrs.damageMix, "damageMix");
     bind (paramPtrs.damageAmount, "damageAmount");
@@ -202,9 +208,13 @@ void GrainFreezeProcessor::cacheModPointers()
 // The formant shifter adds lookahead; (de)activating it changes plugin latency.
 void GrainFreezeProcessor::parameterChanged (const juce::String& id, float value)
 {
-    if (id == "pitchLockFormant")
+    juce::ignoreUnused (value);
+    if (id == "pitchLockFormant" || id == "pitchFormantOn")
     {
-        formantLatencyActive.store (value > 0.5f, std::memory_order_relaxed);
+        // Either the legacy formant lock or the Pitch/Formant machine adds the
+        // shifter's lookahead. Latency is active if either is engaged.
+        const bool active = isOn (paramPtrs.pitchLockFormant) || isOn (paramPtrs.pitchFormantOn);
+        formantLatencyActive.store (active, std::memory_order_relaxed);
         triggerAsyncUpdate(); // setLatencySamples must run on the message thread
     }
 }
@@ -519,8 +529,14 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     midiCtrl.prepare (sampleRate);
     sampleEngine.prepare (sampleRate, getTotalNumOutputChannels());
 
+    // Transform machines (master-bus inserts).
+    spectralMachine.prepare (sampleRate, getTotalNumOutputChannels());
+    damageMachine.prepare (sampleRate, getTotalNumOutputChannels());
+    timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
+    pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
+
     // Report the formant shifter's lookahead so the host can compensate.
-    formantLatencyActive.store (isOn (paramPtrs.pitchLockFormant),
+    formantLatencyActive.store (isOn (paramPtrs.pitchLockFormant) || isOn (paramPtrs.pitchFormantOn),
                                 std::memory_order_relaxed);
     setLatencySamples (formantLatencyActive.load (std::memory_order_relaxed)
                        ? gf::FormantShifter::kLatency : 0);
@@ -771,13 +787,14 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     entropyParams.maxGrains = ctl.maxGrains;
     entropyParams.velocity = midiVelocity;
     entropyParams.velToAmp = loadParam (p.velToAmp);
+    // Spectral as a machine now lives on the master bus (see transform stage);
+    // here we only keep the legacy momentary Freeze button and the Identity macro.
     const float oldSpecMix = isOn (p.specFreeze) ? loadParam (p.specMix) : 0.0f;
-    const float newSpecMix = ctl.spectralOn ? loadParam (p.spectralMix) * juce::jmax (0.001f, loadParam (p.spectralAmount, 1.0f)) : 0.0f;
-    entropyParams.spectralFreeze = isOn (p.specFreeze) || ctl.spectralOn || identity > 0.65f;
-    entropyParams.spectralMix = juce::jmax (oldSpecMix, juce::jmax (newSpecMix, identity * 0.45f));
+    entropyParams.spectralFreeze = isOn (p.specFreeze) || identity > 0.65f;
+    entropyParams.spectralMix = juce::jmax (oldSpecMix, identity * 0.45f);
     entropyParams.spectralShimmer = juce::jlimit (0.0f, 1.0f, loadParam (p.specShimmer, 0.2f) + identity * 0.35f);
     entropyParams.reverbMix = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::reverbMix) + ctl.space * 0.35f);
-    entropyParams.satOn = isOn (p.satOn) || ctl.damageOn || identity > 0.5f;
+    entropyParams.satOn = isOn (p.satOn) || identity > 0.5f; // Damage machine owns damageOn now
     entropyParams.satType = (int) loadParam (p.satType);
     entropyParams.satDrive = loadParam (p.satDrive, 1.0f) * (1.0f + ctl.damage * 4.0f + identity * 3.0f);
     entropyParams.satMix = juce::jmax (loadParam (p.satMix), juce::jmax (ctl.damage * 0.35f, identity * 0.25f));
@@ -804,7 +821,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     prettyParams.beautyWarmth = loadParam (p.beautyWarmth, 0.35f);
     prettyParams.polishOn = isOn (p.polishOn) && beautyActive;
     prettyParams.width = target (gf::ParamId::polishWidth);
-    prettyParams.crushOn = isOn (p.crushOn) || ctl.damageOn || identity > 0.55f;
+    prettyParams.crushOn = isOn (p.crushOn) || identity > 0.55f; // Damage machine owns damageOn now
     prettyParams.crushBits = juce::jmin (target (gf::ParamId::bitCrush), 24.0f - (ctl.damage * 12.0f + identity * 16.0f));
     prettyParams.crushMix = juce::jmax (loadParam (p.crushMix), juce::jmax (ctl.damage * 0.75f, identity * 0.55f));
     prettyParams.air = loadParam (p.polishAir, 0.2f);
@@ -885,11 +902,11 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     mixParams.eqHigh = loadParam (p.eqHigh);
     mixParams.eqLoFi = juce::jlimit (0.0f, 1.0f, loadParam (p.eqLoFi) + identity * 0.35f);
     mixParams.width  = juce::jlimit (0.0f, 2.0f, loadParam (p.mixWidth, 1.0f) + ctl.space * 0.35f);
-    mixParams.pitchLockOn     = isOn (p.pitchLockOn) || ctl.pitchFormantOn;
+    mixParams.pitchLockOn     = isOn (p.pitchLockOn); // Pitch/Formant machine is a separate master-bus insert
     mixParams.pitchLockMode   = (int) loadParam (p.pitchLockMode, 1.0f);
     mixParams.pitchLockKey    = (int) loadParam (p.pitchLockKey);
     mixParams.pitchLockScale  = (int) loadParam (p.pitchLockScale, 1.0f);
-    mixParams.pitchLockAmount = juce::jmax (loadParam (p.pitchLockAmount, 1.0f), ctl.pitchFormantOn ? loadParam (p.pitchFormantMix, 0.0f) : 0.0f);
+    mixParams.pitchLockAmount = loadParam (p.pitchLockAmount, 1.0f);
     mixParams.pitchLockFormant = isOn (p.pitchLockFormant);
 
 
@@ -899,6 +916,47 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
                                entropyBuffer,
                                prettifierBuffer,
                                mixParams);
+
+    // -------- Transform machines: independent master-bus inserts, each gated by
+    // its own machine On flag and blended by its own Mix. --------
+
+    // Pitch / Formant: formant-preserving pitch shift (latency-compensated dry).
+    if (ctl.pitchFormantOn)
+        pitchFormantMachine.process (buffer,
+                                     target (gf::ParamId::pitch),
+                                     isOn (p.pitchLockFormant),
+                                     loadParam (p.pitchFormantMix, 1.0f));
+
+    // Time Breaker: beat-repeat / stutter / reverse glitch.
+    if (ctl.timeBreakerOn)
+        timeBreaker.process (buffer,
+                             loadParam (p.stutterSize, 80.0f),
+                             loadParam (p.stutterRate, 8.0f),
+                             juce::jmax (loadParam (p.stutterChance),
+                                         0.5f * loadParam (p.timeBreakerMix, 1.0f)),
+                             loadParam (p.reverseChance),
+                             loadParam (p.timeBreakerMix, 1.0f));
+
+    // Damage: drive -> sample-rate reduction -> bit crush.
+    if (ctl.damageOn)
+        damageMachine.process (buffer,
+                               loadParam (p.damageAmount, 1.0f),
+                               loadParam (p.damageMix, 1.0f));
+
+    // Spectral: freeze a glassy pad. Capture a fresh spectrum for a short window
+    // when first switched on, then hold it (it only resynthesizes once frozen).
+    if (ctl.spectralOn)
+    {
+        if (! spectralWasOn)
+            spectralCaptureLeft = gf::SpectralFreeze::kFftSize * 2; // ~2 frames to capture
+        spectralMachine.setFrozen (spectralCaptureLeft <= 0);
+        spectralMachine.setMix (loadParam (p.spectralMix, 1.0f)
+                                * juce::jmax (0.001f, loadParam (p.spectralAmount, 1.0f)));
+        spectralMachine.setShimmer (loadParam (p.specShimmer, 0.2f));
+        spectralMachine.process (buffer);
+        spectralCaptureLeft = juce::jmax (0, spectralCaptureLeft - n);
+    }
+    spectralWasOn = ctl.spectralOn;
 
     // Sample Mode: capture the clean master (before our own playback, so the loop
     // can't feed back), service a pending Freeze, then layer the looping sample.

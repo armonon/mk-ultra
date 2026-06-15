@@ -12,6 +12,8 @@
 #include "GrainFreeze/PresetManager.h"
 #include "GrainFreeze/Randomizer.h"
 #include "GrainFreeze/SampleFreeze.h"
+#include "GrainFreeze/SpectralFreeze.h"
+#include "GrainFreeze/TransformRack.h"
 
 #ifndef MKULTRA_ENABLE_EXPERIMENTAL_INPUT_TOOLS
 #define MKULTRA_ENABLE_EXPERIMENTAL_INPUT_TOOLS 0
@@ -57,6 +59,11 @@ public:
     gf::mix::MixEngine mixEngine;
     gf::pretty::PrettifierEngine prettifierEngine;
     gf::ModMatrix      modMatrix;
+    // Dedicated transform machines (master-bus inserts, each gated by its own On).
+    gf::SpectralFreeze      spectralMachine;
+    gf::DamageEngine        damageMachine;
+    gf::TimeBreakerEngine   timeBreaker;
+    gf::PitchFormantMachine pitchFormantMachine;
     gf::PresetManager  presets { apvts };
     gf::SnapshotManager snapshots { apvts };
     gf::Randomizer     randomizer { apvts };
@@ -189,6 +196,10 @@ private:
         std::atomic<float>* pitchFormantMix = nullptr;
         std::atomic<float>* timeBreakerOn = nullptr;
         std::atomic<float>* timeBreakerMix = nullptr;
+        std::atomic<float>* stutterRate = nullptr;
+        std::atomic<float>* stutterSize = nullptr;
+        std::atomic<float>* stutterChance = nullptr;
+        std::atomic<float>* reverseChance = nullptr;
         std::atomic<float>* damageOn = nullptr;
         std::atomic<float>* damageMix = nullptr;
         std::atomic<float>* damageAmount = nullptr;
@@ -315,6 +326,10 @@ private:
     gf::MidiNoteController midiCtrl;
     gf::SampleFreezeEngine sampleEngine;
     std::atomic<bool> sampleFreezeRequested { false };
+    // Spectral machine: capture a fresh spectrum for a short window each time it
+    // is switched on, then hold (freeze) it.
+    int  spectralCaptureLeft = 0;
+    bool spectralWasOn = false;
     juce::AudioBuffer<float> dryInBuffer;
     juce::AudioBuffer<float> entropyBuffer;
     juce::AudioBuffer<float> prettifierBuffer;
