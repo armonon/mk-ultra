@@ -207,6 +207,7 @@ private:
     juce::ComboBox   presetBox;
     juce::TextEditor presetName;
     juce::TextButton tabEntropy { "TRANSFORM" };
+    juce::TextButton tabMachines { "MACHINES" };
     juce::TextButton tabMix { "OUT" };
     juce::TextButton tabPrettifier { "BEAUTY & SPACE" };
     int currentTab = 0;
@@ -334,6 +335,36 @@ private:
     juce::ToggleButton echoOnButton   { "Echo" },   reverbOnButton { "Reverb" },
                        chorusOnButton { "Chorus" }, crushOnButton  { "Crush" };
     std::array<std::unique_ptr<ButtonAttachment>, 4> moduleAttach;
+
+    // ---- MACHINES tab: UI for the four transform machines. Each gets an On
+    // toggle, a Mix knob, and its key parameters. Plain knobs (no lock/mod ring).
+    juce::Label machinesHeader;
+    juce::Label machSpectralTitle, machPitchTitle, machDamageTitle, machTimeTitle;
+
+    juce::ToggleButton machSpectralOn { "On" };
+    juce::Slider       machSpectralMix, machSpectralAmount;
+    juce::Label        machSpectralMixL, machSpectralAmountL;
+
+    juce::ToggleButton machPitchOn { "On" };
+    juce::ToggleButton machPitchFormant { "Formant" };
+    juce::Slider       machPitchMix, machPitchShift;
+    juce::Label        machPitchMixL, machPitchShiftL;
+
+    juce::ToggleButton machDamageOn { "On" };
+    juce::Slider       machDamageMix, machDamageAmount;
+    juce::Label        machDamageMixL, machDamageAmountL;
+
+    juce::ToggleButton machTimeOn { "On" };
+    juce::Slider       machTimeMix, machTimeRate, machTimeSize, machTimeChance, machTimeReverse;
+    juce::Label        machTimeMixL, machTimeRateL, machTimeSizeL, machTimeChanceL, machTimeReverseL;
+
+    std::unique_ptr<ButtonAttachment> machSpectralOnAttach, machPitchOnAttach, machPitchFormantAttach,
+                                      machDamageOnAttach, machTimeOnAttach;
+    std::unique_ptr<SliderAttachment> machSpectralMixAttach, machSpectralAmountAttach,
+                                      machPitchMixAttach, machPitchShiftAttach,
+                                      machDamageMixAttach, machDamageAmountAttach,
+                                      machTimeMixAttach, machTimeRateAttach, machTimeSizeAttach,
+                                      machTimeChanceAttach, machTimeReverseAttach;
 
     // Mix tab labels.
     juce::Label mixHeader;

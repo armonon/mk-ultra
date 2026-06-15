@@ -477,14 +477,16 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (freezeButton);
     freezeAttachment = std::make_unique<ButtonAttachment> (proc.apvts, "frozen", freezeButton);
 
-    for (auto* tab : { &tabEntropy, &tabMix, &tabPrettifier })
+    for (auto* tab : { &tabEntropy, &tabMachines, &tabMix, &tabPrettifier })
         addAndMakeVisible (*tab);
     tabEntropy.onClick = [this] { switchTab (0); };
     tabMix.onClick = [this] { switchTab (1); };
     tabPrettifier.onClick = [this] { switchTab (2); };
+    tabMachines.onClick = [this] { switchTab (3); };
     tabEntropy.setClickingTogglesState (true);
     tabMix.setClickingTogglesState (true);
     tabPrettifier.setClickingTogglesState (true);
+    tabMachines.setClickingTogglesState (true);
 
     for (auto* b : { &buttonA, &buttonB, &copyAToBButton, &copyBToAButton, &resetBButton,
                      &undoButton, &redoButton, &initButton, &randomizeAllButton, &panicButton })
@@ -866,6 +868,47 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
 
     addChildComponent (fadeOverlay); // on top, hidden until a tab switch
 
+    // ---- MACHINES tab controls (Spectral, Pitch/Formant, Damage, Time Breaker) ----
+    setupSectionLabel (machinesHeader, "MACHINES", 14.0f);
+    setupSectionLabel (machSpectralTitle, "SPECTRAL", 13.0f);
+    setupSectionLabel (machPitchTitle,    "PITCH / FORMANT", 13.0f);
+    setupSectionLabel (machDamageTitle,   "DAMAGE", 13.0f);
+    setupSectionLabel (machTimeTitle,     "TIME BREAKER", 13.0f);
+
+    auto machKnob = [&] (juce::Slider& s, juce::Label& l, const juce::String& name,
+                         const char* pid, std::unique_ptr<SliderAttachment>& att)
+    {
+        setupMixKnob (s);
+        addAndMakeVisible (s);
+        setupDialLabel (l, name);
+        att = std::make_unique<SliderAttachment> (proc.apvts, pid, s);
+    };
+    auto machToggle = [&] (juce::ToggleButton& b, const char* pid, std::unique_ptr<ButtonAttachment>& att)
+    {
+        addAndMakeVisible (b);
+        att = std::make_unique<ButtonAttachment> (proc.apvts, pid, b);
+    };
+
+    machToggle (machSpectralOn, "spectralOn", machSpectralOnAttach);
+    machKnob (machSpectralMix,    machSpectralMixL,    "Mix",    "spectralMix",    machSpectralMixAttach);
+    machKnob (machSpectralAmount, machSpectralAmountL, "Amount", "spectralAmount", machSpectralAmountAttach);
+
+    machToggle (machPitchOn,      "pitchFormantOn",   machPitchOnAttach);
+    machToggle (machPitchFormant, "pitchLockFormant", machPitchFormantAttach);
+    machKnob (machPitchMix,   machPitchMixL,   "Mix",   "pitchFormantMix", machPitchMixAttach);
+    machKnob (machPitchShift, machPitchShiftL, "Pitch", "pitch",           machPitchShiftAttach);
+
+    machToggle (machDamageOn, "damageOn", machDamageOnAttach);
+    machKnob (machDamageMix,    machDamageMixL,    "Mix",    "damageMix",    machDamageMixAttach);
+    machKnob (machDamageAmount, machDamageAmountL, "Amount", "damageAmount", machDamageAmountAttach);
+
+    machToggle (machTimeOn, "timeBreakerOn", machTimeOnAttach);
+    machKnob (machTimeMix,     machTimeMixL,     "Mix",     "timeBreakerMix", machTimeMixAttach);
+    machKnob (machTimeRate,    machTimeRateL,    "Rate",    "stutterRate",    machTimeRateAttach);
+    machKnob (machTimeSize,    machTimeSizeL,    "Size",    "stutterSize",    machTimeSizeAttach);
+    machKnob (machTimeChance,  machTimeChanceL,  "Chance",  "stutterChance",  machTimeChanceAttach);
+    machKnob (machTimeReverse, machTimeReverseL, "Reverse", "reverseChance",  machTimeReverseAttach);
+
     refreshPresetList();
     setSize (1020, 860);
     updateTabVisibility();
@@ -1051,7 +1094,7 @@ void GrainFreezeEditor::refreshPresetList()
 
 void GrainFreezeEditor::switchTab (int tabIndex)
 {
-    currentTab = juce::jlimit (0, 2, tabIndex);
+    currentTab = juce::jlimit (0, 3, tabIndex);
     updateTabVisibility();
     resized();
     tabFade = 0.0f;            // start fully scrimmed, then ease out
@@ -1073,13 +1116,15 @@ void GrainFreezeEditor::updateTabVisibility()
     const bool entropyTab = currentTab == 0;
     const bool mixTab = currentTab == 1;
     const bool prettifierTab = currentTab == 2;
+    const bool machinesTab = currentTab == 3;
     constexpr bool inputToolsVisible = kMkUltraExperimentalInputTools;
 
     tabEntropy.setToggleState (entropyTab, juce::dontSendNotification);
     tabMix.setToggleState (mixTab, juce::dontSendNotification);
     tabPrettifier.setToggleState (prettifierTab, juce::dontSendNotification);
+    tabMachines.setToggleState (machinesTab, juce::dontSendNotification);
 
-    lnf.setAccentTheme (entropyTab ? gf::BiohazardLookAndFeel::AccentTheme::entropy
+    lnf.setAccentTheme ((entropyTab || machinesTab) ? gf::BiohazardLookAndFeel::AccentTheme::entropy
                         : mixTab     ? gf::BiohazardLookAndFeel::AccentTheme::mix
                                      : gf::BiohazardLookAndFeel::AccentTheme::prettifier);
     sendLookAndFeelChange();
@@ -1104,7 +1149,7 @@ void GrainFreezeEditor::updateTabVisibility()
     if (meter != nullptr) meter->setVisible (entropyTab);
     if (modScope != nullptr) modScope->setVisible (entropyTab);
     // The Mix tab swaps the bottom output scope for the master spectrum analyzer.
-    if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab);
+    if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab && ! machinesTab);
     if (spectrumDisplay != nullptr) spectrumDisplay->setVisible (mixTab);
     specFreezeButton.setVisible (entropyTab);
     specLabel.setVisible (entropyTab);
@@ -1168,6 +1213,21 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto* b : { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton })
         b->setVisible (prettifierTab);
 
+    // MACHINES tab.
+    machinesHeader.setVisible (machinesTab);
+    for (auto* l : { &machSpectralTitle, &machPitchTitle, &machDamageTitle, &machTimeTitle })
+        l->setVisible (machinesTab);
+    for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn })
+        b->setVisible (machinesTab);
+    for (auto* s : { &machSpectralMix, &machSpectralAmount, &machPitchMix, &machPitchShift,
+                     &machDamageMix, &machDamageAmount, &machTimeMix, &machTimeRate,
+                     &machTimeSize, &machTimeChance, &machTimeReverse })
+        s->setVisible (machinesTab);
+    for (auto* l : { &machSpectralMixL, &machSpectralAmountL, &machPitchMixL, &machPitchShiftL,
+                     &machDamageMixL, &machDamageAmountL, &machTimeMixL, &machTimeRateL,
+                     &machTimeSizeL, &machTimeChanceL, &machTimeReverseL })
+        l->setVisible (machinesTab);
+
     if (keyboard != nullptr)
         keyboard->setVisible (inputToolsVisible);
 }
@@ -1212,7 +1272,7 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     }
 
     // Background artwork, kept subtle so the UI stays clean and modern.
-    if (tab == 0)
+    if (tab == 0 || tab == 3)   // Machines tab shares the Transform tab's backdrop
         drawBgImage (bgImage, (0.16f + glowLevel * 0.12f) * boot);
     else if (tab == 2)
         drawBgImage (prettifierBgImage, (0.34f + glowLevel * 0.12f) * boot);
@@ -1376,6 +1436,7 @@ void GrainFreezeEditor::resized()
         header.removeFromLeft (gap);
     };
     placeTab (tabEntropy, 132);
+    placeTab (tabMachines, 124);
     placeTab (tabMix, 82);
     placeTab (tabPrettifier, 184);
 
@@ -1637,6 +1698,44 @@ void GrainFreezeEditor::resized()
         juce::Slider* eqSliders[] = { &eqLowKnob, &eqMidKnob, &eqHighKnob, &eqLoFiKnob };
         for (size_t i = 0; i < eqLabels.size(); ++i)
             layoutDialCell (eqRow, eqLabels[i], *eqSliders[i], eqDialW);
+    }
+    else if (currentTab == 3)
+    {
+        machinesHeader.setBounds (area.removeFromTop (24).reduced (4, 0));
+        area.removeFromTop (gap);
+
+        // One stacked block per machine: [title + On (+extra toggle)] over a knob row.
+        auto machineRow = [&] (juce::Label& title, juce::ToggleButton& on, juce::ToggleButton* extra,
+                               std::initializer_list<std::pair<juce::Slider*, juce::Label*>> knobs)
+        {
+            auto block = area.removeFromTop (116);
+            auto head  = block.removeFromTop (26);
+            title.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
+            on.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
+            if (extra != nullptr)
+            {
+                head.removeFromLeft (gap);
+                extra->setBounds (head.removeFromLeft (100).withSizeKeepingCentre (96, 24));
+            }
+            block.removeFromTop (4);
+            const int kw = 96;
+            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * (int) knobs.size()),
+                                                     block.getHeight());
+            for (auto& kv : knobs)
+                layoutDialCell (krow, *kv.second, *kv.first, kw);
+            area.removeFromTop (gap);
+        };
+
+        machineRow (machSpectralTitle, machSpectralOn, nullptr,
+                    { { &machSpectralMix, &machSpectralMixL }, { &machSpectralAmount, &machSpectralAmountL } });
+        machineRow (machPitchTitle, machPitchOn, &machPitchFormant,
+                    { { &machPitchMix, &machPitchMixL }, { &machPitchShift, &machPitchShiftL } });
+        machineRow (machDamageTitle, machDamageOn, nullptr,
+                    { { &machDamageMix, &machDamageMixL }, { &machDamageAmount, &machDamageAmountL } });
+        machineRow (machTimeTitle, machTimeOn, nullptr,
+                    { { &machTimeMix, &machTimeMixL }, { &machTimeRate, &machTimeRateL },
+                      { &machTimeSize, &machTimeSizeL }, { &machTimeChance, &machTimeChanceL },
+                      { &machTimeReverse, &machTimeReverseL } });
     }
 
     if (currentTab == 0)
