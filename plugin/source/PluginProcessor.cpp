@@ -88,6 +88,13 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.damageOn, "damageOn");
     bind (paramPtrs.damageMix, "damageMix");
     bind (paramPtrs.damageAmount, "damageAmount");
+    bind (paramPtrs.damageClip, "damageClip");
+    bind (paramPtrs.damageBits, "damageBits");
+    bind (paramPtrs.damageRate, "damageRate");
+    bind (paramPtrs.damageJitter, "damageJitter");
+    bind (paramPtrs.damageNoise, "damageNoise");
+    bind (paramPtrs.damageDropout, "damageDropout");
+    bind (paramPtrs.damageTone, "damageTone");
     bind (paramPtrs.motionMatrixOn, "motionMatrixOn");
     bind (paramPtrs.dryWet, "dryWet");
 
@@ -284,6 +291,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addMachine ("pitchFormant", "Pitch / Formant", false);
     addMachine ("timeBreaker", "Time Breaker", false);
     addMachine ("damage", "Damage", false);
+    // Damage detail: a full destruction stage. damageAmount is the master drive.
+    addChoice ("damageClip", "Damage Clip", StringArray { "Tube", "Tape", "Hard", "Fold", "Diode" }, 0);
+    addFloat  ("damageBits",    "Damage Bits",     NormalisableRange<float> (1.0f, 16.0f, 0.01f), 16.0f);
+    addFloat  ("damageRate",    "Damage Rate",     NormalisableRange<float> (1.0f, 64.0f, 0.01f, 0.4f), 1.0f);
+    addFloat  ("damageJitter",  "Damage Jitter",   NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat  ("damageNoise",   "Damage Noise",    NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat  ("damageDropout", "Damage Dropout",  NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    addFloat  ("damageTone",    "Damage Tone",     NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
     addMachine ("motionMatrix", "Motion Matrix", true);
     addFloat ("analyzerScopeMix", "Analyzer / Scopes Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
     addFloat ("analyzerScopeAmount", "Analyzer / Scopes Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
@@ -937,11 +952,22 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
                              loadParam (p.reverseChance),
                              loadParam (p.timeBreakerMix, 1.0f));
 
-    // Damage: drive -> sample-rate reduction -> bit crush.
+    // Damage: full destruction stage (drive -> SR reduction -> bit crush -> noise
+    // -> dropouts -> tone), each stage driven by its own parameter.
     if (ctl.damageOn)
-        damageMachine.process (buffer,
-                               loadParam (p.damageAmount, 1.0f),
-                               loadParam (p.damageMix, 1.0f));
+    {
+        gf::DamageParams dp;
+        dp.amount  = loadParam (p.damageAmount, 0.5f);
+        dp.clip    = (int) loadParam (p.damageClip, 0.0f);
+        dp.bits    = loadParam (p.damageBits, 16.0f);
+        dp.rate    = loadParam (p.damageRate, 1.0f);
+        dp.jitter  = loadParam (p.damageJitter, 0.0f);
+        dp.noise   = loadParam (p.damageNoise, 0.0f);
+        dp.dropout = loadParam (p.damageDropout, 0.0f);
+        dp.tone    = loadParam (p.damageTone, 1.0f);
+        dp.mix     = loadParam (p.damageMix, 1.0f);
+        damageMachine.process (buffer, dp);
+    }
 
     // Spectral: freeze a glassy pad. Capture a fresh spectrum for a short window
     // when first switched on, then hold it (it only resynthesizes once frozen).

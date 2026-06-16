@@ -899,8 +899,17 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machPitchShift, machPitchShiftL, "Pitch", "pitch",           machPitchShiftAttach);
 
     machToggle (machDamageOn, "damageOn", machDamageOnAttach);
-    machKnob (machDamageMix,    machDamageMixL,    "Mix",    "damageMix",    machDamageMixAttach);
-    machKnob (machDamageAmount, machDamageAmountL, "Amount", "damageAmount", machDamageAmountAttach);
+    machDamageClip.addItemList ({ "Tube", "Tape", "Hard", "Fold", "Diode" }, 1);
+    addAndMakeVisible (machDamageClip);
+    machDamageClipAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "damageClip", machDamageClip);
+    machKnob (machDamageAmount,  machDamageAmountL,  "Drive",   "damageAmount",  machDamageAmountAttach);
+    machKnob (machDamageBits,    machDamageBitsL,    "Bits",    "damageBits",    machDamageBitsAttach);
+    machKnob (machDamageRate,    machDamageRateL,    "Rate",    "damageRate",    machDamageRateAttach);
+    machKnob (machDamageJitter,  machDamageJitterL,  "Jitter",  "damageJitter",  machDamageJitterAttach);
+    machKnob (machDamageNoise,   machDamageNoiseL,   "Noise",   "damageNoise",   machDamageNoiseAttach);
+    machKnob (machDamageDropout, machDamageDropoutL, "Dropout", "damageDropout", machDamageDropoutAttach);
+    machKnob (machDamageTone,    machDamageToneL,    "Tone",    "damageTone",    machDamageToneAttach);
+    machKnob (machDamageMix,     machDamageMixL,     "Mix",     "damageMix",     machDamageMixAttach);
 
     machToggle (machTimeOn, "timeBreakerOn", machTimeOnAttach);
     machKnob (machTimeMix,     machTimeMixL,     "Mix",     "timeBreakerMix", machTimeMixAttach);
@@ -1220,13 +1229,16 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn })
         b->setVisible (machinesTab);
     for (auto* s : { &machSpectralMix, &machSpectralAmount, &machPitchMix, &machPitchShift,
-                     &machDamageMix, &machDamageAmount, &machTimeMix, &machTimeRate,
-                     &machTimeSize, &machTimeChance, &machTimeReverse })
+                     &machDamageMix, &machDamageAmount, &machDamageBits, &machDamageRate,
+                     &machDamageJitter, &machDamageNoise, &machDamageDropout, &machDamageTone,
+                     &machTimeMix, &machTimeRate, &machTimeSize, &machTimeChance, &machTimeReverse })
         s->setVisible (machinesTab);
     for (auto* l : { &machSpectralMixL, &machSpectralAmountL, &machPitchMixL, &machPitchShiftL,
-                     &machDamageMixL, &machDamageAmountL, &machTimeMixL, &machTimeRateL,
-                     &machTimeSizeL, &machTimeChanceL, &machTimeReverseL })
+                     &machDamageMixL, &machDamageAmountL, &machDamageBitsL, &machDamageRateL,
+                     &machDamageJitterL, &machDamageNoiseL, &machDamageDropoutL, &machDamageToneL,
+                     &machTimeMixL, &machTimeRateL, &machTimeSizeL, &machTimeChanceL, &machTimeReverseL })
         l->setVisible (machinesTab);
+    machDamageClip.setVisible (machinesTab);
 
     if (keyboard != nullptr)
         keyboard->setVisible (inputToolsVisible);
@@ -1730,8 +1742,27 @@ void GrainFreezeEditor::resized()
                     { { &machSpectralMix, &machSpectralMixL }, { &machSpectralAmount, &machSpectralAmountL } });
         machineRow (machPitchTitle, machPitchOn, &machPitchFormant,
                     { { &machPitchMix, &machPitchMixL }, { &machPitchShift, &machPitchShiftL } });
-        machineRow (machDamageTitle, machDamageOn, nullptr,
-                    { { &machDamageMix, &machDamageMixL }, { &machDamageAmount, &machDamageAmountL } });
+        // Damage gets the full treatment: Clip type in the header + a wide knob row.
+        {
+            auto block = area.removeFromTop (116);
+            auto head  = block.removeFromTop (26);
+            machDamageTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
+            machDamageOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
+            head.removeFromLeft (gap);
+            machDamageClip.setBounds (head.removeFromLeft (110).withSizeKeepingCentre (106, 26));
+            block.removeFromTop (4);
+            const int kw = 96;
+            std::pair<juce::Slider*, juce::Label*> dk[] = {
+                { &machDamageAmount, &machDamageAmountL }, { &machDamageBits, &machDamageBitsL },
+                { &machDamageRate, &machDamageRateL },     { &machDamageJitter, &machDamageJitterL },
+                { &machDamageNoise, &machDamageNoiseL },   { &machDamageDropout, &machDamageDropoutL },
+                { &machDamageTone, &machDamageToneL },      { &machDamageMix, &machDamageMixL } };
+            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 8), block.getHeight());
+            for (auto& kv : dk)
+                layoutDialCell (krow, *kv.second, *kv.first, kw);
+            area.removeFromTop (gap);
+        }
+
         machineRow (machTimeTitle, machTimeOn, nullptr,
                     { { &machTimeMix, &machTimeMixL }, { &machTimeRate, &machTimeRateL },
                       { &machTimeSize, &machTimeSizeL }, { &machTimeChance, &machTimeChanceL },

@@ -13,17 +13,33 @@
 namespace gf
 {
 
-// ---- Damage: drive -> sample-rate reduction -> bit crush, in one in-place pass.
-// amount 0..1 scales severity; mix 0..1 wet/dry. No external deps so it can run
-// per-sample without scratch buffers.
+// ---- Damage: a full destruction stage, in one allocation-free in-place pass:
+// drive + waveshaper -> sample-rate reduction (with jitter) -> bit crush (+dither)
+// -> noise -> dropouts -> tone lowpass -> wet/dry. Each stage has its own control.
+struct DamageParams
+{
+    float amount  = 0.0f;   // master drive (0..1 -> 1..19x into the shaper)
+    int   clip    = 0;      // 0 Tube, 1 Tape, 2 Hard, 3 Fold, 4 Diode
+    float bits    = 16.0f;  // 1..16
+    float rate    = 1.0f;   // downsample factor (1 = none .. 64)
+    float jitter  = 0.0f;   // 0..1 digital instability (SR wobble + dither)
+    float noise   = 0.0f;   // 0..1 added hiss
+    float dropout = 0.0f;   // 0..1 random sample dropouts
+    float tone    = 1.0f;   // 0 dark .. 1 open (post lowpass)
+    float mix     = 0.0f;   // 0..1 wet/dry
+};
+
 class DamageEngine
 {
 public:
-    void prepare (double sr, int numChannels)
+    void prepare (double sampleRate, int numChannels)
     {
-        juce::ignoreUnused (sr);
-        hold.assign ((size_t) juce::jmax (1, numChannels), 0.0f);
-        counter.assign ((size_t) juce::jmax (1, numChannels), 0);
+        sr = sampleRate > 0.0 ? sampleRate : 44100.0;
+        const int ch = juce::jmax (1, numChannels);
+        hold.assign ((size_t) ch, 0.0f);
+        counter.assign ((size_t) ch, 0);
+        lp.assign ((size_t) ch, 0.0f);
+        dropLeft.assign ((size_t) ch, 0);
         reset();
     }
 
@@ -31,46 +47,91 @@ public:
     {
         std::fill (hold.begin(), hold.end(), 0.0f);
         std::fill (counter.begin(), counter.end(), 0);
+        std::fill (lp.begin(), lp.end(), 0.0f);
+        std::fill (dropLeft.begin(), dropLeft.end(), 0);
     }
 
-    void process (juce::AudioBuffer<float>& buffer, float amount, float mix)
+    void process (juce::AudioBuffer<float>& buffer, const DamageParams& p)
     {
-        if (mix <= 0.001f || amount <= 0.001f)
+        if (p.mix <= 0.001f)
             return;
 
-        const float a       = juce::jlimit (0.0f, 1.0f, amount);
-        const float m        = juce::jlimit (0.0f, 1.0f, mix);
-        const float drive    = 1.0f + a * 18.0f;                 // 1..19x
-        const float comp     = 1.0f / std::sqrt (drive);          // level compensation
-        const int   downN    = 1 + (int) (a * a * 40.0f);         // sample-and-hold stride
-        const float bits     = 16.0f - a * 14.0f;                 // 16..2 bits
-        const float levels   = std::pow (2.0f, juce::jmax (1.0f, bits));
-        const float step     = 2.0f / levels;
+        const float m      = juce::jlimit (0.0f, 1.0f, p.mix);
+        const float drive  = 1.0f + juce::jlimit (0.0f, 1.0f, p.amount) * 18.0f;
+        const float comp   = 1.0f / std::sqrt (drive);
+        const float levels = std::pow (2.0f, juce::jlimit (1.0f, 16.0f, p.bits));
+        const float step   = 2.0f / levels;
+        const int   baseN  = juce::jmax (1, (int) std::lround (p.rate));
+        const float fc     = 300.0f * std::pow (60.0f, juce::jlimit (0.0f, 1.0f, p.tone)); // 300..18000 Hz
+        const float lpCoef = juce::jlimit (0.0f, 1.0f, 1.0f - std::exp (-2.0f * pi * fc / (float) sr));
 
         const int numCh = buffer.getNumChannels();
         const int n     = buffer.getNumSamples();
         for (int c = 0; c < numCh && c < (int) hold.size(); ++c)
         {
-            auto* d = buffer.getWritePointer (c);
-            float  h  = hold[(size_t) c];
-            int    ct = counter[(size_t) c];
+            auto* d  = buffer.getWritePointer (c);
+            float h  = hold[(size_t) c];
+            int   ct = counter[(size_t) c];
+            float y  = lp[(size_t) c];
+            int   dl = dropLeft[(size_t) c];
             for (int i = 0; i < n; ++i)
             {
                 const float x = d[i];
-                if (ct <= 0) { h = x; ct = downN; }   // sample-and-hold downsample
+                float w = shape (p.clip, x * drive) * comp;        // drive + waveshape
+
+                if (ct <= 0)                                        // sample-rate reduction
+                {
+                    h = w;
+                    ct = baseN;
+                    if (p.jitter > 0.0f)
+                        ct = juce::jmax (1, (int) std::lround (baseN * (1.0f + (rng.nextFloat() * 2.0f - 1.0f) * p.jitter)));
+                }
                 --ct;
-                float wet = std::tanh (h * drive) * comp;          // saturate
-                wet = std::round (wet / step) * step;              // bit crush
-                d[i] = x * (1.0f - m) + wet * m;
+                w = h;
+
+                if (p.jitter > 0.0f)                               // dither
+                    w += (rng.nextFloat() * 2.0f - 1.0f) * step * p.jitter * 0.5f;
+                w = std::round (w / step) * step;                  // bit crush
+
+                if (p.noise > 0.0f)                                // hiss
+                    w += (rng.nextFloat() * 2.0f - 1.0f) * p.noise * 0.2f;
+
+                if (dl > 0) { w = 0.0f; --dl; }                    // dropouts
+                else if (p.dropout > 0.0f && rng.nextFloat() < p.dropout * 0.01f)
+                {
+                    dl = 1 + rng.nextInt (juce::jmax (1, (int) (p.dropout * 220.0f)));
+                    w = 0.0f;
+                }
+
+                y += lpCoef * (w - y);                             // tone lowpass
+                w = y;
+
+                d[i] = x * (1.0f - m) + w * m;
             }
-            hold[(size_t) c]    = h;
-            counter[(size_t) c] = ct;
+            hold[(size_t) c] = h; counter[(size_t) c] = ct;
+            lp[(size_t) c] = y;   dropLeft[(size_t) c] = dl;
         }
     }
 
 private:
-    std::vector<float> hold;
-    std::vector<int>   counter;
+    static inline float shape (int clip, float x)
+    {
+        switch (clip)
+        {
+            case 1:  return std::tanh (x * 0.8f);                                  // Tape
+            case 2:  return juce::jlimit (-1.0f, 1.0f, x);                          // Hard
+            case 3:  return std::sin (juce::jlimit (-3.5f, 3.5f, x) * 1.5f);        // Fold
+            case 4:  return x >= 0.0f ? std::tanh (x) : std::tanh (x * 0.3f);       // Diode (asym)
+            case 0:
+            default: return x >= 0.0f ? 1.0f - std::exp (-x) : -1.0f + std::exp (x * 0.7f); // Tube
+        }
+    }
+
+    static constexpr float pi = juce::MathConstants<float>::pi;
+    double sr = 44100.0;
+    std::vector<float> hold, lp;
+    std::vector<int>   counter, dropLeft;
+    juce::Random rng;
 };
 
 // ---- Time Breaker: beat-repeat / stutter / reverse glitch. Captures incoming

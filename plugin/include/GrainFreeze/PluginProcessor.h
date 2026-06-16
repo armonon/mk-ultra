@@ -203,6 +203,13 @@ private:
         std::atomic<float>* damageOn = nullptr;
         std::atomic<float>* damageMix = nullptr;
         std::atomic<float>* damageAmount = nullptr;
+        std::atomic<float>* damageClip = nullptr;
+        std::atomic<float>* damageBits = nullptr;
+        std::atomic<float>* damageRate = nullptr;
+        std::atomic<float>* damageJitter = nullptr;
+        std::atomic<float>* damageNoise = nullptr;
+        std::atomic<float>* damageDropout = nullptr;
+        std::atomic<float>* damageTone = nullptr;
         std::atomic<float>* motionMatrixOn = nullptr;
         std::atomic<float>* dryWet = nullptr;
 
