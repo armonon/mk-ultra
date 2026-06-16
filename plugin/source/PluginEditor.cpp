@@ -644,6 +644,16 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     satMix.setTextBoxStyle (juce::Slider::NoTextBox, false, 54, 16);
     addAndMakeVisible (satMix);
     satMixAttach = std::make_unique<SliderAttachment> (proc.apvts, "satMix", satMix);
+    // Per-control labels so the saturation stage reads clearly (Type / Drive / Mix).
+    for (auto* l : { &satTypeLabel, &satDriveLabel, &satMixLabel })
+    {
+        l->setJustificationType (juce::Justification::centred);
+        l->setFont (juce::Font (juce::FontOptions (11.0f)));
+        addAndMakeVisible (*l);
+    }
+    satTypeLabel.setText ("Type", juce::dontSendNotification);
+    satDriveLabel.setText ("Drive", juce::dontSendNotification);
+    satMixLabel.setText ("Mix", juce::dontSendNotification);
 
     satCurve = std::make_unique<SaturationCurve> (proc.apvts);
     addAndMakeVisible (*satCurve);
@@ -1158,6 +1168,9 @@ void GrainFreezeEditor::updateTabVisibility()
     satType.setVisible (entropyTab);
     satDrive.setVisible (entropyTab);
     satMix.setVisible (entropyTab);
+    satTypeLabel.setVisible (entropyTab);
+    satDriveLabel.setVisible (entropyTab);
+    satMixLabel.setVisible (entropyTab);
     if (satCurve != nullptr) satCurve->setVisible (entropyTab);
     if (meter != nullptr) meter->setVisible (entropyTab);
     if (modScope != nullptr) modScope->setVisible (entropyTab);
@@ -1816,11 +1829,16 @@ void GrainFreezeEditor::resized()
         satOnButton.setBounds (right.removeFromTop (20).withWidth (150));
         {
             auto row = right;
-            satType.setBounds  (row.removeFromLeft (98).withSizeKeepingCentre (98, 30));
-            row.removeFromLeft (gap);
-            satDrive.setBounds (row.removeFromLeft (82));
-            row.removeFromLeft (gap);
-            satMix.setBounds   (row.removeFromLeft (82));
+            auto labeled = [&] (juce::Component& c, juce::Label& l, int w, bool combo)
+            {
+                auto cell = row.removeFromLeft (w);
+                l.setBounds (cell.removeFromTop (14));
+                c.setBounds (combo ? cell.withSizeKeepingCentre (w, 28) : cell);
+                row.removeFromLeft (gap);
+            };
+            labeled (satType,  satTypeLabel,  98, true);
+            labeled (satDrive, satDriveLabel, 82, false);
+            labeled (satMix,   satMixLabel,   82, false);
         }
 
         // Global Mod controls, with their scope graph immediately to the right.

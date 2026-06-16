@@ -242,6 +242,7 @@ private:
     juce::ToggleButton satOnButton { "Saturation" };
     juce::ComboBox satType;
     juce::Slider   satDrive, satMix;
+    juce::Label    satTypeLabel, satDriveLabel, satMixLabel;
     std::unique_ptr<ButtonAttachment>   satOnAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> satTypeAttach;
     std::unique_ptr<SliderAttachment>   satDriveAttach, satMixAttach;
