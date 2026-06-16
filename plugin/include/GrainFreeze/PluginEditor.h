@@ -358,12 +358,15 @@ private:
                        machDamageJitterL, machDamageNoiseL, machDamageDropoutL, machDamageToneL;
 
     juce::ToggleButton machTimeOn { "On" };
+    juce::ToggleButton machTimeSync { "Sync" };
+    juce::ComboBox     machTimeDivision;
     juce::Slider       machTimeMix, machTimeRate, machTimeSize, machTimeChance, machTimeReverse;
     juce::Label        machTimeMixL, machTimeRateL, machTimeSizeL, machTimeChanceL, machTimeReverseL;
 
     std::unique_ptr<ButtonAttachment> machSpectralOnAttach, machPitchOnAttach, machPitchFormantAttach,
                                       machDamageOnAttach, machTimeOnAttach;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> machDamageClipAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> machDamageClipAttach, machTimeDivisionAttach;
+    std::unique_ptr<ButtonAttachment> machTimeSyncAttach;
     std::unique_ptr<SliderAttachment> machSpectralMixAttach, machSpectralAmountAttach,
                                       machPitchMixAttach, machPitchShiftAttach,
                                       machDamageMixAttach, machDamageAmountAttach,

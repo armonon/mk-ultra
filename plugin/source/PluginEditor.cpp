@@ -912,6 +912,10 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machDamageMix,     machDamageMixL,     "Mix",     "damageMix",     machDamageMixAttach);
 
     machToggle (machTimeOn, "timeBreakerOn", machTimeOnAttach);
+    machToggle (machTimeSync, "timeBreakerSync", machTimeSyncAttach);
+    machTimeDivision.addItemList ({ "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }, 1);
+    addAndMakeVisible (machTimeDivision);
+    machTimeDivisionAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "timeBreakerDivision", machTimeDivision);
     machKnob (machTimeMix,     machTimeMixL,     "Mix",     "timeBreakerMix", machTimeMixAttach);
     machKnob (machTimeRate,    machTimeRateL,    "Rate",    "stutterRate",    machTimeRateAttach);
     machKnob (machTimeSize,    machTimeSizeL,    "Size",    "stutterSize",    machTimeSizeAttach);
@@ -1226,7 +1230,7 @@ void GrainFreezeEditor::updateTabVisibility()
     machinesHeader.setVisible (machinesTab);
     for (auto* l : { &machSpectralTitle, &machPitchTitle, &machDamageTitle, &machTimeTitle })
         l->setVisible (machinesTab);
-    for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn })
+    for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn, &machTimeSync })
         b->setVisible (machinesTab);
     for (auto* s : { &machSpectralMix, &machSpectralAmount, &machPitchMix, &machPitchShift,
                      &machDamageMix, &machDamageAmount, &machDamageBits, &machDamageRate,
@@ -1239,6 +1243,7 @@ void GrainFreezeEditor::updateTabVisibility()
                      &machTimeMixL, &machTimeRateL, &machTimeSizeL, &machTimeChanceL, &machTimeReverseL })
         l->setVisible (machinesTab);
     machDamageClip.setVisible (machinesTab);
+    machTimeDivision.setVisible (machinesTab);
 
     if (keyboard != nullptr)
         keyboard->setVisible (inputToolsVisible);
@@ -1763,10 +1768,27 @@ void GrainFreezeEditor::resized()
             area.removeFromTop (gap);
         }
 
-        machineRow (machTimeTitle, machTimeOn, nullptr,
-                    { { &machTimeMix, &machTimeMixL }, { &machTimeRate, &machTimeRateL },
-                      { &machTimeSize, &machTimeSizeL }, { &machTimeChance, &machTimeChanceL },
-                      { &machTimeReverse, &machTimeReverseL } });
+        // Time Breaker: header with Sync + tempo Division, then its knob row.
+        {
+            auto block = area.removeFromTop (116);
+            auto head  = block.removeFromTop (26);
+            machTimeTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
+            machTimeOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
+            head.removeFromLeft (gap);
+            machTimeSync.setBounds (head.removeFromLeft (92).withSizeKeepingCentre (88, 24));
+            head.removeFromLeft (gap);
+            machTimeDivision.setBounds (head.removeFromLeft (88).withSizeKeepingCentre (84, 26));
+            block.removeFromTop (4);
+            const int kw = 96;
+            std::pair<juce::Slider*, juce::Label*> tk[] = {
+                { &machTimeMix, &machTimeMixL },   { &machTimeRate, &machTimeRateL },
+                { &machTimeSize, &machTimeSizeL }, { &machTimeChance, &machTimeChanceL },
+                { &machTimeReverse, &machTimeReverseL } };
+            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 5), block.getHeight());
+            for (auto& kv : tk)
+                layoutDialCell (krow, *kv.second, *kv.first, kw);
+            area.removeFromTop (gap);
+        }
     }
 
     if (currentTab == 0)

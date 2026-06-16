@@ -81,6 +81,8 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.pitchFormantMix, "pitchFormantMix");
     bind (paramPtrs.timeBreakerOn, "timeBreakerOn");
     bind (paramPtrs.timeBreakerMix, "timeBreakerMix");
+    bind (paramPtrs.timeBreakerSync, "timeBreakerSync");
+    bind (paramPtrs.timeBreakerDivision, "timeBreakerDivision");
     bind (paramPtrs.stutterRate, "stutterRate");
     bind (paramPtrs.stutterSize, "stutterSize");
     bind (paramPtrs.stutterChance, "stutterChance");
@@ -290,6 +292,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addMachine ("spectral", "Spectral", false);
     addMachine ("pitchFormant", "Pitch / Formant", false);
     addMachine ("timeBreaker", "Time Breaker", false);
+    addBool   ("timeBreakerSync", "Time Breaker Sync", false);
+    addChoice ("timeBreakerDivision", "Time Breaker Division",
+               StringArray { "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }, 3);
     addMachine ("damage", "Damage", false);
     // Damage detail: a full destruction stage. damageAmount is the master drive.
     addChoice ("damageClip", "Damage Clip", StringArray { "Tube", "Tape", "Hard", "Fold", "Diode" }, 0);
@@ -942,15 +947,29 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
                                      isOn (p.pitchLockFormant),
                                      loadParam (p.pitchFormantMix, 1.0f));
 
-    // Time Breaker: beat-repeat / stutter / reverse glitch.
+    // Time Breaker: beat-repeat / stutter / reverse glitch. Clock + slice come
+    // from a tempo-synced note division when Sync is on, else from free Rate/Size.
     if (ctl.timeBreakerOn)
-        timeBreaker.process (buffer,
-                             loadParam (p.stutterSize, 80.0f),
-                             loadParam (p.stutterRate, 8.0f),
-                             juce::jmax (loadParam (p.stutterChance),
-                                         0.5f * loadParam (p.timeBreakerMix, 1.0f)),
+    {
+        int sliceSamples, clockSamples;
+        if (isOn (p.timeBreakerSync))
+        {
+            static const float kDivBeats[] = { 4.0f, 2.0f, 1.0f, 0.5f, 1.0f / 3.0f, 0.25f, 1.0f / 6.0f, 0.125f };
+            const int di = juce::jlimit (0, 7, (int) loadParam (p.timeBreakerDivision, 3.0f));
+            const double spb = 60.0 / juce::jmax (20.0, hostBpm) * currentSampleRate; // samples per beat
+            clockSamples = juce::jmax (1, (int) (spb * kDivBeats[di]));
+            sliceSamples = clockSamples;
+        }
+        else
+        {
+            clockSamples = juce::jmax (1, (int) (currentSampleRate / juce::jmax (0.25f, loadParam (p.stutterRate, 8.0f))));
+            sliceSamples = juce::jmax (1, (int) (currentSampleRate * loadParam (p.stutterSize, 80.0f) * 0.001f));
+        }
+        timeBreaker.process (buffer, sliceSamples, clockSamples,
+                             juce::jmax (loadParam (p.stutterChance), 0.5f * loadParam (p.timeBreakerMix, 1.0f)),
                              loadParam (p.reverseChance),
                              loadParam (p.timeBreakerMix, 1.0f));
+    }
 
     // Damage: full destruction stage (drive -> SR reduction -> bit crush -> noise
     // -> dropouts -> tone), each stage driven by its own parameter.

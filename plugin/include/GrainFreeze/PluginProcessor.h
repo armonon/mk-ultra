@@ -196,6 +196,8 @@ private:
         std::atomic<float>* pitchFormantMix = nullptr;
         std::atomic<float>* timeBreakerOn = nullptr;
         std::atomic<float>* timeBreakerMix = nullptr;
+        std::atomic<float>* timeBreakerSync = nullptr;
+        std::atomic<float>* timeBreakerDivision = nullptr;
         std::atomic<float>* stutterRate = nullptr;
         std::atomic<float>* stutterSize = nullptr;
         std::atomic<float>* stutterChance = nullptr;

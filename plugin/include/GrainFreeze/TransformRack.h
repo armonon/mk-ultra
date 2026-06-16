@@ -158,18 +158,19 @@ public:
         for (auto& s : slice) std::fill (s.begin(), s.end(), 0.0f);
     }
 
-    // sliceMs: length of a captured slice; rateHz: how often the clock fires;
-    // chance 0..1: probability a clock tick triggers a repeat; revChance 0..1:
-    // probability a triggered slice plays reversed; mix 0..1 wet/dry.
-    void process (juce::AudioBuffer<float>& buffer, float sliceMs, float rateHz,
+    // sliceSamples: length of a captured slice; clockSamples: how often the clock
+    // fires (both already resolved from free ms/Hz or tempo-synced divisions by the
+    // caller); chance 0..1: probability a clock tick triggers a repeat; revChance
+    // 0..1: probability a triggered slice plays reversed; mix 0..1 wet/dry.
+    void process (juce::AudioBuffer<float>& buffer, int sliceSamples, int clockSamples,
                   float chance, float revChance, float mix)
     {
         if (mix <= 0.001f || chance <= 0.001f)
             return;
 
         const float m       = juce::jlimit (0.0f, 1.0f, mix);
-        const int   clockN  = juce::jmax (1, (int) (sr / juce::jmax (0.25f, rateHz)));
-        const int   wantLen = juce::jlimit (1, maxSliceLen, (int) (sr * sliceMs * 0.001f));
+        const int   clockN  = juce::jmax (1, clockSamples);
+        const int   wantLen = juce::jlimit (1, maxSliceLen, sliceSamples);
         const int   numCh   = juce::jmin (channels, buffer.getNumChannels());
         const int   n       = buffer.getNumSamples();
 
