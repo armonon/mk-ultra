@@ -954,6 +954,32 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machTimeRoute1Depth, machTimeRoute1DepthL, "Depth", "timeBreakerMod1Depth", machTimeRoute1DepthAttach);
     machKnob (machTimeRoute2Depth, machTimeRoute2DepthL, "Depth", "timeBreakerMod2Depth", machTimeRoute2DepthAttach);
 
+    // ---- Hover tooltips for the less-obvious controls ----
+    machSpectralOn.setTooltip ("Spectral: freeze the spectrum into a sustained glassy pad");
+    machPitchOn.setTooltip ("Pitch / Formant: formant-preserving pitch shift (driven by the Pitch knob)");
+    machPitchFormant.setTooltip ("Preserve formants so shifted pitch stays natural instead of chipmunk");
+    machDamageOn.setTooltip ("Damage: drive, sample-rate reduction, bit crush, noise, dropouts and tone");
+    machDamageClip.setTooltip ("Waveshaper character: Tube, Tape, Hard clip, Wavefold or Diode");
+    machDamageBits.setTooltip ("Bit depth (1 = wrecked, 16 = clean)");
+    machDamageRate.setTooltip ("Sample-rate reduction amount");
+    machDamageJitter.setTooltip ("Digital instability: sample-rate wobble + dither");
+    machDamageNoise.setTooltip ("Added hiss / noise");
+    machDamageDropout.setTooltip ("Random sample dropouts / glitches");
+    machDamageTone.setTooltip ("Post tone: dark to open");
+    machTimeOn.setTooltip ("Time Breaker: beat-repeat / stutter / reverse glitch");
+    machTimeSync.setTooltip ("Lock the stutter clock and slice length to host tempo");
+    machTimeDivision.setTooltip ("Tempo division for the stutter clock when Sync is on");
+    machTimeChance.setTooltip ("How often the clock triggers a stutter");
+    machTimeRoute1Target.setTooltip ("Route the Time Breaker's tempo gate onto this knob");
+    machTimeRoute2Target.setTooltip ("Route the Time Breaker's tempo gate onto this knob");
+    machTimeRoute1Depth.setTooltip ("How far the routed knob moves with the gate");
+    machTimeRoute2Depth.setTooltip ("How far the routed knob moves with the gate");
+    lfoSyncBox.setTooltip ("Lock the Global Mod LFO rate to host tempo (Free = use the knob)");
+    echoSyncBox.setTooltip ("Lock the Echo time to host tempo (Free = use the Echo knob)");
+    globalModOnButton.setTooltip ("Global modulation LFO that sweeps the engine knobs");
+    satOnButton.setTooltip ("Saturation stage: Tube / Tape / Hard drive on the grains");
+    pitchLockButton.setTooltip ("Snap the whole output to a musical key + scale");
+
     refreshPresetList();
     setSize (1020, 860);
     updateTabVisibility();

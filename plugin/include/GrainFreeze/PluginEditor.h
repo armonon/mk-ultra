@@ -171,6 +171,7 @@ private:
     GrainFreezeProcessor& proc;
 
     gf::BiohazardLookAndFeel lnf;
+    juce::TooltipWindow tooltipWindow { this, 600 }; // hover hints across the editor
     juce::Path watermark;
     juce::Image logoImage;
     juce::Image whiteLogoImage;   // white-tinted emblem for the Mix tab
