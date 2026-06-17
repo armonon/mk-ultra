@@ -33,8 +33,39 @@ bool PresetManager::savePreset (const juce::String& name)
     return ok;
 }
 
+bool PresetManager::applyFactory (const juce::String& name)
+{
+    const FactoryPreset* found = nullptr;
+    for (auto& fp : factoryPresets())
+        if (name == fp.name) { found = &fp; break; }
+    if (found == nullptr) return false;
+
+    // Reset every parameter to its default, then apply the preset's overrides.
+    for (auto child : apvts.state)
+    {
+        const auto id = child.getProperty ("id").toString();
+        if (id.isNotEmpty())
+            if (auto* p = apvts.getParameter (id))
+                p->setValueNotifyingHost (p->getDefaultValue());
+    }
+    for (auto& fpp : found->params)
+        if (auto* p = apvts.getParameter (fpp.id))
+            p->setValueNotifyingHost (p->getNormalisableRange().convertTo0to1 (fpp.value));
+
+    currentPreset = name;
+    return true;
+}
+
+void PresetManager::loadDefaultPatch()
+{
+    applyFactory (kDefaultPresetName);
+}
+
 bool PresetManager::loadPreset (const juce::String& name)
 {
+    if (applyFactory (name))            // built-in factory preset
+        return true;
+
     auto file = getPresetDirectory().getChildFile (name + kExtension);
     if (! file.existsAsFile()) return false;
 
@@ -61,11 +92,16 @@ bool PresetManager::deletePreset (const juce::String& name)
 juce::StringArray PresetManager::getPresetNames() const
 {
     juce::StringArray names;
+    for (auto& fp : factoryPresets())   // built-ins first (default, then categories)
+        names.add (fp.name);
+
+    juce::StringArray userNames;
     auto files = getPresetDirectory().findChildFiles (
         juce::File::findFiles, false, juce::String ("*") + kExtension);
     for (auto& f : files)
-        names.add (f.getFileNameWithoutExtension());
-    names.sort (true);
+        userNames.add (f.getFileNameWithoutExtension());
+    userNames.sort (true);
+    names.addArray (userNames);
     return names;
 }
 

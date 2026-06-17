@@ -32,12 +32,15 @@ GrainFreezeProcessor::GrainFreezeProcessor()
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, &undoManager, "PARAMS", createLayout())
 {
-    slotA = apvts.copyState();
-    slotB = apvts.copyState();
     cacheParameterPointers();
     cacheModPointers();
     apvts.addParameterListener ("pitchLockFormant", this);
     apvts.addParameterListener ("pitchFormantOn", this);
+    // First-insert "signature" sound. If the host restores saved state,
+    // setStateInformation runs after construction and overrides this.
+    presets.loadDefaultPatch();
+    slotA = apvts.copyState();
+    slotB = apvts.copyState();
 }
 
 GrainFreezeProcessor::~GrainFreezeProcessor()

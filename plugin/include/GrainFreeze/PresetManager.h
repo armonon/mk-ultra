@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "GrainFreeze/FactoryPresets.h"
 
 namespace gf
 {
@@ -34,10 +35,16 @@ public:
 
     juce::String getCurrentPresetName() const { return currentPreset; }
 
+    // Apply the built-in default patch (used as the first-insert sound).
+    void loadDefaultPatch();
+
     static constexpr const char* kExtension = ".preset";
 
 private:
     int indexOfCurrent (const juce::StringArray& names) const;
+    // Reset all params to default, then apply the named factory preset. Returns
+    // false if no factory preset has that name.
+    bool applyFactory (const juce::String& name);
 
     juce::AudioProcessorValueTreeState& apvts;
     juce::String currentPreset;
