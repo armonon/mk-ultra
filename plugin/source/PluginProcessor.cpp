@@ -577,7 +577,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
 
     // Transform machines (master-bus inserts).
     spectralMachine.prepare (sampleRate, getTotalNumOutputChannels());
-    damageMachine.prepare (sampleRate, getTotalNumOutputChannels());
+    damageMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
     pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
 

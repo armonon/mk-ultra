@@ -3,6 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
 #include <vector>
+#include <memory>
 #include <cmath>
 #include "GrainFreeze/FormantShifter.h"
 
@@ -32,7 +33,7 @@ struct DamageParams
 class DamageEngine
 {
 public:
-    void prepare (double sampleRate, int numChannels)
+    void prepare (double sampleRate, int numChannels, int maxBlock)
     {
         sr = sampleRate > 0.0 ? sampleRate : 44100.0;
         const int ch = juce::jmax (1, numChannels);
@@ -40,6 +41,25 @@ public:
         counter.assign ((size_t) ch, 0);
         lp.assign ((size_t) ch, 0.0f);
         dropLeft.assign ((size_t) ch, 0);
+
+        // The waveshaper (Tube/Tape/Hard/Fold/Diode) throws harmonics above
+        // Nyquist at high drive; run it 4x oversampled so they don't fold back
+        // as aliasing. The lo-fi stages downstream stay at base rate on purpose.
+        osChannels = juce::jlimit (1, 2, ch);
+        const int block = juce::jmax (1, maxBlock);
+        os = std::make_unique<juce::dsp::Oversampling<float>> (
+                 (size_t) osChannels, 2,
+                 juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
+        os->initProcessing ((size_t) block);
+        os->reset();
+        dryBuf.setSize (osChannels, block);
+
+        // Delay the dry path by the oversampler latency so the wet/dry blend
+        // stays phase-aligned (otherwise it combs at low amounts).
+        dryRingLen = juce::jmax (1, (int) std::lround (os->getLatencyInSamples()));
+        dryRing.setSize (osChannels, dryRingLen);
+        dryRing.clear();
+        dryRingPos = 0;
         reset();
     }
 
@@ -65,9 +85,41 @@ public:
         const float fc     = 300.0f * std::pow (60.0f, juce::jlimit (0.0f, 1.0f, p.tone)); // 300..18000 Hz
         const float lpCoef = juce::jlimit (0.0f, 1.0f, 1.0f - std::exp (-2.0f * pi * fc / (float) sr));
 
-        const int numCh = buffer.getNumChannels();
         const int n     = buffer.getNumSamples();
-        for (int c = 0; c < numCh && c < (int) hold.size(); ++c)
+        const int numCh = juce::jmin (buffer.getNumChannels(), juce::jmin ((int) hold.size(), osChannels));
+        if (numCh <= 0 || n <= 0)
+            return;
+
+        // Stash the dry signal for the wet/dry blend at the end.
+        for (int c = 0; c < numCh; ++c)
+            dryBuf.copyFrom (c, 0, buffer, c, 0, n);
+
+        // ---- Stage 1: drive + waveshaper, 4x oversampled (anti-aliased) ----
+        if (os != nullptr && numCh == osChannels && n <= dryBuf.getNumSamples())
+        {
+            juce::dsp::AudioBlock<float> block (buffer.getArrayOfWritePointers(), (size_t) numCh, (size_t) n);
+            auto up = os->processSamplesUp (block);
+            const int upN = (int) up.getNumSamples();
+            for (int c = 0; c < numCh; ++c)
+            {
+                auto* u = up.getChannelPointer ((size_t) c);
+                for (int i = 0; i < upN; ++i)
+                    u[i] = shape (p.clip, u[i] * drive) * comp;
+            }
+            os->processSamplesDown (block);
+        }
+        else // fallback (shouldn't happen once prepared): shape at base rate
+        {
+            for (int c = 0; c < numCh; ++c)
+            {
+                auto* d = buffer.getWritePointer (c);
+                for (int i = 0; i < n; ++i)
+                    d[i] = shape (p.clip, d[i] * drive) * comp;
+            }
+        }
+
+        // ---- Stage 2: lo-fi grit stays at base rate (the aliasing IS the sound) ----
+        for (int c = 0; c < numCh; ++c)
         {
             auto* d  = buffer.getWritePointer (c);
             float h  = hold[(size_t) c];
@@ -76,10 +128,9 @@ public:
             int   dl = dropLeft[(size_t) c];
             for (int i = 0; i < n; ++i)
             {
-                const float x = d[i];
-                float w = shape (p.clip, x * drive) * comp;        // drive + waveshape
+                float w = d[i];                                   // anti-aliased waveshaper output
 
-                if (ct <= 0)                                        // sample-rate reduction
+                if (ct <= 0)                                       // sample-rate reduction
                 {
                     h = w;
                     ct = baseN;
@@ -89,28 +140,41 @@ public:
                 --ct;
                 w = h;
 
-                if (p.jitter > 0.0f)                               // dither
+                if (p.jitter > 0.0f)                              // dither
                     w += (rng.nextFloat() * 2.0f - 1.0f) * step * p.jitter * 0.5f;
-                w = std::round (w / step) * step;                  // bit crush
+                w = std::round (w / step) * step;                 // bit crush
 
-                if (p.noise > 0.0f)                                // hiss
+                if (p.noise > 0.0f)                               // hiss
                     w += (rng.nextFloat() * 2.0f - 1.0f) * p.noise * 0.2f;
 
-                if (dl > 0) { w = 0.0f; --dl; }                    // dropouts
+                if (dl > 0) { w = 0.0f; --dl; }                   // dropouts
                 else if (p.dropout > 0.0f && rng.nextFloat() < p.dropout * 0.01f)
                 {
                     dl = 1 + rng.nextInt (juce::jmax (1, (int) (p.dropout * 220.0f)));
                     w = 0.0f;
                 }
 
-                y += lpCoef * (w - y);                             // tone lowpass
-                w = y;
-
-                d[i] = x * (1.0f - m) + w * m;
+                y += lpCoef * (w - y);                            // tone lowpass
+                d[i] = y;                                         // pre-blend wet
             }
             hold[(size_t) c] = h; counter[(size_t) c] = ct;
             lp[(size_t) c] = y;   dropLeft[(size_t) c] = dl;
         }
+
+        // ---- Stage 3: wet/dry blend, dry delayed to match oversampler latency ----
+        int rp = dryRingPos;
+        for (int i = 0; i < n; ++i)
+        {
+            for (int c = 0; c < numCh; ++c)
+            {
+                const float dd = dryRing.getSample (c, rp);
+                dryRing.setSample (c, rp, dryBuf.getSample (c, i));
+                auto* d = buffer.getWritePointer (c);
+                d[i] = dd * (1.0f - m) + d[i] * m;
+            }
+            if (++rp >= dryRingLen) rp = 0;
+        }
+        dryRingPos = rp;
     }
 
 private:
@@ -132,6 +196,11 @@ private:
     std::vector<float> hold, lp;
     std::vector<int>   counter, dropLeft;
     juce::Random rng;
+
+    std::unique_ptr<juce::dsp::Oversampling<float>> os; // 4x for the waveshaper only
+    juce::AudioBuffer<float> dryBuf;                    // dry copy for the blend
+    juce::AudioBuffer<float> dryRing;                   // latency-comp delay line
+    int osChannels = 0, dryRingLen = 1, dryRingPos = 0;
 };
 
 // ---- Time Breaker: beat-repeat / stutter / reverse glitch. Captures incoming

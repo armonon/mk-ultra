@@ -75,7 +75,7 @@ void EntropyEngine::prepare (double sampleRate, int samplesPerBlock, int numChan
     reverb.setParameters (reverbParams);
 
     wetBuffer.setSize (numChannels, samplesPerBlock);
-    saturator.prepare (sampleRate, numChannels);
+    saturator.prepare (sampleRate, numChannels, samplesPerBlock);
     spectral.prepare (sampleRate, numChannels);
 }
 
