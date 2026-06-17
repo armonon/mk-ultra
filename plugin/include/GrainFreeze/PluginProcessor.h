@@ -76,6 +76,13 @@ public:
     // UI can pulse routed knobs in time. 0 when not routed / Time Breaker off.
     float getTimeBreakerModOffset (gf::ParamId id) const;
 
+    // Live Time Breaker gate (0..1) for the UI's idle/animation check.
+    float getTimeBreakerGate() const
+    {
+        return (paramPtrs.timeBreakerOn != nullptr && paramPtrs.timeBreakerOn->load() > 0.5f)
+                   ? timeBreaker.gate() : 0.0f;
+    }
+
     // Post-saturation output level for metering (linear, per channel, decaying).
     float getOutputLevel (int channel) const
     {

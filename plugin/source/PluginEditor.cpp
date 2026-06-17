@@ -650,6 +650,9 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     satDrive.setTextBoxStyle (juce::Slider::NoTextBox, false, 54, 16);
     addAndMakeVisible (satDrive);
     satDriveAttach = std::make_unique<SliderAttachment> (proc.apvts, "satDrive", satDrive);
+    // The timer no longer repaints the curve continuously, so refresh it on change.
+    satDrive.onValueChange = [this] { if (satCurve != nullptr) satCurve->repaint(); };
+    satType.onChange       = [this] { if (satCurve != nullptr) satCurve->repaint(); };
     satMix.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     satMix.setMouseDragSensitivity (kKnobDragSensitivity);
     satMix.setTextBoxStyle (juce::Slider::NoTextBox, false, 54, 16);
@@ -1020,7 +1023,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     openGLContext.attachTo (*this);
    #endif
 
-    startTimerHz (60); // drive the modulation rings + scopes (smoother readouts)
+    startTimerHz (30); // light: only updates rings/meter when something is moving
 }
 
 GrainFreezeEditor::~GrainFreezeEditor()
@@ -1060,87 +1063,38 @@ void GrainFreezeEditor::timerCallback()
         proc.undoManager.beginNewTransaction();
     }
 
-    // Pull each parameter's live mod offset, repaint rings, and highlight the
-    // "M" button when a knob currently has modulation depth assigned.
-    auto updateKnobRing = [this] (LabeledKnob& k)
+    // Lightweight: only do ambient repaints when something is actually moving
+    // (audio level, the global mod LFO, or the Time Breaker gate). When idle, the
+    // timer does nothing -> the UI is fully static and knob drags stay snappy.
+    const float lvl = juce::jmax (proc.getOutputLevel (0), proc.getOutputLevel (1));
+    const bool animating = lvl > 0.001f
+                        || std::abs (proc.getGlobalModValue()) > 0.001f
+                        || proc.getTimeBreakerGate() > 0.001f;
+
+    if (animating)
     {
-        if (k.ring == nullptr) return;
-        const float off = proc.getModOffset (k.id) + proc.getTimeBreakerModOffset (k.id);
-        k.ring->setOffset (off);
-        k.ring->repaint();
+        auto updateKnobRing = [this] (LabeledKnob& k)
+        {
+            if (k.ring == nullptr) return;
+            const float off = proc.getModOffset (k.id) + proc.getTimeBreakerModOffset (k.id);
+            k.ring->setOffset (off);
+            k.ring->repaint();
+            const bool active = std::abs (off) > 0.01f;
+            k.modButton.setColour (juce::TextButton::textColourOffId,
+                                   active ? lnf.accent() : gf::BiohazardLookAndFeel::textCol);
+        };
+        for (auto& k : knobs)       updateKnobRing (k);
+        for (auto& k : prettyKnobs) updateKnobRing (k);
+        if (meter != nullptr) meter->repaint();
+    }
 
-        const bool active = std::abs (off) > 0.01f;
-        k.modButton.setColour (juce::TextButton::textColourOffId,
-                               active ? lnf.accent()
-                                      : gf::BiohazardLookAndFeel::textCol);
-    };
-    for (auto& k : knobs)       updateKnobRing (k);
-    for (auto& k : prettyKnobs) updateKnobRing (k);
-
-    // Light the FREEZE button while a sample is captured and looping.
+    // FREEZE lamp — repaints only on state change.
     if (const bool ready = proc.sampleFreezeReady(); ready != sampleReadyShown)
     {
         sampleReadyShown = ready;
         sampleFreezeButton.setColour (juce::TextButton::textColourOffId,
                                       ready ? lnf.accent() : gf::BiohazardLookAndFeel::textCol);
         sampleFreezeButton.repaint();
-    }
-
-    // Throttle the costly visuals (scopes + the animated background) to ~30 Hz while
-    // keeping knob rings + metering at the full 60 Hz, so the UI stays responsive.
-    ++bgFrame;
-    ecoUiActive = proc.apvts.getRawParameterValue ("ecoUiMode")->load() > 0.5f;
-    const bool heavyFrame = (bgFrame & 1) == 0;
-
-    if (meter != nullptr) meter->repaint();
-    if (heavyFrame)
-    {
-        if (satCurve != nullptr) satCurve->repaint(); // keeps curve synced to drive
-        if (modScope != nullptr) modScope->repaint();
-        if (waveformDisplay != nullptr) waveformDisplay->repaint();
-        if (spectrumDisplay != nullptr && spectrumDisplay->isVisible()) spectrumDisplay->repaint();
-    }
-
-    // Pulse the centre glow with the output level (smoothed for a soft breathe).
-    const float lvl = juce::jmax (proc.getOutputLevel (0), proc.getOutputLevel (1));
-    glowLevel = glowLevel * 0.8f + juce::jlimit (0.0f, 1.0f, lvl) * 0.2f;
-
-    // Calm, steady glow (no nervous CRT flicker) with a barely-there breathe.
-    flicker = 0.985f + flickerRng.nextFloat() * 0.015f;
-
-    // Advance the background animation clock and drift the spore field.
-    animPhase += 1.0f / 60.0f;
-    if (! sporesReady && getWidth() > 0) initSpores();
-    if (sporesReady && ! ecoUiActive)
-    {
-        const float w = (float) getWidth();
-        const float h = (float) juce::jmax (getHeight() - 130, 1);
-        for (auto& s : spores)
-        {
-            s.x += s.vx;
-            s.y += s.vy;
-            if (s.x < -12.0f) s.x = w + 12.0f; else if (s.x > w + 12.0f) s.x = -12.0f;
-            if (s.y < -12.0f) s.y = h + 12.0f; else if (s.y > h + 12.0f) s.y = -12.0f;
-        }
-    }
-
-    // Ease out the tab-switch cross-fade scrim.
-    if (tabFade < 1.0f)
-    {
-        tabFade = juce::jmin (1.0f, tabFade + 0.12f);
-        fadeOverlay.setAmount ((1.0f - tabFade) * 0.85f);
-    }
-
-    // Boot-up power-on: ease bootPhase to 1 over ~1 second after open.
-    if (bootPhase < 1.0f)
-    {
-        bootPhase = juce::jmin (1.0f, bootPhase + 1.0f / 60.0f);
-        repaint(); // full-window fade-in during boot
-    }
-    else if (! ecoUiActive && heavyFrame)
-    {
-        // Animated background runs at ~30 Hz; Eco UI freezes it entirely.
-        repaint (0, 0, getWidth(), getHeight() - 130);
     }
 }
 
@@ -1204,10 +1158,7 @@ void GrainFreezeEditor::switchTab (int tabIndex)
     currentTab = juce::jlimit (0, 4, tabIndex);
     updateTabVisibility();
     resized();
-    tabFade = 0.0f;            // start fully scrimmed, then ease out
-    fadeOverlay.setAmount (1.0f);
-    fadeOverlay.toFront (false);
-    repaint();
+    repaint(); // instant switch (no cross-fade) for snappiness
 }
 
 void GrainFreezeEditor::layoutDialCell (juce::Rectangle<int>& row, juce::Label& label,
@@ -1268,10 +1219,10 @@ void GrainFreezeEditor::updateTabVisibility()
     satMixLabel.setVisible (entropyTab);
     if (satCurve != nullptr) satCurve->setVisible (entropyTab);
     if (meter != nullptr) meter->setVisible (entropyTab);
-    if (modScope != nullptr) modScope->setVisible (entropyTab);
+    if (modScope != nullptr) modScope->setVisible (false);   // animated scopes retired (lightweight)
     // The Mix tab swaps the bottom output scope for the master spectrum analyzer.
-    if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab && ! machinesTab && ! homeTab);
-    if (spectrumDisplay != nullptr) spectrumDisplay->setVisible (mixTab);
+    if (waveformDisplay != nullptr) waveformDisplay->setVisible (false);
+    if (spectrumDisplay != nullptr) spectrumDisplay->setVisible (false);
     // Legacy spectral freeze retired from the UI — the Spectral machine (Machines
     // tab) is the single home for spectral now.
     specFreezeButton.setVisible (false);
@@ -1371,11 +1322,10 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
 {
     using LF = gf::BiohazardLookAndFeel;
 
-    const float boot = bootPhase < 1.0f
-        ? (1.0f - std::cos (bootPhase * juce::MathConstants<float>::pi)) * 0.5f
-        : 1.0f;
-    const float surge = (bootPhase > 0.6f && bootPhase < 0.95f) ? 0.12f : 0.0f;
-    const float pulse = (0.08f + glowLevel * 0.22f + surge) * flicker * boot;
+    // Fully static, lightweight background: no boot fade, no glow breathe, no
+    // flicker, no drifting bloom, no spores. paint() only runs on real repaints.
+    const float pulse = 0.12f;
+    const float boot = 1.0f;   // no boot fade now; logo halo still scales by this
     const auto bounds = getLocalBounds().toFloat();
     const int tab = currentTab;
 
@@ -1389,14 +1339,12 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
 
     const auto acc = lnf.accent();
 
-    // Modern base: deeper vertical gradient with more contrast (darker bottom,
-    // a touch brighter at the very top) per tab tint.
+    // Static base gradient per tab tint.
     {
         const bool pretty = (tab == 2);
         const juce::Colour topCol = pretty   ? juce::Colour (0xff3b3322)
                                   : tab == 1 ? juce::Colour (0xff13171e)
                                              : juce::Colour (0xff111711);
-        // Prettifier reads as a brighter, warmer room than the darker Entropy/Mix tabs.
         const juce::Colour midCol = pretty ? LF::bg.brighter (0.14f) : LF::bg;
         const juce::Colour botCol = pretty ? LF::bg.darker (0.22f) : LF::bg.darker (0.55f);
         juce::ColourGradient base (topCol, bounds.getCentreX(), 0.0f,
@@ -1406,18 +1354,18 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
         g.fillRect (bounds);
     }
 
-    // Background artwork, kept subtle so the UI stays clean and modern.
-    if (tab == 0 || tab == 3 || tab == 4)   // Machines + Home share the Texture backdrop
-        drawBgImage (bgImage, (0.16f + glowLevel * 0.12f) * boot);
+    // Background artwork (static, subtle).
+    if (tab == 0 || tab == 3 || tab == 4)
+        drawBgImage (bgImage, 0.16f);
     else if (tab == 2)
-        drawBgImage (prettifierBgImage, (0.34f + glowLevel * 0.12f) * boot);
-    else // Mix tab: its own marbled artwork as the backdrop.
-        drawBgImage (mixBgImage, (0.42f + glowLevel * 0.12f) * boot);
+        drawBgImage (prettifierBgImage, 0.34f);
+    else
+        drawBgImage (mixBgImage, 0.42f);
 
-    // Mix tab: warm golden aura behind the console (subtle, not too bright).
+    // Mix tab: static warm aura.
     if (tab == 1)
     {
-        const float auraA = (0.10f + glowLevel * 0.06f) * boot;
+        const float auraA = 0.10f;
         juce::ColourGradient aura (LF::gold.withAlpha (auraA),
                                    bounds.getCentreX(), bounds.getHeight() * 0.40f,
                                    juce::Colours::transparentBlack,
@@ -1425,15 +1373,9 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
         aura.addColour (0.5, LF::gold.withAlpha (auraA * 0.5f));
         g.setGradientFill (aura);
         g.fillRect (bounds);
-
-        // Faint golden top wash to tint the whole section gold.
-        juce::ColourGradient topGold (LF::gold.withAlpha (auraA * 0.55f), bounds.getCentreX(), 0.0f,
-                                      juce::Colours::transparentBlack, bounds.getCentreX(), bounds.getHeight() * 0.6f, false);
-        g.setGradientFill (topGold);
-        g.fillRect (bounds);
     }
 
-    // Soft top accent wash for a premium ambient feel (brighter for contrast).
+    // Soft top accent wash (static).
     {
         juce::ColourGradient topGlow (acc.withAlpha (pulse * 0.24f), bounds.getCentreX(), -40.0f,
                                       juce::Colours::transparentBlack, bounds.getCentreX(), bounds.getHeight() * 0.55f, false);
@@ -1441,38 +1383,11 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
         g.fillRect (bounds);
     }
 
-    // Tab-specific centre bloom that breathes with output level, slowly drifting
-    // side to side so the backdrop is never static.
-    {
-        const float driftX = std::sin (animPhase * 0.33f) * bounds.getWidth() * 0.10f;
-        const float driftY = std::cos (animPhase * 0.27f) * bounds.getHeight() * 0.04f;
-        g.setGradientFill (juce::ColourGradient (
-            acc.withAlpha (pulse * 0.42f), bounds.getCentreX() + driftX, bounds.getHeight() * 0.42f + driftY,
-            juce::Colours::transparentBlack, bounds.getCentreX() + driftX, bounds.getHeight() * 1.05f, true));
-        g.fillRect (bounds);
-    }
-
-    // Drifting "spores": a field of soft glowing motes floating behind the controls,
-    // tinted by the active tab accent, twinkling on the animation clock. (Eco off.)
-    if (sporesReady && ! ecoUiActive)
-    {
-        for (const auto& s : spores)
-        {
-            const float tw = 0.30f + 0.34f * std::sin (animPhase * s.twinkle + s.phase);
-            const float a  = juce::jlimit (0.0f, 1.0f, tw) * 0.5f * boot;
-            if (a <= 0.001f) continue;
-            const float r = s.size;
-            g.setGradientFill (juce::ColourGradient (acc.withAlpha (a), s.x, s.y,
-                                                     juce::Colours::transparentBlack, s.x + r * 3.2f, s.y, true));
-            g.fillEllipse (s.x - r * 3.2f, s.y - r * 3.2f, r * 6.4f, r * 6.4f);
-        }
-    }
-
-    // Logo watermark on Entropy tab only (very subtle).
+    // Logo watermark on the Texture tab (static, subtle).
     if (tab == 0 && logoImage.isValid() && ! watermark.isEmpty())
     {
         auto wmArea = watermark.getBounds();
-        g.setOpacity ((0.05f + glowLevel * 0.05f) * boot);
+        g.setOpacity (0.06f);
         g.drawImage (logoImage, wmArea, juce::RectanglePlacement::centred);
         g.setOpacity (1.0f);
     }
