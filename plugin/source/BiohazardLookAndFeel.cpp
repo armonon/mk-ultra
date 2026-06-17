@@ -348,18 +348,14 @@ void BiohazardLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, in
     const bool hover = slider.isMouseOverOrDragging();
     const auto acc = hover ? accent().brighter (0.15f) : accent();
 
+    juce::ignoreUnused (hover);
     const float dialR  = radius * 0.66f;   // solid knob face
     const float trackR = radius * 0.90f;   // value ring radius
     const float trackW = juce::jmax (3.0f, radius * 0.13f);
 
-    // Soft ambient drop shadow under the whole knob.
-    for (int i = 3; i >= 1; --i)
-    {
-        const float spread = (float) i * 1.6f;
-        g.setColour (juce::Colours::black.withAlpha (0.16f));
-        g.fillEllipse (juce::Rectangle<float> ((dialR + spread) * 2.0f, (dialR + spread) * 2.0f)
-                           .withCentre (centre.translated (0.0f, 2.0f)));
-    }
+    // Plain, flat knob like the original Entropy: a recessed track, a solid value
+    // arc, a dark flat face and a pointer line. No crystal facets, sparkles,
+    // travelling glints, glows or drop shadow — static and cheap to draw.
 
     // Recessed track groove (full sweep).
     juce::Path track;
@@ -368,34 +364,26 @@ void BiohazardLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, in
     g.strokePath (track, juce::PathStrokeType (trackW, juce::PathStrokeType::curved,
                                                juce::PathStrokeType::rounded));
 
-    // Value arc with a soft outer glow, then a crisp core. Glow swells on hover.
-    if (on)
-    {
-        juce::Path glow;
-        glow.addCentredArc (centre.x, centre.y, trackR, trackR, 0.0f, startAngle, angle, true);
-        g.setColour (acc.withAlpha (hover ? 0.40f : 0.25f));
-        g.strokePath (glow, juce::PathStrokeType (trackW + (hover ? 8.0f : 5.0f), juce::PathStrokeType::curved,
-                                                  juce::PathStrokeType::rounded));
-    }
+    // Value arc (solid, no glow).
     juce::Path val;
     val.addCentredArc (centre.x, centre.y, trackR, trackR, 0.0f, startAngle, angle, true);
     g.setColour (on ? acc : metalHi);
     g.strokePath (val, juce::PathStrokeType (trackW, juce::PathStrokeType::curved,
                                              juce::PathStrokeType::rounded));
 
-    // Faceted, sparkling diamond knob face.
+    // Flat dark face with a thin rim.
     auto face = juce::Rectangle<float> (dialR * 2.0f, dialR * 2.0f).withCentre (centre);
-    drawDiamondFace (g, face, hover, acc);
+    g.setColour (metal.darker (0.45f));
+    g.fillEllipse (face);
+    g.setColour (juce::Colours::white.withAlpha (0.06f));
+    g.drawEllipse (face.reduced (0.5f), 1.0f);
 
-    // Indicator dot near the rim (modern, minimal).
-    const float dotDist = dialR * 0.66f;
-    const float dotR    = juce::jmax (2.4f, radius * 0.075f);
-    const juce::Point<float> dot (centre.x + std::cos (angle) * dotDist,
-                                  centre.y + std::sin (angle) * dotDist);
-    g.setColour (acc.withAlpha (0.35f));
-    g.fillEllipse (juce::Rectangle<float> (dotR * 3.0f, dotR * 3.0f).withCentre (dot)); // glow
+    // Pointer line.
+    const float p0 = dialR * 0.28f, p1 = dialR * 0.94f;
     g.setColour (on ? acc : metalHi);
-    g.fillEllipse (juce::Rectangle<float> (dotR * 2.0f, dotR * 2.0f).withCentre (dot));
+    g.drawLine (centre.x + std::cos (angle) * p0, centre.y + std::sin (angle) * p0,
+                centre.x + std::cos (angle) * p1, centre.y + std::sin (angle) * p1,
+                juce::jmax (2.0f, radius * 0.07f));
 }
 
 void BiohazardLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,

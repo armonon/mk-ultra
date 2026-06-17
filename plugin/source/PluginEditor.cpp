@@ -197,72 +197,34 @@ void PresetBrowser::resized()
 
 void ModRing::paint (juce::Graphics& g)
 {
+    // Plain: nothing at all when a knob isn't modulated (clean like old Entropy);
+    // a simple static arc + dot when it is. No background track, no fading trail.
+    if (std::abs (offset) < 0.005f)
+        return;
+
     auto bounds = getLocalBounds().toFloat().reduced (4.0f);
     const float size = juce::jmin (bounds.getWidth(), bounds.getHeight());
     auto square = juce::Rectangle<float> (size, size).withCentre (bounds.getCentre());
-
     const float radius = size * 0.5f - 2.0f;
     const auto  centre = square.getCentre();
     const float thickness = 3.0f;
 
-    // Faint background track.
-    juce::Path track;
-    track.addCentredArc (centre.x, centre.y, radius, radius, 0.0f,
-                         kStartAngle, kEndAngle, true);
-    g.setColour (juce::Colours::white.withAlpha (0.08f));
-    g.strokePath (track, juce::PathStrokeType (thickness));
-
-    // Where the knob currently sits, as a 0..1 proportion of its range.
     const double base01 = slider.valueToProportionOfLength (slider.getValue());
     const float  baseAngle = kStartAngle + (float) base01 * (kEndAngle - kStartAngle);
-    const float span = (kEndAngle - kStartAngle);
+    const float  span = (kEndAngle - kStartAngle);
+    const auto colour = offset >= 0.0f ? bioLnF (*this)->accent()
+                                       : gf::BiohazardLookAndFeel::coral;
 
-    // Accent for positive modulation, coral for negative.
-    auto colour = offset >= 0.0f ? bioLnF (*this)->accent()
-                                 : gf::BiohazardLookAndFeel::coral;
-
-    // Fading trail: draw recent offsets oldest-to-newest with rising alpha,
-    // so a moving arc leaves a glowing smear behind its current position.
-    for (int n = 0; n < kTrailLen; ++n)
-    {
-        // index walking from oldest (just after head) to newest (head-1)
-        const int idx = (trailHead + n) % kTrailLen;
-        const float pastOff = trail[(size_t) idx];
-        if (std::abs (pastOff) < 0.005f) continue;
-
-        const float age   = (float) n / (float) (kTrailLen - 1); // 0 oldest .. 1 newest
-        const float alpha = 0.05f + age * 0.30f;
-        const float pastAngle = baseAngle + pastOff * span * 0.5f;
-
-        juce::Path ghost;
-        ghost.addCentredArc (centre.x, centre.y, radius, radius, 0.0f,
-                             juce::jmin (baseAngle, pastAngle),
-                             juce::jmax (baseAngle, pastAngle), true);
-        g.setColour (colour.withAlpha (alpha));
-        g.strokePath (ghost, juce::PathStrokeType (thickness * (0.6f + age * 0.4f),
-                                                   juce::PathStrokeType::curved,
-                                                   juce::PathStrokeType::rounded));
-    }
-
-    if (std::abs (offset) < 0.005f)
-        return; // no live arc, but trail above may still have drawn
-
-    // The arc sweeps from the base position by an amount proportional to offset.
     const float modAngle = baseAngle + offset * span * 0.5f;
-
     juce::Path arc;
     arc.addCentredArc (centre.x, centre.y, radius, radius, 0.0f,
-                       juce::jmin (baseAngle, modAngle),
-                       juce::jmax (baseAngle, modAngle), true);
+                       juce::jmin (baseAngle, modAngle), juce::jmax (baseAngle, modAngle), true);
     g.setColour (colour.withAlpha (0.9f));
     g.strokePath (arc, juce::PathStrokeType (thickness, juce::PathStrokeType::curved,
                                              juce::PathStrokeType::rounded));
 
-    // A small dot marking the modulated target position.
-    const float dotR = radius;
-    const float dx = centre.x + std::cos (modAngle) * dotR;
-    const float dy = centre.y + std::sin (modAngle) * dotR;
-    g.fillEllipse (dx - 2.5f, dy - 2.5f, 5.0f, 5.0f);
+    g.fillEllipse (centre.x + std::cos (modAngle) * radius - 2.5f,
+                   centre.y + std::sin (modAngle) * radius - 2.5f, 5.0f, 5.0f);
 }
 
 void SaturationCurve::paint (juce::Graphics& g)
