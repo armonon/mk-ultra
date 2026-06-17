@@ -234,6 +234,9 @@ private:
     juce::ToggleButton globalModOnButton { "Global Mod" };
     juce::Slider   globalRate;
     juce::ComboBox globalShape;
+    juce::ComboBox lfoSyncBox;   // Free + tempo divisions for the Global Mod LFO
+    juce::ComboBox echoSyncBox;  // Free + tempo divisions for the Echo time
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lfoSyncAttach, echoSyncAttach;
     std::unique_ptr<SliderAttachment>   globalRateAttach;
     std::unique_ptr<ButtonAttachment>   globalModOnAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> globalShapeAttach;

@@ -230,6 +230,8 @@ private:
         std::atomic<float>* globalRate = nullptr;
         std::atomic<float>* globalShape = nullptr;
         std::atomic<float>* globalModOn = nullptr;
+        std::atomic<float>* echoDivision = nullptr;
+        std::atomic<float>* lfoDivision = nullptr;
 
         std::atomic<float>* sampleMode = nullptr;
         std::atomic<float>* sampleWindow = nullptr;
@@ -331,6 +333,7 @@ private:
     int    controlRateSamples = 441; // ~100 Hz control rate at 44.1k
 
     double currentSampleRate = 44100.0;
+    double currentBpm = 120.0;   // host tempo, refreshed each block for sync
     // Output scope shows a fixed ~50 ms window regardless of host block size:
     // we store every Nth output sample so 256 points always span the same time.
     int    waveformDecimate = 8;     // samples between stored scope points

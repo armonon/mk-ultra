@@ -115,6 +115,8 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.globalRate, "globalRate");
     bind (paramPtrs.globalShape, "globalShape");
     bind (paramPtrs.globalModOn, "globalModOn");
+    bind (paramPtrs.echoDivision, "echoDivision");
+    bind (paramPtrs.lfoDivision, "lfoDivision");
 
     bind (paramPtrs.sampleMode, "sampleMode");
     bind (paramPtrs.sampleWindow, "sampleWindow");
@@ -308,6 +310,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         addFloat  ("timeBreakerMod1Depth",  "Time Breaker Route 1 Depth", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
         addChoice ("timeBreakerMod2Target", "Time Breaker Route 2", tbTargets, 0);
         addFloat  ("timeBreakerMod2Depth",  "Time Breaker Route 2 Depth", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+    }
+    // Tempo sync for the Echo time and the Global Mod LFO rate. "Free" = use the
+    // free knob; any division locks to the host BPM.
+    {
+        const StringArray divs { "Free", "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
+        addChoice ("echoDivision", "Echo Sync", divs, 0);
+        addChoice ("lfoDivision",  "Mod LFO Sync", divs, 0);
     }
     addMachine ("damage", "Damage", false);
     // Damage detail: a full destruction stage. damageAmount is the master drive.
@@ -690,7 +699,17 @@ void GrainFreezeProcessor::syncModMatrix()
         s.rangeMax.store  (p.rangeMax->load());
         s.skew.store      (p.skew->load());
     }
-    modMatrix.setGlobalRate    (loadParam (paramPtrs.globalRate, 0.5f));
+    {
+        float rate = loadParam (paramPtrs.globalRate, 0.5f);
+        const int lfoDiv = (int) loadParam (paramPtrs.lfoDivision, 0.0f);
+        if (lfoDiv >= 1)                       // tempo-sync the LFO rate to a division
+        {
+            static const float kBeats[] = { 0.0f, 4.0f, 2.0f, 1.0f, 0.5f, 1.0f / 3.0f, 0.25f, 1.0f / 6.0f, 0.125f };
+            const double beatSec = 60.0 / juce::jmax (20.0, currentBpm);
+            rate = (float) (1.0 / (beatSec * kBeats[juce::jlimit (1, 8, lfoDiv)]));
+        }
+        modMatrix.setGlobalRate (rate);
+    }
     modMatrix.setGlobalShape   ((int) loadParam (paramPtrs.globalShape, 0.0f));
     modMatrix.setGlobalEnabled (isOn (paramPtrs.globalModOn, true));
 }
@@ -715,6 +734,14 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const auto& p = paramPtrs;
     const int channels = buffer.getNumChannels();
     const int n = buffer.getNumSamples();
+
+    // Refresh host tempo early so the mod LFO / echo sync can use it this block.
+    if (auto* ph = getPlayHead())
+    {
+        juce::AudioPlayHead::CurrentPositionInfo info;
+        if (ph->getCurrentPosition (info) && info.bpm > 0.0)
+            currentBpm = info.bpm;
+    }
 
     if (isOn (p.panic))
     {
@@ -871,7 +898,16 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     prettyParams.inputTrim = loadParam (p.prettifierInTrim, 1.0f);
     prettyParams.outputTrim = loadParam (p.prettifierOutTrim, 1.0f);
     prettyParams.echoOn = isOn (p.echoOn) && beautyActive;
-    prettyParams.echoTimeMs = target (gf::ParamId::echoTime);
+    const int echoDiv = (int) loadParam (p.echoDivision, 0.0f);
+    const bool echoSynced = echoDiv >= 1;
+    if (echoSynced)                            // tempo-sync the echo time to a division
+    {
+        static const float kBeats[] = { 0.0f, 4.0f, 2.0f, 1.0f, 0.5f, 1.0f / 3.0f, 0.25f, 1.0f / 6.0f, 0.125f };
+        const float beatMs = 60000.0f / (float) juce::jmax (20.0, currentBpm);
+        prettyParams.echoTimeMs = beatMs * kBeats[juce::jlimit (1, 8, echoDiv)];
+    }
+    else
+        prettyParams.echoTimeMs = target (gf::ParamId::echoTime);
     prettyParams.echoFeedback = target (gf::ParamId::echoFeedback);
     prettyParams.echoMix = target (gf::ParamId::echoMix);
     prettyParams.reverbOn = isOn (p.prettyReverbOn) && isOn (p.reverbOn, true) && beautyActive;
@@ -906,25 +942,19 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     prettyParams.dnaMotion = loadParam (p.dnaMotion, 0.5f);
     prettyParams.dnaShine = loadParam (p.dnaShine, 0.5f);
 
-    double hostBpm = 120.0;
-    if (auto* ph = getPlayHead())
-    {
-        juce::AudioPlayHead::CurrentPositionInfo info;
-        if (ph->getCurrentPosition (info) && info.bpm > 0.0)
-            hostBpm = info.bpm;
-    }
+    const double hostBpm = currentBpm; // refreshed at the top of processBlock
     if (textureActive && beautyActive && routingModeValue == 1) // Texture / Grain -> Beauty & Space
     {
         entropyBuffer.makeCopyOf (buffer, true);
         entropyEngine.pushInput (entropyBuffer);
         entropyEngine.process (entropyBuffer, entropyParams);
         prettifierBuffer.makeCopyOf (entropyBuffer, true);
-        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn);
+        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn && ! echoSynced);
     }
     else if (textureActive && beautyActive && routingModeValue == 2) // Beauty & Space -> Texture / Grain
     {
         prettifierBuffer.makeCopyOf (buffer, true);
-        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn);
+        prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn && ! echoSynced);
         entropyBuffer.makeCopyOf (prettifierBuffer, true);
         entropyEngine.pushInput (entropyBuffer);
         entropyEngine.process (entropyBuffer, entropyParams);
@@ -940,7 +970,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         if (beautyActive)
         {
             prettifierBuffer.makeCopyOf (buffer, true);
-            prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn);
+            prettifierEngine.process (prettifierBuffer, prettyParams, hostBpm, ctl.tempoLockOn && ! echoSynced);
         }
     }
 

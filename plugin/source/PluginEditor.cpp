@@ -626,6 +626,15 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     globalShapeAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
         proc.apvts, "globalShape", globalShape);
 
+    // Tempo-sync selectors for the LFO rate and the Echo time ("Free" = the knob).
+    {
+        const juce::StringArray divs { "Free", "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
+        lfoSyncBox.addItemList (divs, 1);  addAndMakeVisible (lfoSyncBox);
+        echoSyncBox.addItemList (divs, 1); addAndMakeVisible (echoSyncBox);
+        lfoSyncAttach  = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "lfoDivision", lfoSyncBox);
+        echoSyncAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "echoDivision", echoSyncBox);
+    }
+
     // Saturation.
     addAndMakeVisible (satOnButton);
     satOnButton.setTooltip ("Enable the saturation stage");
@@ -1177,6 +1186,7 @@ void GrainFreezeEditor::updateTabVisibility()
     globalModOnButton.setVisible (entropyTab);
     globalRate.setVisible (entropyTab);
     globalShape.setVisible (entropyTab);
+    lfoSyncBox.setVisible (entropyTab);
     satOnButton.setVisible (entropyTab);
     satType.setVisible (entropyTab);
     satDrive.setVisible (entropyTab);
@@ -1251,6 +1261,7 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto& l : dnaLabels) l.setVisible (prettifierTab);
     for (auto* b : { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton })
         b->setVisible (prettifierTab);
+    echoSyncBox.setVisible (prettifierTab);
 
     // MACHINES tab.
     machinesHeader.setVisible (machinesTab);
@@ -1642,8 +1653,9 @@ void GrainFreezeEditor::resized()
         // DNA panel: a row of module on/off pills, then a row of 10 character knobs.
         dnaHeader.setBounds (dnaSection.removeFromTop (16).reduced (4, 0));
         auto modRow = dnaSection.removeFromTop (28);
+        echoSyncBox.setBounds (modRow.removeFromLeft (80).withSizeKeepingCentre (76, 22));
         juce::ToggleButton* mods[4] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton };
-        const int modW = juce::jmin (140, modRow.getWidth() / 4);
+        const int modW = juce::jmin (132, modRow.getWidth() / 4);
         modRow = modRow.withSizeKeepingCentre (modW * 4, modRow.getHeight());
         for (auto* m : mods)
             m->setBounds (modRow.removeFromLeft (modW).reduced (3, 1));
@@ -1902,7 +1914,12 @@ void GrainFreezeEditor::resized()
 
         // Global Mod controls, with their scope graph immediately to the right.
         auto gmArea = specRow.removeFromLeft (224).reduced (4);
-        globalModOnButton.setBounds (gmArea.removeFromTop (20).withWidth (150));
+        {
+            auto gmTop = gmArea.removeFromTop (20);
+            globalModOnButton.setBounds (gmTop.removeFromLeft (112));
+            gmTop.removeFromLeft (gap);
+            lfoSyncBox.setBounds (gmTop.withSizeKeepingCentre (gmTop.getWidth(), 18));
+        }
         {
             auto row = gmArea;
             globalRate.setBounds  (row.removeFromLeft (80));
