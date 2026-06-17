@@ -363,11 +363,18 @@ private:
     juce::ComboBox     machTimeDivision;
     juce::Slider       machTimeMix, machTimeRate, machTimeSize, machTimeChance, machTimeReverse;
     juce::Label        machTimeMixL, machTimeRateL, machTimeSizeL, machTimeChanceL, machTimeReverseL;
+    // Time Breaker -> knob routing (2 slots: target + depth).
+    juce::Label        machTimeRouteL;
+    juce::ComboBox     machTimeRoute1Target, machTimeRoute2Target;
+    juce::Slider       machTimeRoute1Depth, machTimeRoute2Depth;
+    juce::Label        machTimeRoute1DepthL, machTimeRoute2DepthL;
 
     std::unique_ptr<ButtonAttachment> machSpectralOnAttach, machPitchOnAttach, machPitchFormantAttach,
                                       machDamageOnAttach, machTimeOnAttach;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> machDamageClipAttach, machTimeDivisionAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> machDamageClipAttach, machTimeDivisionAttach,
+                                      machTimeRoute1TargetAttach, machTimeRoute2TargetAttach;
     std::unique_ptr<ButtonAttachment> machTimeSyncAttach;
+    std::unique_ptr<SliderAttachment> machTimeRoute1DepthAttach, machTimeRoute2DepthAttach;
     std::unique_ptr<SliderAttachment> machSpectralMixAttach, machSpectralAmountAttach,
                                       machPitchMixAttach, machPitchShiftAttach,
                                       machDamageMixAttach, machDamageAmountAttach,

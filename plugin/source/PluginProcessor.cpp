@@ -83,6 +83,10 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.timeBreakerMix, "timeBreakerMix");
     bind (paramPtrs.timeBreakerSync, "timeBreakerSync");
     bind (paramPtrs.timeBreakerDivision, "timeBreakerDivision");
+    bind (paramPtrs.timeBreakerMod1Target, "timeBreakerMod1Target");
+    bind (paramPtrs.timeBreakerMod1Depth, "timeBreakerMod1Depth");
+    bind (paramPtrs.timeBreakerMod2Target, "timeBreakerMod2Target");
+    bind (paramPtrs.timeBreakerMod2Depth, "timeBreakerMod2Depth");
     bind (paramPtrs.stutterRate, "stutterRate");
     bind (paramPtrs.stutterSize, "stutterSize");
     bind (paramPtrs.stutterChance, "stutterChance");
@@ -295,6 +299,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addBool   ("timeBreakerSync", "Time Breaker Sync", false);
     addChoice ("timeBreakerDivision", "Time Breaker Division",
                StringArray { "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }, 3);
+    // Time Breaker -> knob routing (2 mod slots): each picks a target + depth, and
+    // is driven by the Time Breaker's tempo-synced gate.
+    {
+        const StringArray tbTargets { "None", "Grain Size", "Density", "Pitch", "Spray",
+                                      "Pitch Jitter", "Reverb", "Echo Time", "Crush" };
+        addChoice ("timeBreakerMod1Target", "Time Breaker Route 1", tbTargets, 0);
+        addFloat  ("timeBreakerMod1Depth",  "Time Breaker Route 1 Depth", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+        addChoice ("timeBreakerMod2Target", "Time Breaker Route 2", tbTargets, 0);
+        addFloat  ("timeBreakerMod2Depth",  "Time Breaker Route 2 Depth", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+    }
     addMachine ("damage", "Damage", false);
     // Damage detail: a full destruction stage. damageAmount is the master drive.
     addChoice ("damageClip", "Damage Clip", StringArray { "Tube", "Tape", "Hard", "Fold", "Diode" }, 0);
@@ -786,10 +800,43 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         globalModValue.store (0.0f, std::memory_order_relaxed);
     }
 
-    auto target = [this, &ctl] (gf::ParamId id)
+    // Time Breaker -> knob routing: its tempo-synced gate (from the previous block)
+    // offsets up to two target params. Choice index maps to a ParamId; 0/-1 = none.
+    const float tbGate = ctl.timeBreakerOn ? timeBreaker.gate() : 0.0f;
+    auto tbTargetId = [] (int choice) -> int
+    {
+        switch (choice)
+        {
+            case 1:  return (int) gf::ParamId::grainSize;
+            case 2:  return (int) gf::ParamId::density;
+            case 3:  return (int) gf::ParamId::pitch;
+            case 4:  return (int) gf::ParamId::spray;
+            case 5:  return (int) gf::ParamId::pitchJitter;
+            case 6:  return (int) gf::ParamId::reverbMix;
+            case 7:  return (int) gf::ParamId::echoTime;
+            case 8:  return (int) gf::ParamId::bitCrush;
+            default: return -1;
+        }
+    };
+    const int   tbT1 = tbTargetId ((int) loadParam (p.timeBreakerMod1Target));
+    const float tbD1 = loadParam (p.timeBreakerMod1Depth);
+    const int   tbT2 = tbTargetId ((int) loadParam (p.timeBreakerMod2Target));
+    const float tbD2 = loadParam (p.timeBreakerMod2Depth);
+
+    auto target = [this, &ctl, tbGate, tbT1, tbD1, tbT2, tbD2] (gf::ParamId id)
     {
         const auto idx = (size_t) id;
-        return ctl.motionMatrixOn ? modulated (id) : loadParam (modTargetPtrs[idx]);
+        float v = ctl.motionMatrixOn ? modulated (id) : loadParam (modTargetPtrs[idx]);
+        if (tbGate > 0.0001f && (tbT1 == (int) id || tbT2 == (int) id))
+        {
+            const auto& r = modTargetRanges[idx];
+            const float span = r.end - r.start;
+            float off = 0.0f;
+            if (tbT1 == (int) id) off += tbD1 * tbGate * span * 0.5f;
+            if (tbT2 == (int) id) off += tbD2 * tbGate * span * 0.5f;
+            v = juce::jlimit (r.start, r.end, v + off);
+        }
+        return v;
     };
 
     gf::entropy::Params entropyParams;

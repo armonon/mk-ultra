@@ -198,6 +198,10 @@ private:
         std::atomic<float>* timeBreakerMix = nullptr;
         std::atomic<float>* timeBreakerSync = nullptr;
         std::atomic<float>* timeBreakerDivision = nullptr;
+        std::atomic<float>* timeBreakerMod1Target = nullptr;
+        std::atomic<float>* timeBreakerMod1Depth = nullptr;
+        std::atomic<float>* timeBreakerMod2Target = nullptr;
+        std::atomic<float>* timeBreakerMod2Depth = nullptr;
         std::atomic<float>* stutterRate = nullptr;
         std::atomic<float>* stutterSize = nullptr;
         std::atomic<float>* stutterChance = nullptr;

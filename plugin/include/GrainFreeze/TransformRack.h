@@ -154,7 +154,7 @@ public:
     void reset()
     {
         active = false; clock = 0; playPos = 0; repeatsLeft = 0; sliceLen = 0; reversed = false;
-        writeHead = 0; captureStart = 0;
+        writeHead = 0; captureStart = 0; gateSmoothed = 0.0f;
         for (auto& s : slice) std::fill (s.begin(), s.end(), 0.0f);
     }
 
@@ -165,14 +165,15 @@ public:
     void process (juce::AudioBuffer<float>& buffer, int sliceSamples, int clockSamples,
                   float chance, float revChance, float mix)
     {
-        if (mix <= 0.001f || chance <= 0.001f)
-            return;
-
+        // Always advance the clock + gate so knob routing works even when the audio
+        // effect is bypassed (mix 0). Audio blend only happens when wet + chance > 0.
         const float m       = juce::jlimit (0.0f, 1.0f, mix);
+        const bool  doAudio = m > 0.001f && chance > 0.001f;
         const int   clockN  = juce::jmax (1, clockSamples);
         const int   wantLen = juce::jlimit (1, maxSliceLen, sliceSamples);
         const int   numCh   = juce::jmin (channels, buffer.getNumChannels());
         const int   n       = buffer.getNumSamples();
+        const float gCoef   = 1.0f - std::exp (-1.0f / juce::jmax (1.0f, (float) (sr * 0.006))); // ~6 ms
 
         for (int i = 0; i < n; ++i)
         {
@@ -190,23 +191,23 @@ public:
                 }
             }
 
-            for (int c = 0; c < numCh; ++c)
-            {
-                auto* d  = buffer.getWritePointer (c);
-                auto& sl = slice[(size_t) c];
-                const float in = d[i];
+            if (doAudio)
+                for (int c = 0; c < numCh; ++c)
+                {
+                    auto* d  = buffer.getWritePointer (c);
+                    auto& sl = slice[(size_t) c];
+                    const float in = d[i];
+                    if (! active)
+                        sl[(size_t) wrap (writeHead)] = in;        // keep filling the ring
+                    else
+                    {
+                        const long ofs = reversed ? (sliceLen - 1 - playPos) : playPos;
+                        d[i] = in * (1.0f - m) + sl[(size_t) wrap (captureStart + ofs)] * m;
+                    }
+                }
 
-                if (! active)
-                {
-                    sl[(size_t) wrap (writeHead)] = in;            // keep filling the ring
-                }
-                else
-                {
-                    const long ofs  = reversed ? (sliceLen - 1 - playPos) : playPos;
-                    const float wet = sl[(size_t) wrap (captureStart + ofs)];
-                    d[i] = in * (1.0f - m) + wet * m;
-                }
-            }
+            // Smoothed gate (1 while repeating, else 0) — drives knob routing.
+            gateSmoothed += gCoef * ((active ? 1.0f : 0.0f) - gateSmoothed);
 
             if (! active)
                 ++writeHead;
@@ -217,6 +218,9 @@ public:
             }
         }
     }
+
+    // Tempo-synced rhythmic gate (0..1), for routing Time Breaker onto knobs.
+    float gate() const { return gateSmoothed; }
 
     int wrap (long pos) const { long r = pos % maxSliceLen; if (r < 0) r += maxSliceLen; return (int) r; }
 
@@ -229,6 +233,7 @@ private:
     bool active = false, reversed = false;
     int  clock = 0, playPos = 0, repeatsLeft = 0, sliceLen = 0;
     long writeHead = 0, captureStart = 0;
+    float gateSmoothed = 0.0f;
     juce::Random rng;
 };
 

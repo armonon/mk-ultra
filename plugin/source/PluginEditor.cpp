@@ -931,6 +931,19 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machTimeSize,    machTimeSizeL,    "Size",    "stutterSize",    machTimeSizeAttach);
     machKnob (machTimeChance,  machTimeChanceL,  "Chance",  "stutterChance",  machTimeChanceAttach);
     machKnob (machTimeReverse, machTimeReverseL, "Reverse", "reverseChance",  machTimeReverseAttach);
+    setupDialLabel (machTimeRouteL, "Routes to");
+    machTimeRouteL.setJustificationType (juce::Justification::centredLeft);
+    auto setupRouteCombo = [&] (juce::ComboBox& b, const char* pid,
+                                std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>& att)
+    {
+        b.addItemList ({ "None", "Grain Size", "Density", "Pitch", "Spray", "Pitch Jitter", "Reverb", "Echo Time", "Crush" }, 1);
+        addAndMakeVisible (b);
+        att = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, pid, b);
+    };
+    setupRouteCombo (machTimeRoute1Target, "timeBreakerMod1Target", machTimeRoute1TargetAttach);
+    setupRouteCombo (machTimeRoute2Target, "timeBreakerMod2Target", machTimeRoute2TargetAttach);
+    machKnob (machTimeRoute1Depth, machTimeRoute1DepthL, "Depth", "timeBreakerMod1Depth", machTimeRoute1DepthAttach);
+    machKnob (machTimeRoute2Depth, machTimeRoute2DepthL, "Depth", "timeBreakerMod2Depth", machTimeRoute2DepthAttach);
 
     refreshPresetList();
     setSize (1020, 860);
@@ -1257,6 +1270,13 @@ void GrainFreezeEditor::updateTabVisibility()
         l->setVisible (machinesTab);
     machDamageClip.setVisible (machinesTab);
     machTimeDivision.setVisible (machinesTab);
+    machTimeRouteL.setVisible (machinesTab);
+    machTimeRoute1Target.setVisible (machinesTab);
+    machTimeRoute2Target.setVisible (machinesTab);
+    for (auto* s : { &machTimeRoute1Depth, &machTimeRoute2Depth })
+        s->setVisible (machinesTab);
+    for (auto* l : { &machTimeRoute1DepthL, &machTimeRoute2DepthL })
+        l->setVisible (machinesTab);
 
     if (keyboard != nullptr)
         keyboard->setVisible (inputToolsVisible);
@@ -1802,9 +1822,9 @@ void GrainFreezeEditor::resized()
             area.removeFromTop (gap);
         }
 
-        // Time Breaker: header with Sync + tempo Division, then its knob row.
+        // Time Breaker: header (Sync + Division), knob row, then routing slots.
         {
-            auto block = area.removeFromTop (116);
+            auto block = area.removeFromTop (172);
             auto head  = block.removeFromTop (26);
             machTimeTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
             machTimeOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
@@ -1812,15 +1832,33 @@ void GrainFreezeEditor::resized()
             machTimeSync.setBounds (head.removeFromLeft (92).withSizeKeepingCentre (88, 24));
             head.removeFromLeft (gap);
             machTimeDivision.setBounds (head.removeFromLeft (88).withSizeKeepingCentre (84, 26));
-            block.removeFromTop (4);
+
+            auto knobRow = block.removeFromTop (96);
+            knobRow.removeFromTop (4);
             const int kw = 96;
             std::pair<juce::Slider*, juce::Label*> tk[] = {
                 { &machTimeMix, &machTimeMixL },   { &machTimeRate, &machTimeRateL },
                 { &machTimeSize, &machTimeSizeL }, { &machTimeChance, &machTimeChanceL },
                 { &machTimeReverse, &machTimeReverseL } };
-            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 5), block.getHeight());
+            auto krow = knobRow.withSizeKeepingCentre (juce::jmin (knobRow.getWidth(), kw * 5), knobRow.getHeight());
             for (auto& kv : tk)
                 layoutDialCell (krow, *kv.second, *kv.first, kw);
+
+            // Routing slots: [Routes to]  [target 1][depth]   [target 2][depth]
+            auto routeRow2 = block;
+            machTimeRouteL.setBounds (routeRow2.removeFromLeft (88).withSizeKeepingCentre (84, 22));
+            auto slot = [&] (juce::ComboBox& cb, juce::Slider& dk, juce::Label& dl)
+            {
+                routeRow2.removeFromLeft (gap);
+                cb.setBounds (routeRow2.removeFromLeft (132).withSizeKeepingCentre (128, 28));
+                routeRow2.removeFromLeft (gap);
+                auto c = routeRow2.removeFromLeft (64);
+                dl.setBounds (c.removeFromTop (14));
+                dk.setBounds (c.reduced (2, 0));
+            };
+            slot (machTimeRoute1Target, machTimeRoute1Depth, machTimeRoute1DepthL);
+            routeRow2.removeFromLeft (gap * 2);
+            slot (machTimeRoute2Target, machTimeRoute2Depth, machTimeRoute2DepthL);
             area.removeFromTop (gap);
         }
     }
