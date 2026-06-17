@@ -1086,11 +1086,20 @@ void GrainFreezeEditor::timerCallback()
         sampleFreezeButton.repaint();
     }
 
-    if (meter != nullptr)    meter->repaint();
-    if (satCurve != nullptr) satCurve->repaint(); // cheap; keeps curve synced to drive
-    if (modScope != nullptr) modScope->repaint();
-    if (waveformDisplay != nullptr) waveformDisplay->repaint();
-    if (spectrumDisplay != nullptr && spectrumDisplay->isVisible()) spectrumDisplay->repaint();
+    // Throttle the costly visuals (scopes + the animated background) to ~30 Hz while
+    // keeping knob rings + metering at the full 60 Hz, so the UI stays responsive.
+    ++bgFrame;
+    ecoUiActive = proc.apvts.getRawParameterValue ("ecoUiMode")->load() > 0.5f;
+    const bool heavyFrame = (bgFrame & 1) == 0;
+
+    if (meter != nullptr) meter->repaint();
+    if (heavyFrame)
+    {
+        if (satCurve != nullptr) satCurve->repaint(); // keeps curve synced to drive
+        if (modScope != nullptr) modScope->repaint();
+        if (waveformDisplay != nullptr) waveformDisplay->repaint();
+        if (spectrumDisplay != nullptr && spectrumDisplay->isVisible()) spectrumDisplay->repaint();
+    }
 
     // Pulse the centre glow with the output level (smoothed for a soft breathe).
     const float lvl = juce::jmax (proc.getOutputLevel (0), proc.getOutputLevel (1));
@@ -1102,7 +1111,7 @@ void GrainFreezeEditor::timerCallback()
     // Advance the background animation clock and drift the spore field.
     animPhase += 1.0f / 60.0f;
     if (! sporesReady && getWidth() > 0) initSpores();
-    if (sporesReady)
+    if (sporesReady && ! ecoUiActive)
     {
         const float w = (float) getWidth();
         const float h = (float) juce::jmax (getHeight() - 130, 1);
@@ -1128,9 +1137,10 @@ void GrainFreezeEditor::timerCallback()
         bootPhase = juce::jmin (1.0f, bootPhase + 1.0f / 60.0f);
         repaint(); // full-window fade-in during boot
     }
-    else
+    else if (! ecoUiActive && heavyFrame)
     {
-        repaint (0, 0, getWidth(), getHeight() - 130); // glow + watermark region only
+        // Animated background runs at ~30 Hz; Eco UI freezes it entirely.
+        repaint (0, 0, getWidth(), getHeight() - 130);
     }
 }
 
@@ -1443,8 +1453,8 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     }
 
     // Drifting "spores": a field of soft glowing motes floating behind the controls,
-    // tinted by the active tab accent, twinkling on the animation clock.
-    if (sporesReady)
+    // tinted by the active tab accent, twinkling on the animation clock. (Eco off.)
+    if (sporesReady && ! ecoUiActive)
     {
         for (const auto& s : spores)
         {

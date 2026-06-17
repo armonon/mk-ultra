@@ -192,9 +192,11 @@ private:
     float animPhase = 0.0f;
     juce::Random animRng;
     struct Spore { float x = 0, y = 0, vx = 0, vy = 0, size = 0, phase = 0, twinkle = 0; };
-    static constexpr int kNumSpores = 34;
+    static constexpr int kNumSpores = 16;   // lighter spore field for snappier repaints
     std::array<Spore, kNumSpores> spores {};
     bool sporesReady = false;
+    int  bgFrame = 0;            // counter: heavy visuals (bg + scopes) run at 30 Hz
+    bool ecoUiActive = false;    // mirrors the Eco UI param; freezes the background
     void initSpores();
 
     juce::ToggleButton freezeButton { "Freeze" };
