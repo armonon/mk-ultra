@@ -727,7 +727,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
 
     setupSectionLabel (prettifierHeader, "BEAUTY & SPACE", 14.0f);
 
-    setupSectionLabel (mixHeader, "MIX CONSOLE", 14.0f);
+    setupSectionLabel (mixHeader, "MASTER", 14.0f);
     routingLabel.setText ("Routing", juce::dontSendNotification);
     routingLabel.setJustificationType (juce::Justification::centredLeft);
     routingLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
@@ -1639,23 +1639,19 @@ void GrainFreezeEditor::resized()
     }
     else if (currentTab == 1)
     {
-        mixHeader.setBounds (area.removeFromTop (24).reduced (4, 0));
-        area.removeFromTop (6);
-
+        // Signal-flow layout: input -> two send/return loops on the LEFT (each
+        // headed by its engine on/off) -> MASTER + EQ on the RIGHT. Routing and
+        // Pitch Lock sit in a band along the bottom.
         auto topToggles = area.removeFromTop (34);
         pluginOnButton.setBounds (topToggles.removeFromLeft (92).reduced (2, 4));
-        topToggles.removeFromLeft (gap);
-        entropyOnButton.setBounds (topToggles.removeFromLeft (96).reduced (2, 4));
-        topToggles.removeFromLeft (gap);
-        prettifierOnButton.setBounds (topToggles.removeFromLeft (108).reduced (2, 4));
         topToggles.removeFromLeft (gap);
         limiterOnButton.setBounds (topToggles.removeFromLeft (92).reduced (2, 4));
         topToggles.removeFromLeft (gap);
         mixEqOnButton.setBounds (topToggles.removeFromLeft (72).reduced (2, 4));
         topToggles.removeFromLeft (gap);
-        pitchMatchOnButton.setBounds (topToggles.removeFromLeft (108).reduced (2, 4));
+        pitchMatchOnButton.setBounds (topToggles.removeFromLeft (118).reduced (2, 4));
         topToggles.removeFromLeft (gap);
-        tempoLockOnButton.setBounds (topToggles.removeFromLeft (108).reduced (2, 4));
+        tempoLockOnButton.setBounds (topToggles.removeFromLeft (118).reduced (2, 4));
 
         if (inputToolsVisible)
         {
@@ -1683,19 +1679,11 @@ void GrainFreezeEditor::resized()
             sampleKnob (sampleLevelSlider, sampleLevelLabel);
         }
 
-        area.removeFromTop (gap + 6);
-        const int dialW = juce::jmax (84, area.getWidth() / 10);
-        auto row1 = area.removeFromTop (juce::jmin (120, area.getHeight() - 50));
-        row1 = row1.withSizeKeepingCentre (juce::jmin (row1.getWidth(), dialW * 10), row1.getHeight());
-        juce::Slider* mixSliders[] = { &dryLevel, &entropySend, &entropyReturn, &prettifierSend,
-                                       &prettifierReturn, &mixOutput, &chaosBeauty, &mixWidth, &mixGlue, &mixCeiling };
-        for (size_t i = 0; i < mixLabels.size(); ++i)
-            layoutDialCell (row1, mixLabels[i], *mixSliders[i], dialW);
-
         area.removeFromTop (gap + 4);
-        // Routing (left) and the Pitch Lock cluster (right) share one band so the
-        // EQ below keeps full-height knobs instead of being squeezed.
-        auto routeRow = area.removeFromTop (46);
+
+        // Routing + Pitch Lock band reserved along the bottom.
+        auto routeRow = area.removeFromBottom (46);
+        area.removeFromBottom (gap);
         routingLabel.setBounds (routeRow.removeFromLeft (66).withSizeKeepingCentre (66, 26));
         routingMode.setBounds (routeRow.removeFromLeft (168).withSizeKeepingCentre (164, 28));
         routeRow.removeFromLeft (gap * 2);
@@ -1719,15 +1707,48 @@ void GrainFreezeEditor::resized()
         routeRow.removeFromLeft (gap);
         pitchLockFormantButton.setBounds (routeRow.removeFromLeft (104).withSizeKeepingCentre (100, 28));
 
-        area.removeFromTop (gap + 8);
-        eqHeader.setBounds (area.removeFromTop (22).reduced (4, 0));
-        area.removeFromTop (4);
-        const int eqDialW = juce::jmax (108, area.getWidth() / 7);
-        auto eqRow = area.removeFromTop (juce::jmin (150, area.getHeight() - 8));
-        eqRow = eqRow.withSizeKeepingCentre (eqDialW * 4, eqRow.getHeight());
+        // Split the body: LEFT loops | RIGHT master.
+        auto leftCol = area.removeFromLeft (juce::jmax (300, area.getWidth() * 42 / 100));
+        area.removeFromLeft (gap * 2);
+        auto rightCol = area;
+
+        // ---- LEFT: one send/return loop per engine, headed by its on/off ----
+        auto loopPanel = [&] (juce::Rectangle<int> r, juce::ToggleButton& onBtn,
+                              juce::Slider& send, juce::Label& sendL,
+                              juce::Slider& ret,  juce::Label& retL)
+        {
+            onBtn.setBounds (r.removeFromTop (30).withTrimmedLeft (6).withWidth (180));
+            r.removeFromTop (2);
+            const int half = r.getWidth() / 2;
+            { auto c = r.removeFromLeft (half).reduced (10, 6); sendL.setBounds (c.removeFromTop (16)); send.setBounds (c); }
+            { auto c = r.reduced (10, 6);                        retL.setBounds (c.removeFromTop (16)); ret.setBounds (c); }
+        };
+        const int loopH = leftCol.getHeight() / 2;
+        loopPanel (leftCol.removeFromTop (loopH).reduced (2), entropyOnButton,
+                   entropySend, mixLabels[1], entropyReturn, mixLabels[2]);
+        loopPanel (leftCol.reduced (2), prettifierOnButton,
+                   prettifierSend, mixLabels[3], prettifierReturn, mixLabels[4]);
+
+        // ---- RIGHT: master knobs (2x3) then EQ ----
+        mixHeader.setBounds (rightCol.removeFromTop (22).reduced (4, 0));
+        rightCol.removeFromTop (2);
+        auto masterArea = rightCol.removeFromTop (rightCol.getHeight() * 58 / 100);
+        std::pair<juce::Slider*, juce::Label*> mk[] = {
+            { &dryLevel, &mixLabels[0] }, { &mixWidth, &mixLabels[7] },  { &mixGlue, &mixLabels[8] },
+            { &mixCeiling, &mixLabels[9] }, { &mixOutput, &mixLabels[5] }, { &chaosBeauty, &mixLabels[6] } };
+        const int mkW = masterArea.getWidth() / 3;
+        auto mrow1 = masterArea.removeFromTop (masterArea.getHeight() / 2);
+        for (int i = 0; i < 3; ++i) layoutDialCell (mrow1, *mk[i].second, *mk[i].first, mkW);
+        auto mrow2 = masterArea;
+        for (int i = 3; i < 6; ++i) layoutDialCell (mrow2, *mk[i].second, *mk[i].first, mkW);
+
+        rightCol.removeFromTop (gap);
+        eqHeader.setBounds (rightCol.removeFromTop (20).reduced (4, 0));
+        rightCol.removeFromTop (2);
+        const int eqW = rightCol.getWidth() / 4;
         juce::Slider* eqSliders[] = { &eqLowKnob, &eqMidKnob, &eqHighKnob, &eqLoFiKnob };
         for (size_t i = 0; i < eqLabels.size(); ++i)
-            layoutDialCell (eqRow, eqLabels[i], *eqSliders[i], eqDialW);
+            layoutDialCell (rightCol, eqLabels[i], *eqSliders[i], eqW);
     }
     else if (currentTab == 3)
     {
