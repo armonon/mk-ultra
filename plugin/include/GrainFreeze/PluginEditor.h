@@ -257,7 +257,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> globalShapeAttach;
 
     juce::Label    satLabel;
-    juce::ToggleButton satOnButton { "Saturation" };
+    juce::ToggleButton satOnButton { "Warmth" };
     juce::ComboBox satType;
     juce::Slider   satDrive, satMix;
     juce::Label    satTypeLabel, satDriveLabel, satMixLabel;
@@ -352,7 +352,7 @@ private:
     std::array<std::unique_ptr<SliderAttachment>, kNumDna> dnaAttach;
 
     juce::ToggleButton echoOnButton   { "Echo" },   reverbOnButton { "Reverb" },
-                       chorusOnButton { "Chorus" }, crushOnButton  { "Crush" };
+                       chorusOnButton { "Chorus" }, crushOnButton  { "Lo-Fi" };
     std::array<std::unique_ptr<ButtonAttachment>, 4> moduleAttach;
 
     // ---- MACHINES tab: UI for the four transform machines. Each gets an On

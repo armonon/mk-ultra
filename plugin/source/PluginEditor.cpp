@@ -14,7 +14,7 @@ namespace
     const KnobDef kKnobDefs[] = {
         { gf::ParamId::grainSize,   "grainSize",   "Grain Size" },
         { gf::ParamId::density,     "density",     "Density" },
-        { gf::ParamId::pitch,       "pitch",       "Pitch" },
+        { gf::ParamId::pitch,       "pitch",       "Grain Pitch" },
         { gf::ParamId::spray,       "spray",       "Spray" },
         { gf::ParamId::spread,      "spread",      "Spread" },
         { gf::ParamId::position,    "position",    "Position" },
@@ -980,9 +980,9 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
 
     // ---- Hover tooltips for the less-obvious controls ----
     machSpectralOn.setTooltip ("Spectral: freeze the spectrum into a sustained glassy pad");
-    machPitchOn.setTooltip ("Pitch / Formant: formant-preserving pitch shift (driven by the Pitch knob)");
+    machPitchOn.setTooltip ("Master pitch shift (formant-preserving). Grain Pitch (Texture) pitches the grains; Pitch Lock (Master) snaps to a scale");
     machPitchFormant.setTooltip ("Preserve formants so shifted pitch stays natural instead of chipmunk");
-    machDamageOn.setTooltip ("Damage: drive, sample-rate reduction, bit crush, noise, dropouts and tone");
+    machDamageOn.setTooltip ("Damage: the full destruction unit (drive, SR reduction, bit crush, noise, dropouts, tone). Warmth + Lo-Fi are the gentle versions");
     machDamageClip.setTooltip ("Waveshaper character: Tube, Tape, Hard clip, Wavefold or Diode");
     machDamageBits.setTooltip ("Bit depth (1 = wrecked, 16 = clean)");
     machDamageRate.setTooltip ("Sample-rate reduction amount");
@@ -1001,8 +1001,10 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     lfoSyncBox.setTooltip ("Lock the Global Mod LFO rate to host tempo (Free = use the knob)");
     echoSyncBox.setTooltip ("Lock the Echo time to host tempo (Free = use the Echo knob)");
     globalModOnButton.setTooltip ("Global modulation LFO that sweeps the engine knobs");
-    satOnButton.setTooltip ("Saturation stage: Tube / Tape / Hard drive on the grains");
-    pitchLockButton.setTooltip ("Snap the whole output to a musical key + scale");
+    satOnButton.setTooltip ("Warmth - gentle tube/tape colour on the grains. For heavy destruction use the Damage machine");
+    pitchLockButton.setTooltip ("Pitch Lock - snap the whole output to a key/scale. (Grain Pitch = grains; Pitch/Formant = master shift)");
+    crushOnButton.setTooltip ("Lo-Fi - gentle bit-depth reduction. For full degradation use the Damage machine");
+    knobs[2].slider.setTooltip ("Pitches the grains. Master shift = Pitch/Formant machine; scale snap = Pitch Lock (Master)");
 
     refreshPresetList();
     setSize (1020, 860);
