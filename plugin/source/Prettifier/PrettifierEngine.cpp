@@ -93,6 +93,14 @@ void PrettifierEngine::prepare (double sampleRate, int samplesPerBlock, int numC
     reverbParams.dryLevel = 0.0f;
     reverb.setParameters (reverbParams);
     wetBuffer.setSize (numChannels, samplesPerBlock);
+
+    beautyOsChannels = juce::jlimit (1, 2, juce::jmax (1, numChannels));
+    beautyMaxBlock   = juce::jmax (1, samplesPerBlock);
+    beautyOs = std::make_unique<juce::dsp::Oversampling<float>> (
+                   (size_t) beautyOsChannels, 2,
+                   juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
+    beautyOs->initProcessing ((size_t) beautyMaxBlock);
+    beautyOs->reset();
 }
 
 void PrettifierEngine::reset()
@@ -176,17 +184,40 @@ void PrettifierEngine::process (juce::AudioBuffer<float>& buffer, const Params& 
     // Beauty machine: mild saturating tilt + air lift.
     if (params.beautyOn)
     {
-        const float amt = params.beautyAmount;
-        const float lift = 1.0f + params.beautyAir * 0.25f;
-        const float warm = 1.0f - params.beautyWarmth * 0.2f;
-        for (int c = 0; c < channels; ++c)
+        const float amt   = params.beautyAmount;
+        const float lift  = 1.0f + params.beautyAir * 0.25f;
+        const float warm  = 1.0f - params.beautyWarmth * 0.2f;
+        const float drive = 1.0f + amt * 2.2f;
+
+        if (beautyOs != nullptr && channels == beautyOsChannels && samples <= beautyMaxBlock)
         {
-            for (int i = 0; i < samples; ++i)
+            // Oversample the tanh 4x so its harmonics don't fold back as aliasing;
+            // lift/warm are linear gains and stay at base rate after downsampling.
+            juce::dsp::AudioBlock<float> block (buffer.getArrayOfWritePointers(), (size_t) channels, (size_t) samples);
+            auto up = beautyOs->processSamplesUp (block);
+            const int upN = (int) up.getNumSamples();
+            for (int c = 0; c < channels; ++c)
             {
-                float v = buffer.getSample (c, i);
-                v = std::tanh (v * (1.0f + amt * 2.2f));
-                buffer.setSample (c, i, v * lift * warm);
+                auto* u = up.getChannelPointer ((size_t) c);
+                for (int i = 0; i < upN; ++i)
+                    u[i] = std::tanh (u[i] * drive);
             }
+            beautyOs->processSamplesDown (block);
+            for (int c = 0; c < channels; ++c)
+            {
+                auto* d = buffer.getWritePointer (c);
+                for (int i = 0; i < samples; ++i)
+                    d[i] *= lift * warm;
+            }
+        }
+        else
+        {
+            for (int c = 0; c < channels; ++c)
+                for (int i = 0; i < samples; ++i)
+                {
+                    const float v = std::tanh (buffer.getSample (c, i) * drive);
+                    buffer.setSample (c, i, v * lift * warm);
+                }
         }
     }
 

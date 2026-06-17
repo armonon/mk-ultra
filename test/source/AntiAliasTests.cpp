@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "GrainFreeze/TransformRack.h"
 #include "GrainFreeze/Saturator.h"
+#include "GrainFreeze/Prettifier/PrettifierEngine.h"
 
 #include <cmath>
 #include <vector>
@@ -112,4 +113,29 @@ TEST_CASE ("Warmth saturator stays finite + bounded at max drive", "[antialias][
     fillSine (buf, kF0, 0.9f); sat.process (buf);   // measure this pass
     CHECK (finiteAndBounded (buf));
     INFO ("Warmth in-band alias floor = " << aliasToFundDb ({ buf.getReadPointer (0), buf.getReadPointer (0) + kN }) << " dB");
+}
+
+TEST_CASE ("Beauty machine (Prettifier) stays finite + bounded at max drive", "[antialias][beauty]")
+{
+    gf::pretty::PrettifierEngine p;
+    p.prepare (kSr, 512, 2);
+
+    gf::pretty::Params params;          // only the oversampled beauty saturator, pushed hard
+    params.enabled = true;
+    params.echoOn = params.reverbOn = params.chorusOn = params.polishOn = false;
+    params.beautyOn = true;
+    params.beautyAmount = 1.0f;
+    params.beautyAir = 1.0f;
+    params.beautyWarmth = 0.0f;
+
+    for (int blk = 0; blk < 200; ++blk)
+    {
+        juce::AudioBuffer<float> b (2, 512);
+        for (int c = 0; c < 2; ++c)
+            for (int i = 0; i < 512; ++i)
+                b.setSample (c, i, (float) std::sin (2.0 * juce::MathConstants<double>::pi * 7000.0 * (blk * 512 + i) / kSr) * 0.95f);
+        p.process (b, params, 120.0, false);
+        INFO ("block = " << blk);
+        REQUIRE (finiteAndBounded (b));
+    }
 }

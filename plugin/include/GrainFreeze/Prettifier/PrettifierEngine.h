@@ -79,6 +79,12 @@ private:
     juce::dsp::Reverb::Parameters reverbParams;
     juce::AudioBuffer<float> wetBuffer;
     std::array<double, 2> chorusPhase { 0.0, 0.0 };
+
+    // Beauty-machine saturation is run oversampled so its tanh drive doesn't
+    // alias at high amount. In-place + full-wet, so no dry compensation needed.
+    std::unique_ptr<juce::dsp::Oversampling<float>> beautyOs;
+    int beautyOsChannels = 0;
+    int beautyMaxBlock = 0;
 };
 
 } // namespace pretty
