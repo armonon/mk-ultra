@@ -1067,9 +1067,8 @@ void GrainFreezeEditor::timerCallback()
     // (audio level, the global mod LFO, or the Time Breaker gate). When idle, the
     // timer does nothing -> the UI is fully static and knob drags stay snappy.
     const float lvl = juce::jmax (proc.getOutputLevel (0), proc.getOutputLevel (1));
-    const bool animating = lvl > 0.001f
-                        || std::abs (proc.getGlobalModValue()) > 0.001f
-                        || proc.getTimeBreakerGate() > 0.001f;
+    const bool globalModOn = proc.apvts.getRawParameterValue ("globalModOn")->load() > 0.5f;
+    const bool animating = lvl > 0.001f || globalModOn || proc.getTimeBreakerGate() > 0.001f;
 
     if (animating)
     {
@@ -1086,6 +1085,11 @@ void GrainFreezeEditor::timerCallback()
         for (auto& k : knobs)       updateKnobRing (k);
         for (auto& k : prettyKnobs) updateKnobRing (k);
         if (meter != nullptr) meter->repaint();
+        // Live visualizers — repaint only while there's signal/mod to show, so the
+        // UI still goes fully static (zero repaints) when idle.
+        if (modScope != nullptr && modScope->isVisible())               modScope->repaint();
+        if (waveformDisplay != nullptr && waveformDisplay->isVisible())  waveformDisplay->repaint();
+        if (spectrumDisplay != nullptr && spectrumDisplay->isVisible())  spectrumDisplay->repaint();
     }
 
     // FREEZE lamp — repaints only on state change.
@@ -1219,10 +1223,10 @@ void GrainFreezeEditor::updateTabVisibility()
     satMixLabel.setVisible (entropyTab);
     if (satCurve != nullptr) satCurve->setVisible (entropyTab);
     if (meter != nullptr) meter->setVisible (entropyTab);
-    if (modScope != nullptr) modScope->setVisible (false);   // animated scopes retired (lightweight)
+    if (modScope != nullptr) modScope->setVisible (entropyTab);
     // The Mix tab swaps the bottom output scope for the master spectrum analyzer.
-    if (waveformDisplay != nullptr) waveformDisplay->setVisible (false);
-    if (spectrumDisplay != nullptr) spectrumDisplay->setVisible (false);
+    if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab && ! machinesTab && ! homeTab);
+    if (spectrumDisplay != nullptr) spectrumDisplay->setVisible (mixTab);
     // Legacy spectral freeze retired from the UI — the Spectral machine (Machines
     // tab) is the single home for spectral now.
     specFreezeButton.setVisible (false);
