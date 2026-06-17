@@ -19,7 +19,7 @@ namespace
         { gf::ParamId::spread,      "spread",      "Spread" },
         { gf::ParamId::position,    "position",    "Position" },
         { gf::ParamId::pitchJitter, "pitchJitter", "Pitch Jitter" },
-        { gf::ParamId::reverbMix,   "reverbMix",   "Reverb" },
+        { gf::ParamId::reverbMix,   "reverbMix",   "Grain Space" },
         { gf::ParamId::output,      "output",      "Output" },
     };
 
@@ -477,12 +477,14 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (freezeButton);
     freezeAttachment = std::make_unique<ButtonAttachment> (proc.apvts, "frozen", freezeButton);
 
-    for (auto* tab : { &tabEntropy, &tabMachines, &tabMix, &tabPrettifier })
+    for (auto* tab : { &tabHome, &tabEntropy, &tabMachines, &tabMix, &tabPrettifier })
         addAndMakeVisible (*tab);
+    tabHome.onClick = [this] { switchTab (4); };
     tabEntropy.onClick = [this] { switchTab (0); };
     tabMix.onClick = [this] { switchTab (1); };
     tabPrettifier.onClick = [this] { switchTab (2); };
     tabMachines.onClick = [this] { switchTab (3); };
+    tabHome.setClickingTogglesState (true);
     tabEntropy.setClickingTogglesState (true);
     tabMix.setClickingTogglesState (true);
     tabPrettifier.setClickingTogglesState (true);
@@ -954,6 +956,28 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machTimeRoute1Depth, machTimeRoute1DepthL, "Depth", "timeBreakerMod1Depth", machTimeRoute1DepthAttach);
     machKnob (machTimeRoute2Depth, machTimeRoute2DepthL, "Depth", "timeBreakerMod2Depth", machTimeRoute2DepthAttach);
 
+    // ---- HOME cockpit: macro knobs + signal-flow stage strip ----
+    setupSectionLabel (homeTitle, "MK-ULTRA", 16.0f);
+    setupSectionLabel (homeFlowLabel, "SIGNAL FLOW", 12.0f);
+    {
+        const char* mIds[kNumMacros]   = { "macroTexture", "macroBeauty", "macroSpace",
+                                           "macroChaos", "macroMotion", "macroDamage", "macroEmotion" };
+        const char* mNames[kNumMacros] = { "Texture", "Beauty", "Space", "Chaos", "Motion", "Damage", "Emotion" };
+        for (int i = 0; i < kNumMacros; ++i)
+        {
+            setupMixKnob (macroKnobs[(size_t) i]);
+            addAndMakeVisible (macroKnobs[(size_t) i]);
+            setupDialLabel (macroLabels[(size_t) i], mNames[i]);
+            macroAttach[(size_t) i] = std::make_unique<SliderAttachment> (proc.apvts, mIds[i], macroKnobs[(size_t) i]);
+        }
+    }
+    for (auto* b : { &homeTextureOn, &homeMachinesLabel, &homeSpaceOn, &homeMasterLabel })
+        addAndMakeVisible (*b);
+    homeMachinesLabel.setClickingTogglesState (false);  // display-only stage labels
+    homeMasterLabel.setClickingTogglesState (false);
+    homeTextureAttach = std::make_unique<ButtonAttachment> (proc.apvts, "textureGrainOn", homeTextureOn);
+    homeSpaceAttach   = std::make_unique<ButtonAttachment> (proc.apvts, "beautySpaceOn", homeSpaceOn);
+
     // ---- Hover tooltips for the less-obvious controls ----
     machSpectralOn.setTooltip ("Spectral: freeze the spectrum into a sustained glassy pad");
     machPitchOn.setTooltip ("Pitch / Formant: formant-preserving pitch shift (driven by the Pitch knob)");
@@ -1165,7 +1189,7 @@ void GrainFreezeEditor::refreshPresetList()
 
 void GrainFreezeEditor::switchTab (int tabIndex)
 {
-    currentTab = juce::jlimit (0, 3, tabIndex);
+    currentTab = juce::jlimit (0, 4, tabIndex);
     updateTabVisibility();
     resized();
     tabFade = 0.0f;            // start fully scrimmed, then ease out
@@ -1188,17 +1212,27 @@ void GrainFreezeEditor::updateTabVisibility()
     const bool mixTab = currentTab == 1;
     const bool prettifierTab = currentTab == 2;
     const bool machinesTab = currentTab == 3;
+    const bool homeTab = currentTab == 4;
     constexpr bool inputToolsVisible = kMkUltraExperimentalInputTools;
 
+    tabHome.setToggleState (homeTab, juce::dontSendNotification);
     tabEntropy.setToggleState (entropyTab, juce::dontSendNotification);
     tabMix.setToggleState (mixTab, juce::dontSendNotification);
     tabPrettifier.setToggleState (prettifierTab, juce::dontSendNotification);
     tabMachines.setToggleState (machinesTab, juce::dontSendNotification);
 
-    lnf.setAccentTheme ((entropyTab || machinesTab) ? gf::BiohazardLookAndFeel::AccentTheme::entropy
+    lnf.setAccentTheme ((entropyTab || machinesTab || homeTab) ? gf::BiohazardLookAndFeel::AccentTheme::entropy
                         : mixTab     ? gf::BiohazardLookAndFeel::AccentTheme::mix
                                      : gf::BiohazardLookAndFeel::AccentTheme::prettifier);
     sendLookAndFeelChange();
+
+    // HOME cockpit controls.
+    homeTitle.setVisible (homeTab);
+    homeFlowLabel.setVisible (homeTab);
+    for (auto& s : macroKnobs)  s.setVisible (homeTab);
+    for (auto& l : macroLabels) l.setVisible (homeTab);
+    for (auto* b : { &homeTextureOn, &homeMachinesLabel, &homeSpaceOn, &homeMasterLabel })
+        b->setVisible (homeTab);
 
     freezeButton.setVisible (entropyTab);
     for (auto& k : knobs)
@@ -1224,12 +1258,14 @@ void GrainFreezeEditor::updateTabVisibility()
     if (meter != nullptr) meter->setVisible (entropyTab);
     if (modScope != nullptr) modScope->setVisible (entropyTab);
     // The Mix tab swaps the bottom output scope for the master spectrum analyzer.
-    if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab && ! machinesTab);
+    if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab && ! machinesTab && ! homeTab);
     if (spectrumDisplay != nullptr) spectrumDisplay->setVisible (mixTab);
-    specFreezeButton.setVisible (entropyTab);
-    specLabel.setVisible (entropyTab);
-    specMix.setVisible (entropyTab);
-    specShimmer.setVisible (entropyTab);
+    // Legacy spectral freeze retired from the UI — the Spectral machine (Machines
+    // tab) is the single home for spectral now.
+    specFreezeButton.setVisible (false);
+    specLabel.setVisible (false);
+    specMix.setVisible (false);
+    specShimmer.setVisible (false);
 
     midiEnableButton.setVisible (entropyTab && inputToolsVisible);
     for (auto* c : { &midiRootSlider, &midiGlideSlider, &midiVelAmpSlider })
@@ -1359,7 +1395,7 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     }
 
     // Background artwork, kept subtle so the UI stays clean and modern.
-    if (tab == 0 || tab == 3)   // Machines tab shares the Transform tab's backdrop
+    if (tab == 0 || tab == 3 || tab == 4)   // Machines + Home share the Texture backdrop
         drawBgImage (bgImage, (0.16f + glowLevel * 0.12f) * boot);
     else if (tab == 2)
         drawBgImage (prettifierBgImage, (0.34f + glowLevel * 0.12f) * boot);
@@ -1522,10 +1558,12 @@ void GrainFreezeEditor::resized()
         b.setBounds (header.removeFromLeft (w).withSizeKeepingCentre (w, tabH));
         header.removeFromLeft (gap);
     };
-    placeTab (tabEntropy, 132);
-    placeTab (tabMachines, 124);
-    placeTab (tabMix, 82);
-    placeTab (tabPrettifier, 184);
+    // Visual order follows the signal chain: Home, Texture, Machines, Space, Master.
+    placeTab (tabHome, 78);
+    placeTab (tabEntropy, 104);
+    placeTab (tabMachines, 120);
+    placeTab (tabPrettifier, 92);
+    placeTab (tabMix, 102);
 
     area.removeFromTop (gap);
 
@@ -1899,6 +1937,30 @@ void GrainFreezeEditor::resized()
             slot (machTimeRoute2Target, machTimeRoute2Depth, machTimeRoute2DepthL);
             area.removeFromTop (gap);
         }
+    }
+    else if (currentTab == 4)   // HOME cockpit
+    {
+        homeTitle.setBounds (area.removeFromTop (30).reduced (4, 0));
+        area.removeFromTop (gap);
+
+        // Signal-flow strip: Texture -> Machines -> Space -> Master.
+        homeFlowLabel.setBounds (area.removeFromTop (18).reduced (4, 0));
+        auto flow = area.removeFromTop (40);
+        const int stageW = 150;
+        auto centred = flow.withSizeKeepingCentre (juce::jmin (flow.getWidth(), stageW * 4 + 90), flow.getHeight());
+        auto stageCell = [&] (juce::Button& b) { b.setBounds (centred.removeFromLeft (stageW).withSizeKeepingCentre (stageW - 8, 30)); };
+        stageCell (homeTextureOn);     centred.removeFromLeft (30);
+        stageCell (homeMachinesLabel); centred.removeFromLeft (30);
+        stageCell (homeSpaceOn);       centred.removeFromLeft (30);
+        stageCell (homeMasterLabel);
+
+        area.removeFromTop (gap * 2);
+        // The macros that drive the whole chain.
+        auto macroRow = area.removeFromTop (juce::jmin (150, area.getHeight() - 20));
+        const int mW = juce::jmax (96, macroRow.getWidth() / kNumMacros);
+        macroRow = macroRow.withSizeKeepingCentre (juce::jmin (macroRow.getWidth(), mW * kNumMacros), macroRow.getHeight());
+        for (int i = 0; i < kNumMacros; ++i)
+            layoutDialCell (macroRow, macroLabels[(size_t) i], macroKnobs[(size_t) i], mW);
     }
 
     if (currentTab == 0)

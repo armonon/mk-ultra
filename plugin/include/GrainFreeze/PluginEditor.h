@@ -207,11 +207,25 @@ private:
     juce::TextButton nextButton      { ">" };
     juce::ComboBox   presetBox;
     juce::TextEditor presetName;
-    juce::TextButton tabEntropy { "TRANSFORM" };
+    // Tab buttons. Internal indices are unchanged (0 Texture, 1 Master, 2 Space,
+    // 3 Machines); HOME is a new index 4. Visual order is set in resized().
+    juce::TextButton tabHome { "HOME" };
+    juce::TextButton tabEntropy { "TEXTURE" };
     juce::TextButton tabMachines { "MACHINES" };
-    juce::TextButton tabMix { "OUT" };
-    juce::TextButton tabPrettifier { "BEAUTY & SPACE" };
-    int currentTab = 0;
+    juce::TextButton tabMix { "MASTER" };
+    juce::TextButton tabPrettifier { "SPACE" };
+    int currentTab = 4;   // land on HOME
+
+    // ---- HOME cockpit: the macros that drive the whole chain + a stage strip. ----
+    static constexpr int kNumMacros = 7;
+    std::array<juce::Slider, kNumMacros> macroKnobs;
+    std::array<juce::Label,  kNumMacros> macroLabels;
+    std::array<std::unique_ptr<SliderAttachment>, kNumMacros> macroAttach;
+    juce::Label homeTitle, homeFlowLabel;
+    // Signal-flow stage toggles (own attachments; sync with the deep-tab toggles).
+    juce::ToggleButton homeTextureOn { "Texture" }, homeMachinesLabel { "Machines" },
+                       homeSpaceOn { "Space" }, homeMasterLabel { "Master" };
+    std::unique_ptr<ButtonAttachment> homeTextureAttach, homeSpaceAttach;
     int undoTxnCounter = 0;   // coarse undo-transaction grouping in the timer
     bool sampleReadyShown = false; // tracks the FREEZE button's armed-state tint
 
