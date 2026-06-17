@@ -1013,7 +1013,7 @@ void GrainFreezeEditor::timerCallback()
     auto updateKnobRing = [this] (LabeledKnob& k)
     {
         if (k.ring == nullptr) return;
-        const float off = proc.getModOffset (k.id);
+        const float off = proc.getModOffset (k.id) + proc.getTimeBreakerModOffset (k.id);
         k.ring->setOffset (off);
         k.ring->repaint();
 

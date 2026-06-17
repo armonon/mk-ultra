@@ -72,6 +72,10 @@ public:
     // Live, normalized (-1..1) modulation offset for a parameter, for UI display.
     float getModOffset (gf::ParamId id) const { return modMatrix.getOffset (id); }
 
+    // Time Breaker -> knob routing offset (depth * tempo gate) for a param, so the
+    // UI can pulse routed knobs in time. 0 when not routed / Time Breaker off.
+    float getTimeBreakerModOffset (gf::ParamId id) const;
+
     // Post-saturation output level for metering (linear, per channel, decaying).
     float getOutputLevel (int channel) const
     {

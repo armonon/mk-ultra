@@ -727,6 +727,34 @@ void GrainFreezeProcessor::pullParameters()
     juce::ignoreUnused (modulated (PI::output));
 }
 
+float GrainFreezeProcessor::getTimeBreakerModOffset (gf::ParamId id) const
+{
+    if (! isOn (paramPtrs.timeBreakerOn))
+        return 0.0f;
+    const float g = timeBreaker.gate();
+    if (g <= 0.0001f)
+        return 0.0f;
+    auto tid = [] (int c) -> int
+    {
+        switch (c)
+        {
+            case 1:  return (int) gf::ParamId::grainSize;
+            case 2:  return (int) gf::ParamId::density;
+            case 3:  return (int) gf::ParamId::pitch;
+            case 4:  return (int) gf::ParamId::spray;
+            case 5:  return (int) gf::ParamId::pitchJitter;
+            case 6:  return (int) gf::ParamId::reverbMix;
+            case 7:  return (int) gf::ParamId::echoTime;
+            case 8:  return (int) gf::ParamId::bitCrush;
+            default: return -1;
+        }
+    };
+    float off = 0.0f;
+    if (tid ((int) loadParam (paramPtrs.timeBreakerMod1Target)) == (int) id) off += loadParam (paramPtrs.timeBreakerMod1Depth) * g;
+    if (tid ((int) loadParam (paramPtrs.timeBreakerMod2Target)) == (int) id) off += loadParam (paramPtrs.timeBreakerMod2Depth) * g;
+    return off;
+}
+
 void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
