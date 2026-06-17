@@ -145,7 +145,7 @@ TEST_CASE ("LFO produces bounded oscillating offset", "[mod][lfo]")
 TEST_CASE ("Saturator is transparent when mix is zero", "[sat]")
 {
     gf::Saturator s;
-    s.prepare (44100.0, 2);
+    s.prepare (44100.0, 2, 512);
     s.setDrive (12.0f);
     s.setMix (0.0f);
 
@@ -167,7 +167,7 @@ TEST_CASE ("Saturator stays finite and bounded under heavy drive", "[sat][safety
     for (int type = 0; type <= 2; ++type)
     {
         gf::Saturator s;
-        s.prepare (44100.0, 2);
+        s.prepare (44100.0, 2, 512);
         s.setType (type);
         s.setDrive (24.0f);
         s.setMix (1.0f);
