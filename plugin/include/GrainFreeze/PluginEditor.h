@@ -389,6 +389,11 @@ private:
     juce::Slider       machTimeRoute1Depth, machTimeRoute2Depth;
     juce::Label        machTimeRoute1DepthL, machTimeRoute2DepthL;
 
+    // Progressive disclosure: the dense machines collapse to their essentials and
+    // reveal the deep parameters only when "Advanced" is toggled on.
+    juce::TextButton   machDamageMore { "Advanced" };
+    juce::TextButton   machTimeMore   { "Advanced" };
+
     std::unique_ptr<ButtonAttachment> machSpectralOnAttach, machPitchOnAttach, machPitchFormantAttach,
                                       machDamageOnAttach, machTimeOnAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> machDamageClipAttach, machTimeDivisionAttach,

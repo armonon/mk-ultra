@@ -921,6 +921,23 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machTimeRoute1Depth, machTimeRoute1DepthL, "Depth", "timeBreakerMod1Depth", machTimeRoute1DepthAttach);
     machKnob (machTimeRoute2Depth, machTimeRoute2DepthL, "Depth", "timeBreakerMod2Depth", machTimeRoute2DepthAttach);
 
+    // "Advanced" expanders: collapsed by default so each machine shows only its
+    // essentials; toggling reveals the deep params and re-lays out the tab.
+    auto setupMoreButton = [this] (juce::TextButton& b)
+    {
+        b.setClickingTogglesState (true);
+        b.setToggleState (false, juce::dontSendNotification);
+        addAndMakeVisible (b);
+        b.onClick = [this, &b]
+        {
+            b.setButtonText (b.getToggleState() ? "Less" : "Advanced");
+            updateTabVisibility();
+            resized();
+        };
+    };
+    setupMoreButton (machDamageMore);
+    setupMoreButton (machTimeMore);
+
     // ---- HOME cockpit: macro knobs + signal-flow stage strip ----
     setupSectionLabel (homeTitle, "MK-ULTRA", 16.0f);
     setupSectionLabel (homeFlowLabel, "SIGNAL FLOW", 12.0f);
@@ -1254,31 +1271,45 @@ void GrainFreezeEditor::updateTabVisibility()
         b->setVisible (prettifierTab);
     echoSyncBox.setVisible (prettifierTab);
 
-    // MACHINES tab.
+    // MACHINES tab. Damage and Time Breaker collapse to essentials; their deep
+    // params appear only when the per-machine "Advanced" toggle is on.
+    const bool damageMore = machDamageMore.getToggleState();
+    const bool timeMore   = machTimeMore.getToggleState();
     machinesHeader.setVisible (machinesTab);
     for (auto* l : { &machSpectralTitle, &machPitchTitle, &machDamageTitle, &machTimeTitle })
         l->setVisible (machinesTab);
     for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn, &machTimeSync })
         b->setVisible (machinesTab);
+    for (auto* b : { &machDamageMore, &machTimeMore })
+        b->setVisible (machinesTab);
+    // Always-visible essentials (Spectral + Pitch are already minimal).
     for (auto* s : { &machSpectralMix, &machSpectralAmount, &machPitchMix, &machPitchShift,
-                     &machDamageMix, &machDamageAmount, &machDamageBits, &machDamageRate,
-                     &machDamageJitter, &machDamageNoise, &machDamageDropout, &machDamageTone,
-                     &machTimeMix, &machTimeRate, &machTimeSize, &machTimeChance, &machTimeReverse })
+                     &machDamageAmount, &machDamageMix, &machTimeChance, &machTimeMix })
         s->setVisible (machinesTab);
     for (auto* l : { &machSpectralMixL, &machSpectralAmountL, &machPitchMixL, &machPitchShiftL,
-                     &machDamageMixL, &machDamageAmountL, &machDamageBitsL, &machDamageRateL,
-                     &machDamageJitterL, &machDamageNoiseL, &machDamageDropoutL, &machDamageToneL,
-                     &machTimeMixL, &machTimeRateL, &machTimeSizeL, &machTimeChanceL, &machTimeReverseL })
+                     &machDamageAmountL, &machDamageMixL, &machTimeChanceL, &machTimeMixL })
         l->setVisible (machinesTab);
+    // Damage advanced knobs.
+    for (auto* s : { &machDamageBits, &machDamageRate, &machDamageJitter,
+                     &machDamageNoise, &machDamageDropout, &machDamageTone })
+        s->setVisible (machinesTab && damageMore);
+    for (auto* l : { &machDamageBitsL, &machDamageRateL, &machDamageJitterL,
+                     &machDamageNoiseL, &machDamageDropoutL, &machDamageToneL })
+        l->setVisible (machinesTab && damageMore);
+    // Time Breaker advanced knobs + routing.
+    for (auto* s : { &machTimeRate, &machTimeSize, &machTimeReverse })
+        s->setVisible (machinesTab && timeMore);
+    for (auto* l : { &machTimeRateL, &machTimeSizeL, &machTimeReverseL })
+        l->setVisible (machinesTab && timeMore);
     machDamageClip.setVisible (machinesTab);
     machTimeDivision.setVisible (machinesTab);
-    machTimeRouteL.setVisible (machinesTab);
-    machTimeRoute1Target.setVisible (machinesTab);
-    machTimeRoute2Target.setVisible (machinesTab);
+    machTimeRouteL.setVisible (machinesTab && timeMore);
+    machTimeRoute1Target.setVisible (machinesTab && timeMore);
+    machTimeRoute2Target.setVisible (machinesTab && timeMore);
     for (auto* s : { &machTimeRoute1Depth, &machTimeRoute2Depth })
-        s->setVisible (machinesTab);
+        s->setVisible (machinesTab && timeMore);
     for (auto* l : { &machTimeRoute1DepthL, &machTimeRoute2DepthL })
-        l->setVisible (machinesTab);
+        l->setVisible (machinesTab && timeMore);
 
     if (keyboard != nullptr)
         keyboard->setVisible (inputToolsVisible);
@@ -1770,30 +1801,41 @@ void GrainFreezeEditor::resized()
                     { { &machSpectralMix, &machSpectralMixL }, { &machSpectralAmount, &machSpectralAmountL } });
         machineRow (machPitchTitle, machPitchOn, &machPitchFormant,
                     { { &machPitchMix, &machPitchMixL }, { &machPitchShift, &machPitchShiftL } });
-        // Damage gets the full treatment: Clip type in the header + a wide knob row.
+        // Damage: Clip type + Advanced toggle in the header. Collapsed shows just
+        // Drive + Mix; expanded reveals the full lo-fi knob row.
         {
+            const bool more = machDamageMore.getToggleState();
             auto block = area.removeFromTop (116);
             auto head  = block.removeFromTop (26);
             machDamageTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
             machDamageOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
             head.removeFromLeft (gap);
             machDamageClip.setBounds (head.removeFromLeft (110).withSizeKeepingCentre (106, 26));
+            machDamageMore.setBounds (head.removeFromRight (96).withSizeKeepingCentre (92, 24));
             block.removeFromTop (4);
             const int kw = 96;
-            std::pair<juce::Slider*, juce::Label*> dk[] = {
-                { &machDamageAmount, &machDamageAmountL }, { &machDamageBits, &machDamageBitsL },
-                { &machDamageRate, &machDamageRateL },     { &machDamageJitter, &machDamageJitterL },
-                { &machDamageNoise, &machDamageNoiseL },   { &machDamageDropout, &machDamageDropoutL },
-                { &machDamageTone, &machDamageToneL },      { &machDamageMix, &machDamageMixL } };
-            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 8), block.getHeight());
+            std::vector<std::pair<juce::Slider*, juce::Label*>> dk { { &machDamageAmount, &machDamageAmountL } };
+            if (more)
+            {
+                dk.push_back ({ &machDamageBits,    &machDamageBitsL });
+                dk.push_back ({ &machDamageRate,    &machDamageRateL });
+                dk.push_back ({ &machDamageJitter,  &machDamageJitterL });
+                dk.push_back ({ &machDamageNoise,   &machDamageNoiseL });
+                dk.push_back ({ &machDamageDropout, &machDamageDropoutL });
+                dk.push_back ({ &machDamageTone,    &machDamageToneL });
+            }
+            dk.push_back ({ &machDamageMix, &machDamageMixL });
+            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * (int) dk.size()), block.getHeight());
             for (auto& kv : dk)
                 layoutDialCell (krow, *kv.second, *kv.first, kw);
             area.removeFromTop (gap);
         }
 
-        // Time Breaker: header (Sync + Division), knob row, then routing slots.
+        // Time Breaker: Sync + Division + Advanced in the header. Collapsed shows
+        // just Chance + Mix; expanded reveals the stutter knobs and routing slots.
         {
-            auto block = area.removeFromTop (172);
+            const bool more = machTimeMore.getToggleState();
+            auto block = area.removeFromTop (more ? 172 : 116);
             auto head  = block.removeFromTop (26);
             machTimeTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
             machTimeOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
@@ -1801,33 +1843,40 @@ void GrainFreezeEditor::resized()
             machTimeSync.setBounds (head.removeFromLeft (92).withSizeKeepingCentre (88, 24));
             head.removeFromLeft (gap);
             machTimeDivision.setBounds (head.removeFromLeft (88).withSizeKeepingCentre (84, 26));
+            machTimeMore.setBounds (head.removeFromRight (96).withSizeKeepingCentre (92, 24));
 
             auto knobRow = block.removeFromTop (96);
             knobRow.removeFromTop (4);
             const int kw = 96;
-            std::pair<juce::Slider*, juce::Label*> tk[] = {
-                { &machTimeMix, &machTimeMixL },   { &machTimeRate, &machTimeRateL },
-                { &machTimeSize, &machTimeSizeL }, { &machTimeChance, &machTimeChanceL },
-                { &machTimeReverse, &machTimeReverseL } };
-            auto krow = knobRow.withSizeKeepingCentre (juce::jmin (knobRow.getWidth(), kw * 5), knobRow.getHeight());
+            std::vector<std::pair<juce::Slider*, juce::Label*>> tk;
+            if (more)
+                tk = { { &machTimeMix, &machTimeMixL },   { &machTimeRate, &machTimeRateL },
+                       { &machTimeSize, &machTimeSizeL }, { &machTimeChance, &machTimeChanceL },
+                       { &machTimeReverse, &machTimeReverseL } };
+            else
+                tk = { { &machTimeChance, &machTimeChanceL }, { &machTimeMix, &machTimeMixL } };
+            auto krow = knobRow.withSizeKeepingCentre (juce::jmin (knobRow.getWidth(), kw * (int) tk.size()), knobRow.getHeight());
             for (auto& kv : tk)
                 layoutDialCell (krow, *kv.second, *kv.first, kw);
 
-            // Routing slots: [Routes to]  [target 1][depth]   [target 2][depth]
-            auto routeRow2 = block;
-            machTimeRouteL.setBounds (routeRow2.removeFromLeft (88).withSizeKeepingCentre (84, 22));
-            auto slot = [&] (juce::ComboBox& cb, juce::Slider& dk, juce::Label& dl)
+            if (more)
             {
-                routeRow2.removeFromLeft (gap);
-                cb.setBounds (routeRow2.removeFromLeft (132).withSizeKeepingCentre (128, 28));
-                routeRow2.removeFromLeft (gap);
-                auto c = routeRow2.removeFromLeft (64);
-                dl.setBounds (c.removeFromTop (14));
-                dk.setBounds (c.reduced (2, 0));
-            };
-            slot (machTimeRoute1Target, machTimeRoute1Depth, machTimeRoute1DepthL);
-            routeRow2.removeFromLeft (gap * 2);
-            slot (machTimeRoute2Target, machTimeRoute2Depth, machTimeRoute2DepthL);
+                // Routing slots: [Routes to]  [target 1][depth]   [target 2][depth]
+                auto routeRow2 = block;
+                machTimeRouteL.setBounds (routeRow2.removeFromLeft (88).withSizeKeepingCentre (84, 22));
+                auto slot = [&] (juce::ComboBox& cb, juce::Slider& dk, juce::Label& dl)
+                {
+                    routeRow2.removeFromLeft (gap);
+                    cb.setBounds (routeRow2.removeFromLeft (132).withSizeKeepingCentre (128, 28));
+                    routeRow2.removeFromLeft (gap);
+                    auto c = routeRow2.removeFromLeft (64);
+                    dl.setBounds (c.removeFromTop (14));
+                    dk.setBounds (c.reduced (2, 0));
+                };
+                slot (machTimeRoute1Target, machTimeRoute1Depth, machTimeRoute1DepthL);
+                routeRow2.removeFromLeft (gap * 2);
+                slot (machTimeRoute2Target, machTimeRoute2Depth, machTimeRoute2DepthL);
+            }
             area.removeFromTop (gap);
         }
     }
