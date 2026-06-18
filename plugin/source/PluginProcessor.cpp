@@ -37,11 +37,14 @@ GrainFreezeProcessor::GrainFreezeProcessor()
     apvts.addParameterListener ("pitchLockFormant", this);
     apvts.addParameterListener ("pitchFormantOn", this);
     apvts.addParameterListener ("macroMorph", this);
+    apvts.addParameterListener ("macroMorphY", this);
     // First-insert "signature" sound. If the host restores saved state,
     // setStateInformation runs after construction and overrides this.
     presets.loadDefaultPatch();
     slotA = apvts.copyState();
     slotB = apvts.copyState();
+    slotC = apvts.copyState();
+    slotD = apvts.copyState();
 }
 
 GrainFreezeProcessor::~GrainFreezeProcessor()
@@ -49,6 +52,7 @@ GrainFreezeProcessor::~GrainFreezeProcessor()
     apvts.removeParameterListener ("pitchLockFormant", this);
     apvts.removeParameterListener ("pitchFormantOn", this);
     apvts.removeParameterListener ("macroMorph", this);
+    apvts.removeParameterListener ("macroMorphY", this);
 }
 
 void GrainFreezeProcessor::cacheParameterPointers()
@@ -229,11 +233,11 @@ void GrainFreezeProcessor::cacheModPointers()
 // The formant shifter adds lookahead; (de)activating it changes plugin latency.
 void GrainFreezeProcessor::parameterChanged (const juce::String& id, float value)
 {
-    if (id == "macroMorph")
+    if (id == "macroMorph" || id == "macroMorphY")
     {
         // May arrive on the audio thread during automation — just flag it and
-        // do the param writes on the message thread.
-        pendingMorph.store (value, std::memory_order_relaxed);
+        // do the param writes on the message thread (reads live X/Y there).
+        juce::ignoreUnused (value);
         morphRequested.store (true, std::memory_order_relaxed);
         triggerAsyncUpdate();
         return;
@@ -256,19 +260,22 @@ void GrainFreezeProcessor::handleAsyncUpdate()
                        ? gf::FormantShifter::kLatency : 0);
 
     if (morphRequested.exchange (false))
-        applyMorph (pendingMorph.load (std::memory_order_relaxed));
+        applyMorph();
 }
 
-void GrainFreezeProcessor::applyMorph (float morph)
+void GrainFreezeProcessor::applyMorph ()
 {
-    if (! slotA.isValid() || ! slotB.isValid())
+    if (! slotA.isValid() || ! slotB.isValid() || ! slotC.isValid() || ! slotD.isValid())
         return;
 
-    morph = juce::jlimit (0.0f, 1.0f, morph);
+    auto* mx = apvts.getRawParameterValue ("macroMorph");
+    auto* my = apvts.getRawParameterValue ("macroMorphY");
+    const float x = mx != nullptr ? juce::jlimit (0.0f, 1.0f, mx->load()) : 0.0f;
+    const float y = my != nullptr ? juce::jlimit (0.0f, 1.0f, my->load()) : 0.0f;
 
-    // Skip the morpher itself, the A/B mechanics, and non-sound/system params.
+    // Skip the morph axes themselves, A/B mechanics, and non-sound/system params.
     static const juce::StringArray skip {
-        "macroMorph", "performanceMode", "oversamplingMode", "ecoUiMode",
+        "macroMorph", "macroMorphY", "performanceMode", "oversamplingMode", "ecoUiMode",
         "pluginOn", "panic", "analyzerOn", "waveformOn", "modScopeOn",
         "motionMatrixOn", "inputToolsOn", "midiEnabled", "sampleMode" };
 
@@ -280,14 +287,20 @@ void GrainFreezeProcessor::applyMorph (float morph)
 
         const auto a = slotA.getChildWithProperty ("id", rp->paramID);
         const auto b = slotB.getChildWithProperty ("id", rp->paramID);
-        if (! a.isValid() || ! b.isValid())
+        const auto c = slotC.getChildWithProperty ("id", rp->paramID);
+        const auto d = slotD.getChildWithProperty ("id", rp->paramID);
+        if (! a.isValid() || ! b.isValid() || ! c.isValid() || ! d.isValid())
             continue;
 
-        // Slots hold raw values; crossfade in normalised space so skewed
-        // ranges morph perceptually evenly.
+        // Bilinear blend of the four corners, in normalised space.
+        // A=bottom-left, B=bottom-right, C=top-left, D=top-right.
         const float nA = rp->convertTo0to1 ((float) a.getProperty ("value"));
         const float nB = rp->convertTo0to1 ((float) b.getProperty ("value"));
-        rp->setValueNotifyingHost (nA + morph * (nB - nA));
+        const float nC = rp->convertTo0to1 ((float) c.getProperty ("value"));
+        const float nD = rp->convertTo0to1 ((float) d.getProperty ("value"));
+        const float bottom = nA + x * (nB - nA);
+        const float top    = nC + x * (nD - nC);
+        rp->setValueNotifyingHost (bottom + y * (top - bottom));
     }
 }
 
@@ -586,11 +599,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
 
     static constexpr const char* macroIds[] = {
         "macroBeauty", "macroChaos", "macroEmotion", "macroDamage",
-        "macroMotion", "macroSpace", "macroTexture", "macroGlue", "macroMorph"
+        "macroMotion", "macroSpace", "macroTexture", "macroGlue", "macroMorph", "macroMorphY"
     };
     static constexpr const char* macroNames[] = {
         "Macro Beauty", "Macro Chaos", "Macro Emotion", "Macro Damage",
-        "Macro Motion", "Macro Space", "Macro Texture", "Macro Glue", "Macro Morph"
+        "Macro Motion", "Macro Space", "Macro Texture", "Macro Glue", "Macro Morph X", "Macro Morph Y"
     };
     for (size_t i = 0; i < std::size (macroIds); ++i)
         layout.add (std::make_unique<AudioParameterFloat> (
@@ -1282,8 +1295,12 @@ void GrainFreezeProcessor::getStateInformation (juce::MemoryBlock& destData)
     {
         state.removeChild (slotA, nullptr);
         state.removeChild (slotB, nullptr);
+        state.removeChild (slotC, nullptr);
+        state.removeChild (slotD, nullptr);
         state.appendChild (slotA.createCopy(), nullptr);
         state.appendChild (slotB.createCopy(), nullptr);
+        state.appendChild (slotC.createCopy(), nullptr);
+        state.appendChild (slotD.createCopy(), nullptr);
         juce::MemoryOutputStream stream (destData, false);
         state.writeToStream (stream);
     }
@@ -1296,14 +1313,20 @@ void GrainFreezeProcessor::setStateInformation (const void* data, int sizeInByte
     {
         if (auto a = tree.getChildWithName ("AB_SLOT_A"); a.isValid()) slotA = a;
         if (auto b = tree.getChildWithName ("AB_SLOT_B"); b.isValid()) slotB = b;
+        if (auto c = tree.getChildWithName ("AB_SLOT_C"); c.isValid()) slotC = c;
+        if (auto d = tree.getChildWithName ("AB_SLOT_D"); d.isValid()) slotD = d;
         tree.removeChild (tree.getChildWithName ("AB_SLOT_A"), nullptr);
         tree.removeChild (tree.getChildWithName ("AB_SLOT_B"), nullptr);
+        tree.removeChild (tree.getChildWithName ("AB_SLOT_C"), nullptr);
+        tree.removeChild (tree.getChildWithName ("AB_SLOT_D"), nullptr);
         apvts.replaceState (tree);
     }
 }
 
 void GrainFreezeProcessor::storeSlotA() { slotA = apvts.copyState(); }
 void GrainFreezeProcessor::storeSlotB() { slotB = apvts.copyState(); }
+void GrainFreezeProcessor::storeSlotC() { slotC = apvts.copyState(); }
+void GrainFreezeProcessor::storeSlotD() { slotD = apvts.copyState(); }
 void GrainFreezeProcessor::copyAToB() { slotB = slotA.createCopy(); }
 void GrainFreezeProcessor::copyBToA() { slotA = slotB.createCopy(); }
 void GrainFreezeProcessor::loadSlotA() { preserveLocked ([this] { if (slotA.isValid()) apvts.replaceState (slotA.createCopy()); }); }

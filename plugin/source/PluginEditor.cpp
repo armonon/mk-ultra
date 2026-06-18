@@ -945,8 +945,8 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     setupSectionLabel (homeFlowLabel, "SIGNAL FLOW", 12.0f);
     {
         const char* mIds[kNumMacros]   = { "macroTexture", "macroBeauty", "macroSpace",
-                                           "macroChaos", "macroMotion", "macroDamage", "macroEmotion", "macroMorph" };
-        const char* mNames[kNumMacros] = { "Texture", "Beauty", "Space", "Chaos", "Motion", "Damage", "Emotion", "Morph" };
+                                           "macroChaos", "macroMotion", "macroDamage", "macroEmotion" };
+        const char* mNames[kNumMacros] = { "Texture", "Beauty", "Space", "Chaos", "Motion", "Damage", "Emotion" };
         for (int i = 0; i < kNumMacros; ++i)
         {
             setupMixKnob (macroKnobs[(size_t) i]);
@@ -954,9 +954,22 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             setupDialLabel (macroLabels[(size_t) i], mNames[i]);
             macroAttach[(size_t) i] = std::make_unique<SliderAttachment> (proc.apvts, mIds[i], macroKnobs[(size_t) i]);
         }
-        macroKnobs[kNumMacros - 1].setTooltip ("Morph: crossfades every sound parameter from snapshot A to B. "
-                                               "Shift-click the A and B buttons to capture two sounds first.");
     }
+
+    // Morph pad: drag the puck to blend the four captured corners.
+    addAndMakeVisible (morphPad);
+    setupSectionLabel (morphPadLabel, "MORPH PAD", 12.0f);
+    morphPad.setTooltip ("Drag to blend the four corner sounds. Capture each corner with the A/B/C/D buttons below.");
+    morphCapA.onClick = [this] { proc.storeSlotA(); };
+    morphCapB.onClick = [this] { proc.storeSlotB(); };
+    morphCapC.onClick = [this] { proc.storeSlotC(); };
+    morphCapD.onClick = [this] { proc.storeSlotD(); };
+    for (auto* b : { &morphCapA, &morphCapB, &morphCapC, &morphCapD })
+    {
+        b->setTooltip ("Capture the current sound into this morph-pad corner");
+        addAndMakeVisible (*b);
+    }
+
     for (auto* b : { &homeTextureOn, &homeMachinesLabel, &homeSpaceOn, &homeMasterLabel })
         addAndMakeVisible (*b);
     homeMachinesLabel.setClickingTogglesState (false);  // display-only stage labels
@@ -1181,6 +1194,10 @@ void GrainFreezeEditor::updateTabVisibility()
     homeFlowLabel.setVisible (homeTab);
     for (auto& s : macroKnobs)  s.setVisible (homeTab);
     for (auto& l : macroLabels) l.setVisible (homeTab);
+    morphPad.setVisible (homeTab);
+    morphPadLabel.setVisible (homeTab);
+    for (auto* b : { &morphCapA, &morphCapB, &morphCapC, &morphCapD })
+        b->setVisible (homeTab);
     for (auto* b : { &homeTextureOn, &homeMachinesLabel, &homeSpaceOn, &homeMasterLabel })
         b->setVisible (homeTab);
 
@@ -1907,6 +1924,21 @@ void GrainFreezeEditor::resized()
         macroRow = macroRow.withSizeKeepingCentre (juce::jmin (macroRow.getWidth(), mW * kNumMacros), macroRow.getHeight());
         for (int i = 0; i < kNumMacros; ++i)
             layoutDialCell (macroRow, macroLabels[(size_t) i], macroKnobs[(size_t) i], mW);
+
+        // Morph pad below the macros: the square pad + a row of corner-capture buttons.
+        area.removeFromTop (gap * 2);
+        morphPadLabel.setBounds (area.removeFromTop (18).withSizeKeepingCentre (200, 18));
+        area.removeFromTop (4);
+        auto padBlock = area.removeFromTop (juce::jmin (190, juce::jmax (120, area.getHeight())));
+        auto pad = padBlock.withSizeKeepingCentre (200, juce::jmax (90, padBlock.getHeight() - 34));
+        pad.setY (padBlock.getY());
+        morphPad.setBounds (pad);
+        auto capRow = juce::Rectangle<int> (pad.getX(), pad.getBottom() + 6, pad.getWidth(), 24);
+        const int cw = (capRow.getWidth() - 18) / 4;
+        morphCapA.setBounds (capRow.removeFromLeft (cw)); capRow.removeFromLeft (6);
+        morphCapB.setBounds (capRow.removeFromLeft (cw)); capRow.removeFromLeft (6);
+        morphCapC.setBounds (capRow.removeFromLeft (cw)); capRow.removeFromLeft (6);
+        morphCapD.setBounds (capRow.removeFromLeft (cw));
     }
 
     if (currentTab == 0)

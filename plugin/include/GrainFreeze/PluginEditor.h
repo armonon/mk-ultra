@@ -134,6 +134,61 @@ private:
     std::function<void (juce::String)> choose;
 };
 
+// Draggable 2-D morph pad. The puck position drives macroMorph (X) and
+// macroMorphY (Y), which bilinearly blend the four corner snapshots (A/B/C/D).
+class MorphPad : public juce::Component,
+                 public juce::SettableTooltipClient
+{
+public:
+    explicit MorphPad (GrainFreezeProcessor& p) : proc (p) {}
+
+    void mouseDown (const juce::MouseEvent& e) override { setFromMouse (e); }
+    void mouseDrag (const juce::MouseEvent& e) override { setFromMouse (e); }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto b = getLocalBounds().toFloat().reduced (1.0f);
+        g.setColour (gf::BiohazardLookAndFeel::metal);
+        g.fillRoundedRectangle (b, 5.0f);
+        g.setColour (gf::BiohazardLookAndFeel::textCol.withAlpha (0.22f));
+        g.drawRoundedRectangle (b, 5.0f, 1.0f);
+        g.drawLine (b.getCentreX(), b.getY(), b.getCentreX(), b.getBottom(), 0.5f);
+        g.drawLine (b.getX(), b.getCentreY(), b.getRight(), b.getCentreY(), 0.5f);
+
+        g.setFont (juce::Font (juce::FontOptions (11.0f)));
+        g.setColour (gf::BiohazardLookAndFeel::textCol.withAlpha (0.55f));
+        auto ib = b.toNearestInt();
+        g.drawText ("A", ib.getX() + 5,      ib.getBottom() - 17, 16, 14, juce::Justification::centredLeft);
+        g.drawText ("B", ib.getRight() - 21, ib.getBottom() - 17, 16, 14, juce::Justification::centredRight);
+        g.drawText ("C", ib.getX() + 5,      ib.getY() + 3,       16, 14, juce::Justification::centredLeft);
+        g.drawText ("D", ib.getRight() - 21, ib.getY() + 3,       16, 14, juce::Justification::centredRight);
+
+        const float px = b.getX() + paramVal ("macroMorph")  * b.getWidth();
+        const float py = b.getBottom() - paramVal ("macroMorphY") * b.getHeight();
+        g.setColour (gf::BiohazardLookAndFeel::toxic);
+        g.fillEllipse (px - 7.0f, py - 7.0f, 14.0f, 14.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.5f));
+        g.drawEllipse (px - 7.0f, py - 7.0f, 14.0f, 14.0f, 1.5f);
+    }
+
+private:
+    float paramVal (const char* id) const
+    {
+        if (auto* p = proc.apvts.getRawParameterValue (id)) return juce::jlimit (0.0f, 1.0f, p->load());
+        return 0.0f;
+    }
+    void setFromMouse (const juce::MouseEvent& e)
+    {
+        auto b = getLocalBounds().toFloat().reduced (1.0f);
+        const float x = juce::jlimit (0.0f, 1.0f, (e.position.x - b.getX()) / juce::jmax (1.0f, b.getWidth()));
+        const float y = juce::jlimit (0.0f, 1.0f, 1.0f - (e.position.y - b.getY()) / juce::jmax (1.0f, b.getHeight()));
+        if (auto* px = proc.apvts.getParameter ("macroMorph"))  px->setValueNotifyingHost (x);
+        if (auto* py = proc.apvts.getParameter ("macroMorphY")) py->setValueNotifyingHost (y);
+        repaint();
+    }
+    GrainFreezeProcessor& proc;
+};
+
 class GrainFreezeEditor : public juce::AudioProcessorEditor,
                           private juce::Timer
 {
@@ -219,11 +274,17 @@ private:
     int currentTab = 4;   // land on HOME
 
     // ---- HOME cockpit: the macros that drive the whole chain + a stage strip. ----
-    // 7 sound macros + Morph (crossfades the A/B slots) as the 8th.
-    static constexpr int kNumMacros = 8;
+    // 7 sound macros; the Morph X/Y axes live in the MorphPad, not the macro row.
+    static constexpr int kNumMacros = 7;
     std::array<juce::Slider, kNumMacros> macroKnobs;
     std::array<juce::Label,  kNumMacros> macroLabels;
     std::array<std::unique_ptr<SliderAttachment>, kNumMacros> macroAttach;
+
+    // Morph pad + its four corner-capture buttons.
+    MorphPad morphPad { proc };
+    juce::Label morphPadLabel;
+    juce::TextButton morphCapA { "A" }, morphCapB { "B" }, morphCapC { "C" }, morphCapD { "D" };
+
     juce::Label homeTitle, homeFlowLabel;
     // Signal-flow stage toggles (own attachments; sync with the deep-tab toggles).
     juce::ToggleButton homeTextureOn { "Texture" }, homeMachinesLabel { "Machines" },

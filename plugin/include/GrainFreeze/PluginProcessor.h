@@ -103,9 +103,11 @@ public:
     static constexpr int kSpectrumBins = 128;
     void getSpectrumSnapshot (std::array<float, kSpectrumBins>& out) const;
 
-    // A/B compare controls.
+    // A/B compare controls + the two extra Morph-pad corners (C, D).
     void storeSlotA();
     void storeSlotB();
+    void storeSlotC();
+    void storeSlotD();
     void copyAToB();
     void copyBToA();
     void loadSlotA();
@@ -364,13 +366,14 @@ private:
     juce::AudioBuffer<float> prettifierBuffer;
     juce::ValueTree slotA { "AB_SLOT_A" };
     juce::ValueTree slotB { "AB_SLOT_B" };
+    juce::ValueTree slotC { "AB_SLOT_C" };
+    juce::ValueTree slotD { "AB_SLOT_D" };
 
-    // Preset Morph: the macroMorph knob crossfades every sound parameter from
-    // slot A to slot B. The write happens on the message thread (handleAsyncUpdate)
-    // so the host and the editor knobs follow the morph.
+    // Morph pad: macroMorph (X) and macroMorphY (Y) bilinearly blend the four
+    // corner snapshots (A=bottom-left, B=bottom-right, C=top-left, D=top-right)
+    // and write the result on the message thread, so host + editor knobs follow.
     std::atomic<bool>  morphRequested { false };
-    std::atomic<float> pendingMorph { 0.0f };
-    void applyMorph (float morph);
+    void applyMorph (); // reads the live macroMorph (X) + macroMorphY (Y)
 
     std::atomic<float> outLevelL { 0.0f };
     std::atomic<float> outLevelR { 0.0f };
