@@ -455,15 +455,17 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     for (auto* b : { &buttonA, &buttonB, &copyAToBButton, &copyBToAButton, &resetBButton,
                      &undoButton, &redoButton, &initButton, &randomizeAllButton, &panicButton })
         addAndMakeVisible (*b);
-    buttonA.onClick = [this] { proc.loadSlotA(); };
-    buttonB.onClick = [this] { proc.loadSlotB(); };
+    // Plain click recalls a snapshot; shift-click stores the current sound into
+    // it. Capture two sounds this way, then use the Morph knob to crossfade them.
+    buttonA.onClick = [this] { if (juce::ModifierKeys::getCurrentModifiers().isShiftDown()) proc.storeSlotA(); else proc.loadSlotA(); };
+    buttonB.onClick = [this] { if (juce::ModifierKeys::getCurrentModifiers().isShiftDown()) proc.storeSlotB(); else proc.loadSlotB(); };
     copyAToBButton.onClick = [this] { proc.copyAToB(); };
     copyBToAButton.onClick = [this] { proc.copyBToA(); };
     resetBButton.onClick = [this] { proc.resetSlotB(); };
     panicButton.onClick = [this] { proc.panicKillTail(); };
 
-    buttonA.setTooltip ("Recall A snapshot");
-    buttonB.setTooltip ("Recall B snapshot");
+    buttonA.setTooltip ("Click: recall A   |   Shift-click: store current sound as A");
+    buttonB.setTooltip ("Click: recall B   |   Shift-click: store current sound as B");
     copyAToBButton.setTooltip ("Copy A's settings into B");
     copyBToAButton.setTooltip ("Copy B's settings into A");
     resetBButton.setTooltip ("Reset the B snapshot to defaults");
@@ -943,8 +945,8 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     setupSectionLabel (homeFlowLabel, "SIGNAL FLOW", 12.0f);
     {
         const char* mIds[kNumMacros]   = { "macroTexture", "macroBeauty", "macroSpace",
-                                           "macroChaos", "macroMotion", "macroDamage", "macroEmotion" };
-        const char* mNames[kNumMacros] = { "Texture", "Beauty", "Space", "Chaos", "Motion", "Damage", "Emotion" };
+                                           "macroChaos", "macroMotion", "macroDamage", "macroEmotion", "macroMorph" };
+        const char* mNames[kNumMacros] = { "Texture", "Beauty", "Space", "Chaos", "Motion", "Damage", "Emotion", "Morph" };
         for (int i = 0; i < kNumMacros; ++i)
         {
             setupMixKnob (macroKnobs[(size_t) i]);
@@ -952,6 +954,8 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             setupDialLabel (macroLabels[(size_t) i], mNames[i]);
             macroAttach[(size_t) i] = std::make_unique<SliderAttachment> (proc.apvts, mIds[i], macroKnobs[(size_t) i]);
         }
+        macroKnobs[kNumMacros - 1].setTooltip ("Morph: crossfades every sound parameter from snapshot A to B. "
+                                               "Shift-click the A and B buttons to capture two sounds first.");
     }
     for (auto* b : { &homeTextureOn, &homeMachinesLabel, &homeSpaceOn, &homeMasterLabel })
         addAndMakeVisible (*b);

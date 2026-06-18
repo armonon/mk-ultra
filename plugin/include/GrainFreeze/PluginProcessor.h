@@ -365,6 +365,13 @@ private:
     juce::ValueTree slotA { "AB_SLOT_A" };
     juce::ValueTree slotB { "AB_SLOT_B" };
 
+    // Preset Morph: the macroMorph knob crossfades every sound parameter from
+    // slot A to slot B. The write happens on the message thread (handleAsyncUpdate)
+    // so the host and the editor knobs follow the morph.
+    std::atomic<bool>  morphRequested { false };
+    std::atomic<float> pendingMorph { 0.0f };
+    void applyMorph (float morph);
+
     std::atomic<float> outLevelL { 0.0f };
     std::atomic<float> outLevelR { 0.0f };
     std::atomic<float> globalModValue { 0.0f };

@@ -36,6 +36,7 @@ GrainFreezeProcessor::GrainFreezeProcessor()
     cacheModPointers();
     apvts.addParameterListener ("pitchLockFormant", this);
     apvts.addParameterListener ("pitchFormantOn", this);
+    apvts.addParameterListener ("macroMorph", this);
     // First-insert "signature" sound. If the host restores saved state,
     // setStateInformation runs after construction and overrides this.
     presets.loadDefaultPatch();
@@ -47,6 +48,7 @@ GrainFreezeProcessor::~GrainFreezeProcessor()
 {
     apvts.removeParameterListener ("pitchLockFormant", this);
     apvts.removeParameterListener ("pitchFormantOn", this);
+    apvts.removeParameterListener ("macroMorph", this);
 }
 
 void GrainFreezeProcessor::cacheParameterPointers()
@@ -227,6 +229,16 @@ void GrainFreezeProcessor::cacheModPointers()
 // The formant shifter adds lookahead; (de)activating it changes plugin latency.
 void GrainFreezeProcessor::parameterChanged (const juce::String& id, float value)
 {
+    if (id == "macroMorph")
+    {
+        // May arrive on the audio thread during automation — just flag it and
+        // do the param writes on the message thread.
+        pendingMorph.store (value, std::memory_order_relaxed);
+        morphRequested.store (true, std::memory_order_relaxed);
+        triggerAsyncUpdate();
+        return;
+    }
+
     juce::ignoreUnused (value);
     if (id == "pitchLockFormant" || id == "pitchFormantOn")
     {
@@ -242,6 +254,41 @@ void GrainFreezeProcessor::handleAsyncUpdate()
 {
     setLatencySamples (formantLatencyActive.load (std::memory_order_relaxed)
                        ? gf::FormantShifter::kLatency : 0);
+
+    if (morphRequested.exchange (false))
+        applyMorph (pendingMorph.load (std::memory_order_relaxed));
+}
+
+void GrainFreezeProcessor::applyMorph (float morph)
+{
+    if (! slotA.isValid() || ! slotB.isValid())
+        return;
+
+    morph = juce::jlimit (0.0f, 1.0f, morph);
+
+    // Skip the morpher itself, the A/B mechanics, and non-sound/system params.
+    static const juce::StringArray skip {
+        "macroMorph", "performanceMode", "oversamplingMode", "ecoUiMode",
+        "pluginOn", "panic", "analyzerOn", "waveformOn", "modScopeOn",
+        "motionMatrixOn", "inputToolsOn", "midiEnabled", "sampleMode" };
+
+    for (auto* param : getParameters())
+    {
+        auto* rp = dynamic_cast<juce::RangedAudioParameter*> (param);
+        if (rp == nullptr || skip.contains (rp->paramID))
+            continue;
+
+        const auto a = slotA.getChildWithProperty ("id", rp->paramID);
+        const auto b = slotB.getChildWithProperty ("id", rp->paramID);
+        if (! a.isValid() || ! b.isValid())
+            continue;
+
+        // Slots hold raw values; crossfade in normalised space so skewed
+        // ranges morph perceptually evenly.
+        const float nA = rp->convertTo0to1 ((float) a.getProperty ("value"));
+        const float nB = rp->convertTo0to1 ((float) b.getProperty ("value"));
+        rp->setValueNotifyingHost (nA + morph * (nB - nA));
+    }
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::createLayout()

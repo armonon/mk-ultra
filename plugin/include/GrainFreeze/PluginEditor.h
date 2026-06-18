@@ -219,7 +219,8 @@ private:
     int currentTab = 4;   // land on HOME
 
     // ---- HOME cockpit: the macros that drive the whole chain + a stage strip. ----
-    static constexpr int kNumMacros = 7;
+    // 7 sound macros + Morph (crossfades the A/B slots) as the 8th.
+    static constexpr int kNumMacros = 8;
     std::array<juce::Slider, kNumMacros> macroKnobs;
     std::array<juce::Label,  kNumMacros> macroLabels;
     std::array<std::unique_ptr<SliderAttachment>, kNumMacros> macroAttach;
