@@ -114,6 +114,7 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.macroSpace, "macroSpace");
     bind (paramPtrs.macroMotion, "macroMotion");
     bind (paramPtrs.macroDamage, "macroDamage");
+    bind (paramPtrs.macroEmotion, "macroEmotion");
     bind (paramPtrs.mutationAmount, "mutationAmount");
     bind (paramPtrs.globalRate, "globalRate");
     bind (paramPtrs.globalShape, "globalShape");
@@ -626,6 +627,7 @@ GrainFreezeProcessor::ControlSnapshot GrainFreezeProcessor::makeControlSnapshot(
     s.motion = loadParam (paramPtrs.macroMotion, 0.0f);
     s.damage = juce::jmax (loadParam (paramPtrs.macroDamage, 0.0f), loadParam (paramPtrs.damageAmount, 0.0f));
     s.chaos = loadParam (paramPtrs.macroChaos, 0.0f);
+    s.emotion = loadParam (paramPtrs.macroEmotion, 0.0f);
     s.dryWet = loadParam (paramPtrs.dryWet, 1.0f);
     s.outputLevel = loadParam (paramPtrs.mixOutput, 1.0f);
 
@@ -917,8 +919,8 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const float oldSpecMix = isOn (p.specFreeze) ? loadParam (p.specMix) : 0.0f;
     entropyParams.spectralFreeze = isOn (p.specFreeze) || identity > 0.65f;
     entropyParams.spectralMix = juce::jmax (oldSpecMix, identity * 0.45f);
-    entropyParams.spectralShimmer = juce::jlimit (0.0f, 1.0f, loadParam (p.specShimmer, 0.2f) + identity * 0.35f);
-    entropyParams.reverbMix = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::reverbMix) + ctl.space * 0.35f);
+    entropyParams.spectralShimmer = juce::jlimit (0.0f, 1.0f, loadParam (p.specShimmer, 0.2f) + identity * 0.35f + ctl.emotion * 0.4f);
+    entropyParams.reverbMix = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::reverbMix) + ctl.space * 0.35f + ctl.emotion * 0.2f);
     entropyParams.satOn = isOn (p.satOn) || identity > 0.5f; // Damage machine owns damageOn now
     entropyParams.satType = (int) loadParam (p.satType);
     entropyParams.satDrive = loadParam (p.satDrive, 1.0f) * (1.0f + ctl.damage * 4.0f + identity * 3.0f);
@@ -942,17 +944,17 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     prettyParams.echoFeedback = target (gf::ParamId::echoFeedback);
     prettyParams.echoMix = target (gf::ParamId::echoMix);
     prettyParams.reverbOn = isOn (p.prettyReverbOn) && isOn (p.reverbOn, true) && beautyActive;
-    prettyParams.reverbSize = loadParam (p.prettyReverbSize, 0.65f);
+    prettyParams.reverbSize = juce::jlimit (0.0f, 1.0f, loadParam (p.prettyReverbSize, 0.65f) + ctl.emotion * 0.25f);
     prettyParams.reverbDamping = loadParam (p.prettyReverbDamping, 0.4f);
     prettyParams.reverbMix = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::prettyReverbMix) + ctl.space * 0.45f);
     prettyParams.chorusOn = isOn (p.chorusOn) && beautyActive;
     prettyParams.chorusRate = target (gf::ParamId::chorusRate);
-    prettyParams.chorusDepth = target (gf::ParamId::chorusDepth);
+    prettyParams.chorusDepth = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::chorusDepth) + ctl.motion * 0.25f + ctl.emotion * 0.3f);
     prettyParams.chorusMix = juce::jlimit (0.0f, 1.0f, loadParam (p.chorusMix) + ctl.motion * 0.25f);
     prettyParams.beautyOn = isOn (p.beautyOn) && beautyActive;
     prettyParams.beautyAmount = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::beautyAmount) + ctl.beauty * 0.5f);
     prettyParams.beautyAir = loadParam (p.beautyAir, 0.3f);
-    prettyParams.beautyWarmth = loadParam (p.beautyWarmth, 0.35f);
+    prettyParams.beautyWarmth = juce::jlimit (0.0f, 1.0f, loadParam (p.beautyWarmth, 0.35f) + ctl.emotion * 0.35f);
     prettyParams.polishOn = isOn (p.polishOn) && beautyActive;
     prettyParams.width = target (gf::ParamId::polishWidth);
     prettyParams.crushOn = isOn (p.crushOn) || identity > 0.55f; // Damage machine owns damageOn now

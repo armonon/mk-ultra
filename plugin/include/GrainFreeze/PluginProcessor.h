@@ -173,6 +173,7 @@ private:
         float motion = 0.0f;
         float damage = 0.0f;
         float chaos = 0.0f;
+        float emotion = 0.0f;
         float dryWet = 1.0f;
         float outputLevel = 1.0f;
     };
@@ -237,6 +238,7 @@ private:
         std::atomic<float>* macroSpace = nullptr;
         std::atomic<float>* macroMotion = nullptr;
         std::atomic<float>* macroDamage = nullptr;
+        std::atomic<float>* macroEmotion = nullptr;
         std::atomic<float>* mutationAmount = nullptr;
         std::atomic<float>* globalRate = nullptr;
         std::atomic<float>* globalShape = nullptr;
