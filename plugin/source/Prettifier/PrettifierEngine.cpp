@@ -118,6 +118,27 @@ void PrettifierEngine::prepare (double sampleRate, int samplesPerBlock, int numC
     flanger.setDepth (0.6f);
     flanger.setCentreDelay (3.5f);   // short -> flanger character (vs lush chorus)
     flanger.setFeedback (0.55f);
+
+    // Dream: slow, deep, lush chorus (full-wet; blended in process).
+    dreamChorus.prepare (spec);
+    dreamChorus.setRate (0.18f);
+    dreamChorus.setDepth (0.55f);
+    dreamChorus.setCentreDelay (18.0f);
+    dreamChorus.setFeedback (0.12f);
+    dreamChorus.setMix (1.0f);
+    dreamWet.setSize (numChannels, samplesPerBlock);
+    dreamLp = { { 0.0f, 0.0f } };
+
+    // Angel: octave-up shifter into a lush bright reverb.
+    for (auto& s : angelShifter) s.prepare (sampleRate);
+    juce::dsp::Reverb::Parameters ap;
+    ap.roomSize = 0.85f; ap.damping = 0.3f; ap.width = 1.0f; ap.wetLevel = 1.0f; ap.dryLevel = 0.0f;
+    angelReverb.setParameters (ap);
+    angelReverb.reset();
+    angelWet.setSize (numChannels, samplesPerBlock);
+
+    for (auto& s : harmonyShifter) s.prepare (sampleRate);
+    harmonyWet.setSize (numChannels, samplesPerBlock);
 }
 
 void PrettifierEngine::reset()
@@ -128,6 +149,11 @@ void PrettifierEngine::reset()
     chorusPhase = { 0.0, 0.0 };
     phaser.reset();
     flanger.reset();
+    dreamChorus.reset();
+    dreamLp = { { 0.0f, 0.0f } };
+    for (auto& s : angelShifter) s.reset();
+    angelReverb.reset();
+    for (auto& s : harmonyShifter) s.reset();
 }
 
 void PrettifierEngine::process (juce::AudioBuffer<float>& buffer, const Params& params, double hostBpm, bool tempoLock)
@@ -216,6 +242,63 @@ void PrettifierEngine::process (juce::AudioBuffer<float>& buffer, const Params& 
         juce::dsp::AudioBlock<float> block (buffer);
         juce::dsp::ProcessContextReplacing<float> ctx (block);
         flanger.process (ctx);
+    }
+
+    // Dream machine: ethereal lush wash (deep chorus + soft lowpass), crossfaded.
+    if (params.dreamOn && params.dreamMix > 0.001f)
+    {
+        dreamWet.makeCopyOf (buffer, true);
+        juce::dsp::AudioBlock<float> block (dreamWet);
+        juce::dsp::ProcessContextReplacing<float> ctx (block);
+        dreamChorus.process (ctx);
+        const float lpCoef = juce::jlimit (0.0f, 1.0f,
+            1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 4200.0f / (float) sr));
+        const float m = params.dreamMix;
+        for (int c = 0; c < channels; ++c)
+        {
+            auto* w = dreamWet.getWritePointer (juce::jmin (c, dreamWet.getNumChannels() - 1));
+            auto* d = buffer.getWritePointer (c);
+            float y = dreamLp[(size_t) juce::jmin (c, 1)];
+            for (int i = 0; i < samples; ++i)
+            {
+                y += lpCoef * (w[i] - y);
+                d[i] = d[i] * (1.0f - m) + y * m;
+            }
+            dreamLp[(size_t) juce::jmin (c, 1)] = y;
+        }
+    }
+
+    // Angel machine: octave-up shimmer reverb, added as a wet layer.
+    if (params.angelOn && params.angelMix > 0.001f)
+    {
+        angelWet.makeCopyOf (buffer, true);
+        const int numCh = juce::jmin (2, channels);
+        for (int c = 0; c < numCh; ++c)
+        {
+            angelShifter[(size_t) c].setRatio (2.0f);   // +12 semitones
+            angelShifter[(size_t) c].setFormant (false);
+            angelShifter[(size_t) c].process (angelWet.getWritePointer (c), samples);
+        }
+        juce::dsp::AudioBlock<float> block (angelWet);
+        juce::dsp::ProcessContextReplacing<float> ctx (block);
+        angelReverb.process (ctx);
+        for (int c = 0; c < channels; ++c)
+            buffer.addFrom (c, 0, angelWet, juce::jmin (c, angelWet.getNumChannels() - 1), 0, samples, params.angelMix);
+    }
+
+    // Harmony machine: a formant-preserving fifth, added as a wet voice.
+    if (params.harmonyOn && params.harmonyMix > 0.001f)
+    {
+        harmonyWet.makeCopyOf (buffer, true);
+        const int numCh = juce::jmin (2, channels);
+        for (int c = 0; c < numCh; ++c)
+        {
+            harmonyShifter[(size_t) c].setRatio (std::pow (2.0f, 7.0f / 12.0f));   // +7 semitones
+            harmonyShifter[(size_t) c].setFormant (true);
+            harmonyShifter[(size_t) c].process (harmonyWet.getWritePointer (c), samples);
+        }
+        for (int c = 0; c < channels; ++c)
+            buffer.addFrom (c, 0, harmonyWet, juce::jmin (c, harmonyWet.getNumChannels() - 1), 0, samples, params.harmonyMix);
     }
 
     // Beauty machine: mild saturating tilt + air lift.

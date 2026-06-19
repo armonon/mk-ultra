@@ -814,10 +814,10 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         }
     }
     {
-        juce::ToggleButton* mods[6] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
-                                        &phaserOnButton, &flangerOnButton };
-        const char* modIds[6] = { "echoOn", "prettyReverbOn", "chorusOn", "crushOn", "phaserOn", "flangerOn" };
-        for (int i = 0; i < 6; ++i)
+        juce::ToggleButton* mods[9] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
+                                        &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton };
+        const char* modIds[9] = { "echoOn", "prettyReverbOn", "chorusOn", "crushOn", "phaserOn", "flangerOn", "dreamOn", "angelOn", "harmonyOn" };
+        for (int i = 0; i < 9; ++i)
         {
             mods[i]->setTooltip ("Enable/disable this Beauty & Space module");
             addAndMakeVisible (*mods[i]);
@@ -1289,7 +1289,8 @@ void GrainFreezeEditor::updateTabVisibility()
     dnaHeader.setVisible (prettifierTab);
     for (auto& s : dnaKnobs)  s.setVisible (prettifierTab);
     for (auto& l : dnaLabels) l.setVisible (prettifierTab);
-    for (auto* b : { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton, &phaserOnButton, &flangerOnButton })
+    for (auto* b : { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton, &phaserOnButton,
+                     &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton })
         b->setVisible (prettifierTab);
     echoSyncBox.setVisible (prettifierTab);
 
@@ -1664,10 +1665,10 @@ void GrainFreezeEditor::resized()
         dnaHeader.setBounds (dnaSection.removeFromTop (16).reduced (4, 0));
         auto modRow = dnaSection.removeFromTop (28);
         echoSyncBox.setBounds (modRow.removeFromLeft (80).withSizeKeepingCentre (76, 22));
-        juce::ToggleButton* mods[6] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
-                                        &phaserOnButton, &flangerOnButton };
-        const int modW = juce::jmin (112, modRow.getWidth() / 6);
-        modRow = modRow.withSizeKeepingCentre (modW * 6, modRow.getHeight());
+        juce::ToggleButton* mods[9] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
+                                        &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton };
+        const int modW = juce::jmin (94, modRow.getWidth() / 9);
+        modRow = modRow.withSizeKeepingCentre (modW * 9, modRow.getHeight());
         for (auto* m : mods)
             m->setBounds (modRow.removeFromLeft (modW).reduced (3, 1));
 

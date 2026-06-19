@@ -417,8 +417,10 @@ private:
 
     juce::ToggleButton echoOnButton   { "Echo" },   reverbOnButton { "Reverb" },
                        chorusOnButton { "Chorus" }, crushOnButton  { "Lo-Fi" },
-                       phaserOnButton { "Phaser" }, flangerOnButton { "Flanger" };
-    std::array<std::unique_ptr<ButtonAttachment>, 6> moduleAttach;
+                       phaserOnButton { "Phaser" }, flangerOnButton { "Flanger" },
+                       dreamOnButton  { "Dream" },  angelOnButton   { "Angel" },
+                       harmonyOnButton { "Harmony" };
+    std::array<std::unique_ptr<ButtonAttachment>, 9> moduleAttach;
 
     // ---- MACHINES tab: UI for the four transform machines. Each gets an On
     // toggle, a Mix knob, and its key parameters. Plain knobs (no lock/mod ring).

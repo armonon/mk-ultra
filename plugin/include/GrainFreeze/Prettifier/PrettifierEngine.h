@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include "GrainFreeze/FormantShifter.h"
 #include <array>
 
 namespace gf
@@ -54,6 +55,14 @@ struct Params
     bool  flangerOn  = false;
     float flangerMix = 0.3f;
 
+    // Shimmer machines.
+    bool  dreamOn  = false;   // ethereal lush wash (chorus + soft lowpass)
+    float dreamMix = 0.3f;
+    bool  angelOn  = false;   // octave-up shimmer reverb
+    float angelMix = 0.3f;
+    bool  harmonyOn  = false; // pitch-shifted fifth harmony voice
+    float harmonyMix = 0.3f;
+
     // DNA controls
     float dnaCharacter = 0.5f;
     float dnaAge = 0.2f;
@@ -96,6 +105,20 @@ private:
     // delay + feedback so it sweeps like a flanger rather than a lush chorus.
     juce::dsp::Phaser<float> phaser;
     juce::dsp::Chorus<float> flanger;
+
+    // Dream: lush chorus + soft one-pole lowpass on a wet copy, crossfaded in.
+    juce::dsp::Chorus<float> dreamChorus;
+    juce::AudioBuffer<float> dreamWet;
+    std::array<float, 2> dreamLp { { 0.0f, 0.0f } };
+
+    // Angel: octave-up (FormantShifter) into a lush reverb, added as a shimmer.
+    std::array<FormantShifter, 2> angelShifter;
+    juce::dsp::Reverb angelReverb;
+    juce::AudioBuffer<float> angelWet;
+
+    // Harmony: a formant-preserving fifth, added as a wet voice.
+    std::array<FormantShifter, 2> harmonyShifter;
+    juce::AudioBuffer<float> harmonyWet;
 };
 
 } // namespace pretty

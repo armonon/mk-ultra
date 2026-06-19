@@ -280,6 +280,12 @@ private:
         std::atomic<float>* phaserMix = nullptr;
         std::atomic<float>* flangerOn = nullptr;
         std::atomic<float>* flangerMix = nullptr;
+        std::atomic<float>* dreamOn = nullptr;
+        std::atomic<float>* dreamMix = nullptr;
+        std::atomic<float>* angelOn = nullptr;
+        std::atomic<float>* angelMix = nullptr;
+        std::atomic<float>* harmonyOn = nullptr;
+        std::atomic<float>* harmonyMix = nullptr;
         std::atomic<float>* beautyOn = nullptr;
         std::atomic<float>* beautyAir = nullptr;
         std::atomic<float>* beautyWarmth = nullptr;
