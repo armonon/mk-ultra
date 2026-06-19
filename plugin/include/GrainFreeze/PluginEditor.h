@@ -8,6 +8,7 @@
 #include "GrainFreeze/Saturator.h"
 #include "GrainFreeze/BiohazardLookAndFeel.h"
 #include "GrainFreeze/Biohazard.h"
+#include "GrainFreeze/UpdateChecker.h"
 #include <array>
 
 // Draws the saturation transfer curve for the current type + drive.
@@ -421,6 +422,12 @@ private:
                        dreamOnButton  { "Dream" },  angelOnButton   { "Angel" },
                        harmonyOnButton { "Harmony" };
     std::array<std::unique_ptr<ButtonAttachment>, 9> moduleAttach;
+
+    // In-plugin updater: a hidden pill that appears only when GitHub has a newer
+    // release; clicking it opens the release page to download the installer.
+    gf::UpdateChecker updateChecker;
+    juce::TextButton  updateButton;
+    juce::String      updateUrl;
 
     // ---- MACHINES tab: UI for the four transform machines. Each gets an On
     // toggle, a Mix knob, and its key parameters. Plain knobs (no lock/mod ring).

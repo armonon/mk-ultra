@@ -1010,6 +1010,22 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     setSize (1020, 860);
     updateTabVisibility();
 
+    // Update pill: hidden until a newer GitHub release is found, then it appears
+    // and links to the download. The .pkg / Windows installer overrides the old
+    // version on install, so users just download + run -- no separate Hub needed.
+    updateButton.setVisible (false);
+    updateButton.setTooltip ("Click to open the GitHub release page and download the installer");
+    addChildComponent (updateButton);
+    updateButton.onClick = [this] { if (updateUrl.isNotEmpty()) juce::URL (updateUrl).launchInDefaultBrowser(); };
+    updateChecker.start (JucePlugin_VersionString,
+                         [this] (juce::String tag, juce::String url)
+                         {
+                             updateUrl = url;
+                             updateButton.setButtonText ("Update " + tag);
+                             updateButton.setVisible (true);
+                             resized();
+                         });
+
     // macOS render workaround: drive the editor through OpenGL to bypass the
     // broken native CoreGraphics path inside some hosts' plugin wrappers (FL
     // Studio etc.). Without it the layout renders scrambled / glyphs flip.
@@ -1542,10 +1558,15 @@ void GrainFreezeEditor::resized()
     util.removeFromLeft (gap);
     randomizeAllButton.setBounds (util.removeFromLeft (120).reduced (2, 4));
 
-    // Right side: Panic, with Freeze just to its left.
+    // Right side: Panic, Freeze, and the update pill (only takes space when visible).
     panicButton.setBounds (util.removeFromRight (104).reduced (2, 4));
     util.removeFromRight (gap);
     freezeButton.setBounds (util.removeFromRight (104).reduced (2, 4));
+    if (updateButton.isVisible())
+    {
+        util.removeFromRight (gap);
+        updateButton.setBounds (util.removeFromRight (120).reduced (2, 4));
+    }
 
     area.removeFromTop (gap);
 
