@@ -449,6 +449,10 @@ private:
                        machDamageJitter, machDamageNoise, machDamageDropout, machDamageTone;
     juce::Label        machDamageMixL, machDamageAmountL, machDamageBitsL, machDamageRateL,
                        machDamageJitterL, machDamageNoiseL, machDamageDropoutL, machDamageToneL;
+    // Multiband Damage controls (live in the Damage Advanced row).
+    juce::ToggleButton machDamageSplit { "Multiband" };
+    juce::Slider       machDamageSplitHz, machDamageHighAmount;
+    juce::Label        machDamageSplitHzL, machDamageHighAmountL;
 
     juce::ToggleButton machTimeOn { "On" };
     juce::ToggleButton machTimeSync { "Sync" };
@@ -467,7 +471,7 @@ private:
     juce::TextButton   machTimeMore   { "Advanced" };
 
     std::unique_ptr<ButtonAttachment> machSpectralOnAttach, machPitchOnAttach, machPitchFormantAttach,
-                                      machDamageOnAttach, machTimeOnAttach;
+                                      machDamageOnAttach, machDamageSplitAttach, machTimeOnAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> machDamageClipAttach, machTimeDivisionAttach,
                                       machTimeRoute1TargetAttach, machTimeRoute2TargetAttach;
     std::unique_ptr<ButtonAttachment> machTimeSyncAttach;
@@ -477,6 +481,7 @@ private:
                                       machDamageMixAttach, machDamageAmountAttach,
                                       machDamageBitsAttach, machDamageRateAttach, machDamageJitterAttach,
                                       machDamageNoiseAttach, machDamageDropoutAttach, machDamageToneAttach,
+                                      machDamageSplitHzAttach, machDamageHighAmountAttach,
                                       machTimeMixAttach, machTimeRateAttach, machTimeSizeAttach,
                                       machTimeChanceAttach, machTimeReverseAttach;
 

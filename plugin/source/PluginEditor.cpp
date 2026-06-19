@@ -900,6 +900,11 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machDamageTone,    machDamageToneL,    "Tone",    "damageTone",    machDamageToneAttach);
     machKnob (machDamageMix,     machDamageMixL,     "Mix",     "damageMix",     machDamageMixAttach);
 
+    // Multiband Damage controls.
+    machToggle (machDamageSplit, "damageSplitOn", machDamageSplitAttach);
+    machKnob (machDamageSplitHz,    machDamageSplitHzL,    "Split",    "damageSplitHz",    machDamageSplitHzAttach);
+    machKnob (machDamageHighAmount, machDamageHighAmountL, "High Drive", "damageHighAmount", machDamageHighAmountAttach);
+
     machToggle (machTimeOn, "timeBreakerOn", machTimeOnAttach);
     machToggle (machTimeSync, "timeBreakerSync", machTimeSyncAttach);
     machTimeDivision.addItemList ({ "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }, 1);
@@ -990,6 +995,9 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machDamageNoise.setTooltip ("Added hiss / noise");
     machDamageDropout.setTooltip ("Random sample dropouts / glitches");
     machDamageTone.setTooltip ("Post tone: dark to open");
+    machDamageSplit.setTooltip ("Multiband: split the signal at Split Hz and drive the low + high bands independently");
+    machDamageSplitHz.setTooltip ("Crossover frequency (60-12kHz); the band the High Drive knob hammers");
+    machDamageHighAmount.setTooltip ("Drive for the HIGH band when Multiband is on (the existing Drive knob runs the low band)");
     machTimeOn.setTooltip ("Time Breaker: beat-repeat / stutter / reverse glitch");
     machTimeSync.setTooltip ("Lock the stutter clock and slice length to host tempo");
     machTimeDivision.setTooltip ("Tempo division for the stutter clock when Sync is on");
@@ -1335,6 +1343,12 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto* l : { &machDamageBitsL, &machDamageRateL, &machDamageJitterL,
                      &machDamageNoiseL, &machDamageDropoutL, &machDamageToneL })
         l->setVisible (machinesTab && damageMore);
+    // Multiband controls (also in the Advanced section).
+    machDamageSplit.setVisible (machinesTab && damageMore);
+    machDamageSplitHz.setVisible (machinesTab && damageMore);
+    machDamageHighAmount.setVisible (machinesTab && damageMore);
+    machDamageSplitHzL.setVisible (machinesTab && damageMore);
+    machDamageHighAmountL.setVisible (machinesTab && damageMore);
     // Time Breaker advanced knobs + routing.
     for (auto* s : { &machTimeRate, &machTimeSize, &machTimeReverse })
         s->setVisible (machinesTab && timeMore);
@@ -1858,7 +1872,9 @@ void GrainFreezeEditor::resized()
         // Drive + Mix; expanded reveals the full lo-fi knob row.
         {
             const bool more = machDamageMore.getToggleState();
-            auto block = area.removeFromTop (116);
+            // The Damage block grows when Advanced is on (to accommodate the
+            // multiband strip beneath the main knob row).
+            auto block = area.removeFromTop (more ? 152 : 116);
             auto head  = block.removeFromTop (26);
             machDamageTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
             machDamageOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
@@ -1878,9 +1894,25 @@ void GrainFreezeEditor::resized()
                 dk.push_back ({ &machDamageTone,    &machDamageToneL });
             }
             dk.push_back ({ &machDamageMix, &machDamageMixL });
-            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * (int) dk.size()), block.getHeight());
+            auto knobRow = block.removeFromTop (more ? 82 : block.getHeight());
+            auto krow = knobRow.withSizeKeepingCentre (juce::jmin (knobRow.getWidth(), kw * (int) dk.size()), knobRow.getHeight());
             for (auto& kv : dk)
                 layoutDialCell (krow, *kv.second, *kv.first, kw);
+
+            // Multiband strip: [Multiband toggle] [Split knob] [High Drive knob]
+            if (more)
+            {
+                auto mbRow = block;
+                machDamageSplit.setBounds (mbRow.removeFromLeft (108).withSizeKeepingCentre (104, 26));
+                mbRow.removeFromLeft (gap);
+                auto splitCell = mbRow.removeFromLeft (78);
+                machDamageSplitHzL.setBounds (splitCell.removeFromTop (14));
+                machDamageSplitHz.setBounds (splitCell.reduced (2, 0));
+                mbRow.removeFromLeft (gap);
+                auto highCell = mbRow.removeFromLeft (96);
+                machDamageHighAmountL.setBounds (highCell.removeFromTop (14));
+                machDamageHighAmount.setBounds (highCell.reduced (2, 0));
+            }
             area.removeFromTop (gap);
         }
 
