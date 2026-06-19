@@ -110,6 +110,9 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.damageNoise, "damageNoise");
     bind (paramPtrs.damageDropout, "damageDropout");
     bind (paramPtrs.damageTone, "damageTone");
+    bind (paramPtrs.damageSplitOn, "damageSplitOn");
+    bind (paramPtrs.damageSplitHz, "damageSplitHz");
+    bind (paramPtrs.damageHighAmount, "damageHighAmount");
     bind (paramPtrs.motionMatrixOn, "motionMatrixOn");
     bind (paramPtrs.dryWet, "dryWet");
 
@@ -401,6 +404,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addFloat  ("damageNoise",   "Damage Noise",    NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat  ("damageDropout", "Damage Dropout",  NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat  ("damageTone",    "Damage Tone",     NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
+    // Multiband Damage: split the signal at a crossover and drive the high band
+    // independently, so you can "destroy only the highs" while the low end stays clean.
+    addBool   ("damageSplitOn", "Damage Multiband", false);
+    addFloat  ("damageSplitHz", "Damage Split",     NormalisableRange<float> (80.0f, 8000.0f, 1.0f, 0.35f), 800.0f);
+    addFloat  ("damageHighAmount", "Damage High Drive", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addMachine ("motionMatrix", "Motion Matrix", true);
     addFloat ("analyzerScopeMix", "Analyzer / Scopes Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
     addFloat ("analyzerScopeAmount", "Analyzer / Scopes Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
@@ -649,6 +657,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     // Transform machines (master-bus inserts).
     spectralMachine.prepare (sampleRate, getTotalNumOutputChannels());
     damageMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
+    damageMultiband.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
     pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
 
@@ -1175,7 +1184,21 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         dp.dropout = loadParam (p.damageDropout, 0.0f);
         dp.tone    = loadParam (p.damageTone, 1.0f);
         dp.mix     = loadParam (p.damageMix, 1.0f);
-        damageMachine.process (buffer, dp);
+        if (isOn (p.damageSplitOn))
+        {
+            // Multiband: the existing damageAmount drives the LOW band; the new
+            // damageHighAmount drives the HIGH band. All other timbre params are
+            // shared so the two bands sound like the same destruction at different
+            // intensities -- a clean "destroy only highs" move.
+            damageMultiband.setCrossover (loadParam (p.damageSplitHz, 800.0f));
+            gf::DamageParams hi = dp;
+            hi.amount = loadParam (p.damageHighAmount, 0.0f);
+            damageMultiband.process (buffer, dp, hi);
+        }
+        else
+        {
+            damageMachine.process (buffer, dp);
+        }
     }
 
     // Spectral: freeze a glassy pad. Capture a fresh spectrum for a short window

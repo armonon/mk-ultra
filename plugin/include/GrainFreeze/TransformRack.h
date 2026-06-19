@@ -203,6 +203,85 @@ private:
     int osChannels = 0, dryRingLen = 1, dryRingPos = 0;
 };
 
+// ---- Multiband Damage: 2-band Linkwitz-Riley split with an independent
+// DamageEngine per band. The 4th-order LR pair sums to flat magnitude when both
+// halves are processed unity, so when one band is bypassed the other still
+// recombines correctly. This is the architectural lift that makes "destroy only
+// the highs, keep the low end clean" a one-knob move.
+class MultibandDamage
+{
+public:
+    void prepare (double sampleRate, int numChannels, int maxBlock)
+    {
+        const int ch = juce::jlimit (1, 2, juce::jmax (1, numChannels));
+        const int n  = juce::jmax (1, maxBlock);
+        lowBuf.setSize (ch, n);
+        highBuf.setSize (ch, n);
+        juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) n, (juce::uint32) ch };
+        splitter.prepare (spec);
+        splitter.setType (juce::dsp::LinkwitzRileyFilterType::lowpass);
+        setCrossover (800.0f);
+        lowBand .prepare (sampleRate, ch, n);
+        highBand.prepare (sampleRate, ch, n);
+    }
+
+    void reset()
+    {
+        splitter.reset();
+        lowBand.reset(); highBand.reset();
+    }
+
+    void setCrossover (float hz)
+    {
+        splitter.setCutoffFrequency (juce::jlimit (60.0f, 12000.0f, hz));
+    }
+
+    // Process with two independent DamageParams. The whole stage bypasses when
+    // both mixes are inaudible -- the LR pair preserves the signal, so this is
+    // a true bypass (we just return the input untouched).
+    void process (juce::AudioBuffer<float>& buffer,
+                  const DamageParams& low, const DamageParams& high)
+    {
+        if (low.mix <= 0.001f && high.mix <= 0.001f)
+            return;
+
+        const int n  = buffer.getNumSamples();
+        const int ch = juce::jmin (buffer.getNumChannels(), lowBuf.getNumChannels());
+        if (n <= 0 || ch <= 0 || n > lowBuf.getNumSamples())
+            return;
+
+        // Split: the LinkwitzRileyFilter writes both low + high in one sample call.
+        for (int c = 0; c < ch; ++c)
+        {
+            const auto* src = buffer.getReadPointer (c);
+            auto* lo = lowBuf.getWritePointer (c);
+            auto* hi = highBuf.getWritePointer (c);
+            for (int i = 0; i < n; ++i)
+                splitter.processSample (c, src[i], lo[i], hi[i]);
+        }
+
+        // Damage each band independently.
+        lowBand .process (lowBuf,  low);
+        highBand.process (highBuf, high);
+
+        // Sum back. LR4 is magnitude-flat when summed, so reconstruction is exact
+        // when both bands are unity.
+        for (int c = 0; c < ch; ++c)
+        {
+            auto* dst = buffer.getWritePointer (c);
+            const auto* lo = lowBuf.getReadPointer (c);
+            const auto* hi = highBuf.getReadPointer (c);
+            for (int i = 0; i < n; ++i)
+                dst[i] = lo[i] + hi[i];
+        }
+    }
+
+private:
+    juce::dsp::LinkwitzRileyFilter<float> splitter;
+    juce::AudioBuffer<float> lowBuf, highBuf;
+    DamageEngine lowBand, highBand;
+};
+
 // ---- Time Breaker: beat-repeat / stutter / reverse glitch. Captures incoming
 // audio into a ring; on a periodic clock (sliceLen samples) it may latch the
 // most recent slice and replay it (optionally reversed) for a few repeats,

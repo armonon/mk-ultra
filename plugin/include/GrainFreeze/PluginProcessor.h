@@ -62,6 +62,7 @@ public:
     // Dedicated transform machines (master-bus inserts, each gated by its own On).
     gf::SpectralFreeze      spectralMachine;
     gf::DamageEngine        damageMachine;
+    gf::MultibandDamage     damageMultiband;
     gf::TimeBreakerEngine   timeBreaker;
     gf::PitchFormantMachine pitchFormantMachine;
     gf::PresetManager  presets { apvts };
@@ -224,6 +225,9 @@ private:
         std::atomic<float>* damageMix = nullptr;
         std::atomic<float>* damageAmount = nullptr;
         std::atomic<float>* damageClip = nullptr;
+        std::atomic<float>* damageSplitOn = nullptr;
+        std::atomic<float>* damageSplitHz = nullptr;
+        std::atomic<float>* damageHighAmount = nullptr;
         std::atomic<float>* damageBits = nullptr;
         std::atomic<float>* damageRate = nullptr;
         std::atomic<float>* damageJitter = nullptr;
