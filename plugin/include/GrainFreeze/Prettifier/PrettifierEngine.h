@@ -48,6 +48,12 @@ struct Params
     float crushBits = 16.0f;
     float crushMix = 1.0f;
 
+    // Movement machines (juce::dsp).
+    bool  phaserOn  = false;
+    float phaserMix = 0.3f;
+    bool  flangerOn  = false;
+    float flangerMix = 0.3f;
+
     // DNA controls
     float dnaCharacter = 0.5f;
     float dnaAge = 0.2f;
@@ -85,6 +91,11 @@ private:
     std::unique_ptr<juce::dsp::Oversampling<float>> beautyOs;
     int beautyOsChannels = 0;
     int beautyMaxBlock = 0;
+
+    // Movement machines. The flanger is a juce chorus tuned with a short centre
+    // delay + feedback so it sweeps like a flanger rather than a lush chorus.
+    juce::dsp::Phaser<float> phaser;
+    juce::dsp::Chorus<float> flanger;
 };
 
 } // namespace pretty

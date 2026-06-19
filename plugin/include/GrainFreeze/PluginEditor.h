@@ -416,8 +416,9 @@ private:
     std::array<std::unique_ptr<SliderAttachment>, kNumDna> dnaAttach;
 
     juce::ToggleButton echoOnButton   { "Echo" },   reverbOnButton { "Reverb" },
-                       chorusOnButton { "Chorus" }, crushOnButton  { "Lo-Fi" };
-    std::array<std::unique_ptr<ButtonAttachment>, 4> moduleAttach;
+                       chorusOnButton { "Chorus" }, crushOnButton  { "Lo-Fi" },
+                       phaserOnButton { "Phaser" }, flangerOnButton { "Flanger" };
+    std::array<std::unique_ptr<ButtonAttachment>, 6> moduleAttach;
 
     // ---- MACHINES tab: UI for the four transform machines. Each gets an On
     // toggle, a Mix knob, and its key parameters. Plain knobs (no lock/mod ring).

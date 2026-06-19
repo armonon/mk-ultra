@@ -60,12 +60,15 @@ void PrettifierEngine::addParameters (juce::AudioProcessorValueTreeState::Parame
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "dnaMotion", 1 }, "DNA Motion", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "dnaShine", 1 }, "DNA Shine", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
 
-    // Advanced machine placeholders (Phase 5+).
+    // Movement + shimmer machines. Phaser/Flanger are implemented; Harmony/Dream/
+    // Angel are scaffolded for the shimmer batch. The five redundant placeholders
+    // (Texture, Bitcrush, Sample Rate, Space, Spectral) were cut as they duplicate
+    // existing machines (granular, Damage lo-fi, Grain Space, the Spectral machine).
     static constexpr const char* machineIds[] = {
-        "harmony", "dream", "angel", "texture", "bitcrush", "prettySampleRate", "phaser", "flanger", "space", "prettySpectral"
+        "phaser", "flanger", "harmony", "dream", "angel"
     };
     static constexpr const char* machineNames[] = {
-        "Harmony", "Dream", "Angel", "Texture", "Bitcrush", "Sample Rate", "Phaser", "Flanger", "Space", "Spectral"
+        "Phaser", "Flanger", "Harmony", "Dream", "Angel"
     };
     for (size_t i = 0; i < std::size (machineIds); ++i)
     {
@@ -101,6 +104,20 @@ void PrettifierEngine::prepare (double sampleRate, int samplesPerBlock, int numC
                    juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
     beautyOs->initProcessing ((size_t) beautyMaxBlock);
     beautyOs->reset();
+
+    juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) juce::jmax (1, samplesPerBlock),
+                                  (juce::uint32) juce::jmax (1, numChannels) };
+    phaser.prepare (spec);
+    phaser.setRate (0.4f);
+    phaser.setDepth (0.55f);
+    phaser.setCentreFrequency (520.0f);
+    phaser.setFeedback (0.45f);
+
+    flanger.prepare (spec);
+    flanger.setRate (0.28f);
+    flanger.setDepth (0.6f);
+    flanger.setCentreDelay (3.5f);   // short -> flanger character (vs lush chorus)
+    flanger.setFeedback (0.55f);
 }
 
 void PrettifierEngine::reset()
@@ -109,6 +126,8 @@ void PrettifierEngine::reset()
     delayWrite = 0;
     reverb.reset();
     chorusPhase = { 0.0, 0.0 };
+    phaser.reset();
+    flanger.reset();
 }
 
 void PrettifierEngine::process (juce::AudioBuffer<float>& buffer, const Params& params, double hostBpm, bool tempoLock)
@@ -179,6 +198,24 @@ void PrettifierEngine::process (juce::AudioBuffer<float>& buffer, const Params& 
             }
             chorusPhase[(size_t) juce::jmin (c, 1)] = phase;
         }
+    }
+
+    // Phaser machine (sweeping allpass notches).
+    if (params.phaserOn && params.phaserMix > 0.001f)
+    {
+        phaser.setMix (params.phaserMix);
+        juce::dsp::AudioBlock<float> block (buffer);
+        juce::dsp::ProcessContextReplacing<float> ctx (block);
+        phaser.process (ctx);
+    }
+
+    // Flanger machine (short modulated delay + feedback).
+    if (params.flangerOn && params.flangerMix > 0.001f)
+    {
+        flanger.setMix (params.flangerMix);
+        juce::dsp::AudioBlock<float> block (buffer);
+        juce::dsp::ProcessContextReplacing<float> ctx (block);
+        flanger.process (ctx);
     }
 
     // Beauty machine: mild saturating tilt + air lift.

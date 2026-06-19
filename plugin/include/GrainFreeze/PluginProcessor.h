@@ -276,6 +276,10 @@ private:
         std::atomic<float>* prettyReverbDamping = nullptr;
         std::atomic<float>* chorusOn = nullptr;
         std::atomic<float>* chorusMix = nullptr;
+        std::atomic<float>* phaserOn = nullptr;
+        std::atomic<float>* phaserMix = nullptr;
+        std::atomic<float>* flangerOn = nullptr;
+        std::atomic<float>* flangerMix = nullptr;
         std::atomic<float>* beautyOn = nullptr;
         std::atomic<float>* beautyAir = nullptr;
         std::atomic<float>* beautyWarmth = nullptr;
