@@ -13,15 +13,17 @@ namespace gf
 
 // Modern dark studio palette: deep neutral charcoal surfaces with a faint cool
 // tint, elevated panels, and clean vivid accents per tab.
-const juce::Colour BiohazardLookAndFeel::bg         { 0xff0b0e11 };
-const juce::Colour BiohazardLookAndFeel::panel     { 0xff151a20 };
-const juce::Colour BiohazardLookAndFeel::metal     { 0xff232a31 };
-const juce::Colour BiohazardLookAndFeel::metalHi   { 0xff39424c };
-const juce::Colour BiohazardLookAndFeel::metalLo   { 0xff0d1014 };
-const juce::Colour BiohazardLookAndFeel::toxic     { 0xff5cf03a };
-const juce::Colour BiohazardLookAndFeel::toxicDim  { 0xff2c6b22 };
+// Refined premium-minimal palette: deep neutral graphite surfaces and a single
+// sophisticated emerald accent (less lime/"toxic", more luminous + restrained).
+const juce::Colour BiohazardLookAndFeel::bg         { 0xff0a0b0d };
+const juce::Colour BiohazardLookAndFeel::panel     { 0xff111316 };
+const juce::Colour BiohazardLookAndFeel::metal     { 0xff1b1f24 };
+const juce::Colour BiohazardLookAndFeel::metalHi   { 0xff2c323a };
+const juce::Colour BiohazardLookAndFeel::metalLo   { 0xff090a0c };
+const juce::Colour BiohazardLookAndFeel::toxic     { 0xff48e08a };
+const juce::Colour BiohazardLookAndFeel::toxicDim  { 0xff1f5c3e };
 const juce::Colour BiohazardLookAndFeel::coral     { 0xffe08a64 };
-const juce::Colour BiohazardLookAndFeel::textCol   { 0xffe2e8ec };
+const juce::Colour BiohazardLookAndFeel::textCol   { 0xffe9edf0 };
 const juce::Colour BiohazardLookAndFeel::gold      { 0xfff7d873 };
 const juce::Colour BiohazardLookAndFeel::goldDim   { 0xff8a7330 };
 const juce::Colour BiohazardLookAndFeel::blendAccent { 0xff8fe8c0 };
@@ -349,41 +351,45 @@ void BiohazardLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, in
     const auto acc = hover ? accent().brighter (0.15f) : accent();
 
     juce::ignoreUnused (hover);
-    const float dialR  = radius * 0.66f;   // solid knob face
-    const float trackR = radius * 0.90f;   // value ring radius
-    const float trackW = juce::jmax (3.0f, radius * 0.13f);
+    const float dialR  = radius * 0.68f;   // solid knob face
+    const float trackR = radius * 0.91f;   // value ring radius
+    const float trackW = juce::jmax (2.0f, radius * 0.085f);   // thin, refined
 
-    // Plain, flat knob like the original Entropy: a recessed track, a solid value
-    // arc, a dark flat face and a pointer line. No crystal facets, sparkles,
-    // travelling glints, glows or drop shadow — static and cheap to draw.
+    // Premium-minimal: a faint full-sweep groove, a thin accent value arc, a flat
+    // graphite face with crisp edges, and a precise pointer ending in a small dot.
 
-    // Recessed track groove (full sweep).
+    // Faint full-sweep groove.
     juce::Path track;
     track.addCentredArc (centre.x, centre.y, trackR, trackR, 0.0f, startAngle, endAngle, true);
-    g.setColour (metalLo);
+    g.setColour (juce::Colour (0xff21262d));
     g.strokePath (track, juce::PathStrokeType (trackW, juce::PathStrokeType::curved,
                                                juce::PathStrokeType::rounded));
 
-    // Value arc (solid, no glow).
+    // Value arc.
     juce::Path val;
     val.addCentredArc (centre.x, centre.y, trackR, trackR, 0.0f, startAngle, angle, true);
     g.setColour (on ? acc : metalHi);
     g.strokePath (val, juce::PathStrokeType (trackW, juce::PathStrokeType::curved,
                                              juce::PathStrokeType::rounded));
 
-    // Flat dark face with a thin rim.
+    // Flat graphite face: a whisper of top sheen, a crisp dark outer edge.
     auto face = juce::Rectangle<float> (dialR * 2.0f, dialR * 2.0f).withCentre (centre);
-    g.setColour (metal.darker (0.45f));
+    g.setColour (metal);
     g.fillEllipse (face);
-    g.setColour (juce::Colours::white.withAlpha (0.06f));
+    g.setColour (juce::Colours::white.withAlpha (0.05f));
     g.drawEllipse (face.reduced (0.5f), 1.0f);
+    g.setColour (metalLo.withAlpha (0.7f));
+    g.drawEllipse (face.expanded (0.5f), 1.0f);
 
-    // Pointer line.
-    const float p0 = dialR * 0.28f, p1 = dialR * 0.94f;
+    // Precise pointer with a dot at the tip.
+    const float cosA = std::cos (angle), sinA = std::sin (angle);
+    const float p0 = dialR * 0.40f, p1 = dialR * 0.84f;
     g.setColour (on ? acc : metalHi);
-    g.drawLine (centre.x + std::cos (angle) * p0, centre.y + std::sin (angle) * p0,
-                centre.x + std::cos (angle) * p1, centre.y + std::sin (angle) * p1,
-                juce::jmax (2.0f, radius * 0.07f));
+    g.drawLine (centre.x + cosA * p0, centre.y + sinA * p0,
+                centre.x + cosA * p1, centre.y + sinA * p1,
+                juce::jmax (1.5f, radius * 0.05f));
+    const float dotR = juce::jmax (2.0f, radius * 0.06f);
+    g.fillEllipse (centre.x + cosA * p1 - dotR, centre.y + sinA * p1 - dotR, dotR * 2.0f, dotR * 2.0f);
 }
 
 void BiohazardLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
