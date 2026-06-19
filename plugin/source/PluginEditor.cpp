@@ -1362,11 +1362,13 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     // Static base gradient per tab tint.
     {
         const bool pretty = (tab == 2);
-        const juce::Colour topCol = pretty   ? juce::Colour (0xff3b3322)
-                                  : tab == 1 ? juce::Colour (0xff13171e)
-                                             : juce::Colour (0xff111711);
-        const juce::Colour midCol = pretty ? LF::bg.brighter (0.14f) : LF::bg;
-        const juce::Colour botCol = pretty ? LF::bg.darker (0.22f) : LF::bg.darker (0.55f);
+        // Premium-minimal: a consistent deep vignette with only the faintest tab
+        // tint, rather than strong warm/cool per-tab washes.
+        const juce::Colour topCol = pretty   ? juce::Colour (0xff14161b)
+                                  : tab == 1 ? juce::Colour (0xff16151a)
+                                             : juce::Colour (0xff121512);
+        const juce::Colour midCol = LF::bg;
+        const juce::Colour botCol = LF::bg.darker (0.4f);
         juce::ColourGradient base (topCol, bounds.getCentreX(), 0.0f,
                                    botCol, bounds.getCentreX(), bounds.getHeight(), false);
         base.addColour (0.45, midCol);
@@ -1376,11 +1378,11 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
 
     // Background artwork (static, subtle).
     if (tab == 0 || tab == 3 || tab == 4)
-        drawBgImage (bgImage, 0.16f);
+        drawBgImage (bgImage, 0.07f);
     else if (tab == 2)
-        drawBgImage (prettifierBgImage, 0.34f);
+        drawBgImage (prettifierBgImage, 0.11f);
     else
-        drawBgImage (mixBgImage, 0.42f);
+        drawBgImage (mixBgImage, 0.11f);
 
     // Mix tab: static warm aura.
     if (tab == 1)
@@ -1663,14 +1665,20 @@ void GrainFreezeEditor::resized()
 
         // DNA panel: a row of module on/off pills, then a row of 10 character knobs.
         dnaHeader.setBounds (dnaSection.removeFromTop (16).reduced (4, 0));
-        auto modRow = dnaSection.removeFromTop (28);
-        echoSyncBox.setBounds (modRow.removeFromLeft (80).withSizeKeepingCentre (76, 22));
         juce::ToggleButton* mods[9] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
                                         &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton };
-        const int modW = juce::jmin (94, modRow.getWidth() / 9);
-        modRow = modRow.withSizeKeepingCentre (modW * 9, modRow.getHeight());
-        for (auto* m : mods)
-            m->setBounds (modRow.removeFromLeft (modW).reduced (3, 1));
+        // Row 1: echo-sync + the four classic modules.
+        auto modRow1 = dnaSection.removeFromTop (26);
+        echoSyncBox.setBounds (modRow1.removeFromLeft (80).withSizeKeepingCentre (76, 22));
+        const int w1 = juce::jmin (118, modRow1.getWidth() / 4);
+        for (int i = 0; i < 4; ++i)
+            mods[i]->setBounds (modRow1.removeFromLeft (w1).reduced (3, 1));
+        // Row 2: the five movement + shimmer modules, centred.
+        auto modRow2 = dnaSection.removeFromTop (26);
+        const int w2 = juce::jmin (118, modRow2.getWidth() / 5);
+        modRow2 = modRow2.withSizeKeepingCentre (w2 * 5, modRow2.getHeight());
+        for (int i = 4; i < 9; ++i)
+            mods[i]->setBounds (modRow2.removeFromLeft (w2).reduced (3, 1));
 
         dnaSection.removeFromTop (4);
         const int dnaW = dnaSection.getWidth() / kNumDna;

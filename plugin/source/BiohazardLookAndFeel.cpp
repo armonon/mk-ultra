@@ -24,11 +24,11 @@ const juce::Colour BiohazardLookAndFeel::toxic     { 0xff48e08a };
 const juce::Colour BiohazardLookAndFeel::toxicDim  { 0xff1f5c3e };
 const juce::Colour BiohazardLookAndFeel::coral     { 0xffe08a64 };
 const juce::Colour BiohazardLookAndFeel::textCol   { 0xffe9edf0 };
-const juce::Colour BiohazardLookAndFeel::gold      { 0xfff7d873 };
-const juce::Colour BiohazardLookAndFeel::goldDim   { 0xff8a7330 };
-const juce::Colour BiohazardLookAndFeel::blendAccent { 0xff8fe8c0 };
-const juce::Colour BiohazardLookAndFeel::iceBlue    { 0xff5ec6ff };
-const juce::Colour BiohazardLookAndFeel::iceBlueDim { 0xff2a6e9e };
+const juce::Colour BiohazardLookAndFeel::gold      { 0xffd9bd7e };  // muted champagne (was bright yellow)
+const juce::Colour BiohazardLookAndFeel::goldDim   { 0xff7a6638 };
+const juce::Colour BiohazardLookAndFeel::blendAccent { 0xff8fe0bd };
+const juce::Colour BiohazardLookAndFeel::iceBlue    { 0xff6fb2d8 };  // muted steel-sky (was bright cyan)
+const juce::Colour BiohazardLookAndFeel::iceBlueDim { 0xff315a72 };
 
 BiohazardLookAndFeel::BiohazardLookAndFeel()
 {
