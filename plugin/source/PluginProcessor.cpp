@@ -169,6 +169,8 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.angelMix, "angelMix");
     bind (paramPtrs.harmonyOn, "harmonyOn");
     bind (paramPtrs.harmonyMix, "harmonyMix");
+    bind (paramPtrs.convolutionOn, "convolutionOn");
+    bind (paramPtrs.convolutionMix, "convolutionMix");
     bind (paramPtrs.beautyOn, "beautyOn");
     bind (paramPtrs.beautyAir, "beautyAir");
     bind (paramPtrs.beautyWarmth, "beautyWarmth");
@@ -1036,6 +1038,8 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     prettyParams.angelMix   = loadParam (p.angelMix, 0.3f);
     prettyParams.harmonyOn  = isOn (p.harmonyOn) && beautyActive;
     prettyParams.harmonyMix = loadParam (p.harmonyMix, 0.3f);
+    prettyParams.convolutionOn  = isOn (p.convolutionOn) && beautyActive;
+    prettyParams.convolutionMix = loadParam (p.convolutionMix, 0.3f);
     prettyParams.chorusOn = isOn (p.chorusOn) && beautyActive;
     prettyParams.chorusRate = target (gf::ParamId::chorusRate);
     prettyParams.chorusDepth = juce::jlimit (0.0f, 1.0f, target (gf::ParamId::chorusDepth) + ctl.motion * 0.25f + ctl.emotion * 0.3f);
@@ -1344,6 +1348,7 @@ void GrainFreezeProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.appendChild (slotB.createCopy(), nullptr);
         state.appendChild (slotC.createCopy(), nullptr);
         state.appendChild (slotD.createCopy(), nullptr);
+        state.setProperty ("convolutionIRPath", convolutionIRPath, nullptr);
         juce::MemoryOutputStream stream (destData, false);
         state.writeToStream (stream);
     }
@@ -1362,6 +1367,13 @@ void GrainFreezeProcessor::setStateInformation (const void* data, int sizeInByte
         tree.removeChild (tree.getChildWithName ("AB_SLOT_B"), nullptr);
         tree.removeChild (tree.getChildWithName ("AB_SLOT_C"), nullptr);
         tree.removeChild (tree.getChildWithName ("AB_SLOT_D"), nullptr);
+        const auto savedIR = tree.getProperty ("convolutionIRPath").toString();
+        if (savedIR.isNotEmpty())
+        {
+            const juce::File f (savedIR);
+            if (f.existsAsFile())
+                loadConvolutionIR (f);
+        }
         apvts.replaceState (tree);
     }
 }

@@ -420,8 +420,13 @@ private:
                        chorusOnButton { "Chorus" }, crushOnButton  { "Lo-Fi" },
                        phaserOnButton { "Phaser" }, flangerOnButton { "Flanger" },
                        dreamOnButton  { "Dream" },  angelOnButton   { "Angel" },
-                       harmonyOnButton { "Harmony" };
-    std::array<std::unique_ptr<ButtonAttachment>, 9> moduleAttach;
+                       harmonyOnButton { "Harmony" },
+                       convolutionOnButton { "Convolve" };
+    std::array<std::unique_ptr<ButtonAttachment>, 10> moduleAttach;
+
+    juce::TextButton convolutionLoadButton { "Load IR" };
+    juce::Label      convolutionIRLabel;
+    std::unique_ptr<juce::FileChooser> convolutionFileChooser;
 
     // In-plugin updater: a hidden pill that appears only when GitHub has a newer
     // release; clicking it opens the release page to download the installer.

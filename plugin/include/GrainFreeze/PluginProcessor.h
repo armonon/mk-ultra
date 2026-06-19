@@ -126,6 +126,16 @@ public:
     // Sample Mode: the Freeze button asks the audio thread to snapshot the most
     // recent window of audio on its next block. ready() drives the UI lamp.
     void triggerSampleFreeze() { sampleFreezeRequested.store (true, std::memory_order_release); }
+
+    // Convolution Space: load a user-supplied IR file. Returns the file path so
+    // the editor can persist + display it. The Convolution class handles the
+    // load on its own background thread.
+    void loadConvolutionIR (const juce::File& irFile)
+    {
+        prettifierEngine.loadConvolutionIR (irFile);
+        convolutionIRPath = irFile.getFullPathName();
+    }
+    juce::String getConvolutionIRPath() const { return convolutionIRPath; }
     bool sampleFreezeReady() const { return sampleEngine.ready(); }
 
 private:
@@ -290,6 +300,8 @@ private:
         std::atomic<float>* angelMix = nullptr;
         std::atomic<float>* harmonyOn = nullptr;
         std::atomic<float>* harmonyMix = nullptr;
+        std::atomic<float>* convolutionOn = nullptr;
+        std::atomic<float>* convolutionMix = nullptr;
         std::atomic<float>* beautyOn = nullptr;
         std::atomic<float>* beautyAir = nullptr;
         std::atomic<float>* beautyWarmth = nullptr;
@@ -378,6 +390,8 @@ private:
     juce::AudioBuffer<float> dryInBuffer;
     juce::AudioBuffer<float> entropyBuffer;
     juce::AudioBuffer<float> prettifierBuffer;
+    juce::String convolutionIRPath;
+
     juce::ValueTree slotA { "AB_SLOT_A" };
     juce::ValueTree slotB { "AB_SLOT_B" };
     juce::ValueTree slotC { "AB_SLOT_C" };

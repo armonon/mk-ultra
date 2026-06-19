@@ -814,16 +814,44 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         }
     }
     {
-        juce::ToggleButton* mods[9] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
-                                        &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton };
-        const char* modIds[9] = { "echoOn", "prettyReverbOn", "chorusOn", "crushOn", "phaserOn", "flangerOn", "dreamOn", "angelOn", "harmonyOn" };
-        for (int i = 0; i < 9; ++i)
+        juce::ToggleButton* mods[10] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
+                                         &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton,
+                                         &convolutionOnButton };
+        const char* modIds[10] = { "echoOn", "prettyReverbOn", "chorusOn", "crushOn", "phaserOn", "flangerOn", "dreamOn", "angelOn", "harmonyOn", "convolutionOn" };
+        for (int i = 0; i < 10; ++i)
         {
             mods[i]->setTooltip ("Enable/disable this Beauty & Space module");
             addAndMakeVisible (*mods[i]);
             moduleAttach[(size_t) i] = std::make_unique<ButtonAttachment> (proc.apvts, modIds[i], *mods[i]);
         }
     }
+
+    // Convolution IR loader: opens a native file chooser for .wav/.aif IRs.
+    convolutionLoadButton.setTooltip ("Load any IR file (cathedrals, springs, weird spaces) for the Convolve machine");
+    convolutionLoadButton.onClick = [this]
+    {
+        const juce::File start (proc.getConvolutionIRPath().isNotEmpty()
+                                ? juce::File (proc.getConvolutionIRPath()).getParentDirectory()
+                                : juce::File::getSpecialLocation (juce::File::userMusicDirectory));
+        convolutionFileChooser = std::make_unique<juce::FileChooser> (
+            "Load Impulse Response", start, "*.wav;*.aif;*.aiff;*.flac;*.ogg");
+        convolutionFileChooser->launchAsync (
+            juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this] (const juce::FileChooser& fc)
+            {
+                const auto f = fc.getResult();
+                if (f.existsAsFile())
+                {
+                    proc.loadConvolutionIR (f);
+                    convolutionIRLabel.setText (f.getFileNameWithoutExtension(), juce::dontSendNotification);
+                }
+            });
+    };
+    addAndMakeVisible (convolutionLoadButton);
+    convolutionIRLabel.setText (juce::File (proc.getConvolutionIRPath()).getFileNameWithoutExtension(), juce::dontSendNotification);
+    convolutionIRLabel.setJustificationType (juce::Justification::centredLeft);
+    convolutionIRLabel.setColour (juce::Label::textColourId, gf::BiohazardLookAndFeel::textCol);
+    addAndMakeVisible (convolutionIRLabel);
 
     for (auto* s : { &globalRate, &satDrive, &satMix, &specMix, &specShimmer })
         s->setPopupDisplayEnabled (true, false, this); // drag-only: hover popups get stuck as orphaned bubbles
@@ -1314,8 +1342,10 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto& s : dnaKnobs)  s.setVisible (prettifierTab);
     for (auto& l : dnaLabels) l.setVisible (prettifierTab);
     for (auto* b : { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton, &phaserOnButton,
-                     &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton })
+                     &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton, &convolutionOnButton })
         b->setVisible (prettifierTab);
+    convolutionLoadButton.setVisible (prettifierTab);
+    convolutionIRLabel.setVisible (prettifierTab);
     echoSyncBox.setVisible (prettifierTab);
 
     // MACHINES tab. Damage and Time Breaker collapse to essentials; their deep
@@ -1700,20 +1730,26 @@ void GrainFreezeEditor::resized()
 
         // DNA panel: a row of module on/off pills, then a row of 10 character knobs.
         dnaHeader.setBounds (dnaSection.removeFromTop (16).reduced (4, 0));
-        juce::ToggleButton* mods[9] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
-                                        &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton };
+        juce::ToggleButton* mods[10] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
+                                         &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton,
+                                         &harmonyOnButton, &convolutionOnButton };
         // Row 1: echo-sync + the four classic modules.
-        auto modRow1 = dnaSection.removeFromTop (26);
+        auto modRow1 = dnaSection.removeFromTop (24);
         echoSyncBox.setBounds (modRow1.removeFromLeft (80).withSizeKeepingCentre (76, 22));
         const int w1 = juce::jmin (118, modRow1.getWidth() / 4);
         for (int i = 0; i < 4; ++i)
             mods[i]->setBounds (modRow1.removeFromLeft (w1).reduced (3, 1));
-        // Row 2: the five movement + shimmer modules, centred.
-        auto modRow2 = dnaSection.removeFromTop (26);
-        const int w2 = juce::jmin (118, modRow2.getWidth() / 5);
-        modRow2 = modRow2.withSizeKeepingCentre (w2 * 5, modRow2.getHeight());
-        for (int i = 4; i < 9; ++i)
+        // Row 2: the five movement + shimmer modules + convolve, centred.
+        auto modRow2 = dnaSection.removeFromTop (24);
+        const int w2 = juce::jmin (118, modRow2.getWidth() / 6);
+        modRow2 = modRow2.withSizeKeepingCentre (w2 * 6, modRow2.getHeight());
+        for (int i = 4; i < 10; ++i)
             mods[i]->setBounds (modRow2.removeFromLeft (w2).reduced (3, 1));
+        // Row 3: Load IR button + the loaded IR name (only meaningful when Convolve is on).
+        auto modRow3 = dnaSection.removeFromTop (22);
+        convolutionLoadButton.setBounds (modRow3.removeFromLeft (90).reduced (3, 1));
+        modRow3.removeFromLeft (8);
+        convolutionIRLabel.setBounds (modRow3.removeFromLeft (juce::jmin (320, modRow3.getWidth())));
 
         dnaSection.removeFromTop (4);
         const int dnaW = dnaSection.getWidth() / kNumDna;

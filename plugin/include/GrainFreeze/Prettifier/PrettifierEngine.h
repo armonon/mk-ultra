@@ -63,6 +63,10 @@ struct Params
     bool  harmonyOn  = false; // pitch-shifted fifth harmony voice
     float harmonyMix = 0.3f;
 
+    // Convolution Space: load any IR file (cathedrals, springs, weird spaces).
+    bool  convolutionOn  = false;
+    float convolutionMix = 0.3f;
+
     // DNA controls
     float dnaCharacter = 0.5f;
     float dnaAge = 0.2f;
@@ -119,6 +123,23 @@ private:
     // Harmony: a formant-preserving fifth, added as a wet voice.
     std::array<FormantShifter, 2> harmonyShifter;
     juce::AudioBuffer<float> harmonyWet;
+
+    // Convolution Space (user-loadable IRs). The load happens on JUCE's own
+    // background thread inside loadImpulseResponse(), so the audio thread keeps
+    // running cleanly through swaps.
+    juce::dsp::Convolution    convolution;
+    juce::AudioBuffer<float>  convolutionWet;
+
+public:
+    // Convolution Space IR management (called from the editor / file chooser).
+    void loadConvolutionIR (const juce::File& irFile)
+    {
+        if (irFile.existsAsFile())
+            convolution.loadImpulseResponse (irFile, juce::dsp::Convolution::Stereo::yes,
+                                             juce::dsp::Convolution::Trim::yes, 0,
+                                             juce::dsp::Convolution::Normalise::yes);
+    }
+
 };
 
 } // namespace pretty

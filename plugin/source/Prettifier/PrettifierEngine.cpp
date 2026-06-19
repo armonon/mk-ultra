@@ -65,10 +65,10 @@ void PrettifierEngine::addParameters (juce::AudioProcessorValueTreeState::Parame
     // (Texture, Bitcrush, Sample Rate, Space, Spectral) were cut as they duplicate
     // existing machines (granular, Damage lo-fi, Grain Space, the Spectral machine).
     static constexpr const char* machineIds[] = {
-        "phaser", "flanger", "harmony", "dream", "angel"
+        "phaser", "flanger", "harmony", "dream", "angel", "convolution"
     };
     static constexpr const char* machineNames[] = {
-        "Phaser", "Flanger", "Harmony", "Dream", "Angel"
+        "Phaser", "Flanger", "Harmony", "Dream", "Angel", "Convolution"
     };
     for (size_t i = 0; i < std::size (machineIds); ++i)
     {
@@ -139,6 +139,9 @@ void PrettifierEngine::prepare (double sampleRate, int samplesPerBlock, int numC
 
     for (auto& s : harmonyShifter) s.prepare (sampleRate);
     harmonyWet.setSize (numChannels, samplesPerBlock);
+
+    convolution.prepare (spec);
+    convolutionWet.setSize (numChannels, samplesPerBlock);
 }
 
 void PrettifierEngine::reset()
@@ -154,6 +157,7 @@ void PrettifierEngine::reset()
     for (auto& s : angelShifter) s.reset();
     angelReverb.reset();
     for (auto& s : harmonyShifter) s.reset();
+    convolution.reset();
 }
 
 void PrettifierEngine::process (juce::AudioBuffer<float>& buffer, const Params& params, double hostBpm, bool tempoLock)
@@ -202,6 +206,21 @@ void PrettifierEngine::process (juce::AudioBuffer<float>& buffer, const Params& 
         {
             buffer.applyGain (c, 0, samples, 1.0f - params.reverbMix);
             buffer.addFrom (c, 0, wetBuffer, c, 0, samples, params.reverbMix);
+        }
+    }
+
+    // Convolution Space: process a wet copy through the loaded IR, blend in.
+    if (params.convolutionOn && params.convolutionMix > 0.001f)
+    {
+        convolutionWet.makeCopyOf (buffer, true);
+        juce::dsp::AudioBlock<float> block (convolutionWet);
+        juce::dsp::ProcessContextReplacing<float> ctx (block);
+        convolution.process (ctx);
+        for (int c = 0; c < channels; ++c)
+        {
+            buffer.applyGain (c, 0, samples, 1.0f - params.convolutionMix);
+            buffer.addFrom (c, 0, convolutionWet, juce::jmin (c, convolutionWet.getNumChannels() - 1),
+                            0, samples, params.convolutionMix);
         }
     }
 
