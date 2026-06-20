@@ -245,6 +245,8 @@ private:
         std::atomic<float>* duckAttack = nullptr;
         std::atomic<float>* duckRelease = nullptr;
 
+        std::atomic<float>* polyGrain = nullptr;
+
         // Universal modulation matrix slots (4 of each).
         std::array<std::atomic<float>*, 4> modSlotSource { nullptr, nullptr, nullptr, nullptr };
         std::array<std::atomic<float>*, 4> modSlotTarget { nullptr, nullptr, nullptr, nullptr };

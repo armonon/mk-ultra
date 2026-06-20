@@ -906,6 +906,10 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     midiRootSlider.updateText();
     addAndMakeVisible (midiRootSlider);
     midiRootAttach = std::make_unique<SliderAttachment> (proc.apvts, "midiRoot", midiRootSlider);
+
+    polyGrainButton.setTooltip ("Polyphonic Grains: hold a chord -- each grain picks a random held note for its pitch, so the granulator becomes a polyphonic cloud. Requires MIDI on.");
+    addAndMakeVisible (polyGrainButton);
+    polyGrainAttach = std::make_unique<ButtonAttachment> (proc.apvts, "polyGrain", polyGrainButton);
     setupDialLabel (midiRootLabel, "Root");
 
     setupMixKnob (midiGlideSlider);
@@ -1516,6 +1520,7 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto& c : modMatrixTarget) c.setVisible (machinesTab);
     for (auto& s : modMatrixDepth)  s.setVisible (machinesTab);
     for (auto& l : modMatrixArrow)  l.setVisible (machinesTab);
+    polyGrainButton.setVisible (machinesTab);
     for (auto* b : { &machDamageMore, &machTimeMore })
         b->setVisible (machinesTab);
     // Always-visible essentials (Spectral + Pitch are already minimal).
@@ -2192,7 +2197,10 @@ void GrainFreezeEditor::resized()
 
         // Universal Modulation Matrix: 4 rows of [Source -> Target  Depth].
         {
-            modMatrixTitle.setBounds (area.removeFromTop (20).reduced (4, 0));
+            auto head = area.removeFromTop (22);
+            modMatrixTitle.setBounds (head.removeFromLeft (140).withSizeKeepingCentre (140, 20));
+            head.removeFromLeft (gap);
+            polyGrainButton.setBounds (head.removeFromLeft (130).withSizeKeepingCentre (124, 22));
             area.removeFromTop (4);
             for (int i = 0; i < 4; ++i)
             {

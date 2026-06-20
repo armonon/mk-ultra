@@ -45,6 +45,18 @@ public:
     bool  isGateOpen() const { return gateOpen.load (std::memory_order_relaxed); }
     float getVelocity() const { return velocity.load (std::memory_order_relaxed); }
 
+    // Copies up to `maxNotes` of the active note semitone-offsets into `out` and
+    // returns the number written. Used by polyphonic granular mode so a held
+    // chord can drive grain pitches across all the held notes.
+    int copyActiveOffsets (float* out, int maxNotes) const
+    {
+        const int r = root.load (std::memory_order_relaxed);
+        const int n = juce::jmin (count, maxNotes);
+        for (int i = 0; i < n; ++i)
+            out[i] = (float) (stack[(size_t) i] - r);
+        return n;
+    }
+
 private:
     void pushNote (int note, float vel)
     {

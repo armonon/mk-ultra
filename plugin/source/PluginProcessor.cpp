@@ -118,6 +118,7 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.duckThreshold, "duckThreshold");
     bind (paramPtrs.duckAttack, "duckAttack");
     bind (paramPtrs.duckRelease, "duckRelease");
+    bind (paramPtrs.polyGrain, "polyGrain");
 
     {
         static const char* sourceIds[4] = { "modSlot1Source", "modSlot2Source", "modSlot3Source", "modSlot4Source" };
@@ -407,6 +408,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         addChoice ("timeBreakerMod2Target", "Time Breaker Route 2", tbTargets, 0);
         addFloat  ("timeBreakerMod2Depth",  "Time Breaker Route 2 Depth", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
     }
+
+    // Polyphonic granular: when on AND MIDI is enabled, each grain picks a random
+    // active note for its pitch, so a held chord becomes a polyphonic grain cloud.
+    addBool ("polyGrain", "Polyphonic Grains", false);
 
     // Universal Modulation Matrix: 4 generic slots that each pick a SOURCE and
     // route it (with a signed depth) to any TARGET parameter. This generalises
@@ -954,6 +959,17 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             midiCtrl.handleMessage (meta.getMessage());
         noteOffset = midiCtrl.nextOffsetSemis();
         midiVelocity = midiCtrl.getVelocity();
+    }
+
+    // Polyphonic granular: push the active note set into the granular engine
+    // (which picks a random held offset for each new grain).
+    const bool polyOn = ctl.midiEnabled && isOn (paramPtrs.polyGrain);
+    entropyEngine.setPolyOn (polyOn);
+    if (polyOn)
+    {
+        float buf[16] {};
+        const int n_ = midiCtrl.copyActiveOffsets (buf, 16);
+        entropyEngine.setActiveNotes (buf, n_);
     }
 
     if (ctl.motionMatrixOn)

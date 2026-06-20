@@ -48,6 +48,10 @@ public:
     void pushInput (const juce::AudioBuffer<float>& input);
     void process (juce::AudioBuffer<float>& buffer, const Params& params);
 
+    // Pass-throughs to the underlying GranularEngine for polyphonic granular mode.
+    void setPolyOn      (bool b)                       { granular.setPolyOn (b); }
+    void setActiveNotes (const float* notes, int n)    { granular.setActiveNotes (notes, n); }
+
 private:
     gf::GranularEngine granular;
     gf::SpectralFreeze spectral;

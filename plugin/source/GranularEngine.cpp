@@ -103,7 +103,20 @@ void GranularEngine::spawnGrain()
     const double jitter     = (rand01() * 2.0 - 1.0) * spraySamps;
 
     const float jit    = (rand01() * 2.0f - 1.0f) * pitchJitter.load();
-    const float semis  = pitchSemis.load() + noteOffset.load() + jit;
+    // Polyphonic mode: pick a random held note's offset for this grain so a
+    // chord becomes a polyphonic granular cloud. Falls through to noteOffset if
+    // no notes are held or poly is off.
+    float noteOff = noteOffset.load();
+    if (polyOn.load (std::memory_order_relaxed))
+    {
+        const int n = activeNoteCount.load (std::memory_order_relaxed);
+        if (n > 0)
+        {
+            const int pick = juce::jlimit (0, n - 1, (int) (rand01() * n));
+            noteOff = activeNotes[(size_t) pick].load (std::memory_order_relaxed);
+        }
+    }
+    const float semis  = pitchSemis.load() + noteOff + jit;
     const double rate   = std::pow (2.0, semis / 12.0);
     const int    lenSm  = juce::jmax (4, (int) ((grainSizeMs.load() / 1000.0) * sr));
 

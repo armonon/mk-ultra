@@ -44,6 +44,18 @@ public:
     void setDensity     (float perSec)  { density.store (perSec); }
     void setPitchSemis  (float st)      { pitchSemis.store (st); }
     void setNoteOffsetSemis (float st)  { noteOffset.store (st); }
+
+    // Polyphonic note mode: when enabled and there are 2+ active notes, each new
+    // grain randomly picks one of the held notes for its pitch offset. Set by
+    // the processor each block; lock-free copy into an atomic-ish snapshot.
+    void setPolyOn (bool b) { polyOn.store (b, std::memory_order_relaxed); }
+    void setActiveNotes (const float* notes, int n)
+    {
+        const int clamped = juce::jlimit (0, (int) activeNotes.size(), n);
+        for (int i = 0; i < clamped; ++i)
+            activeNotes[(size_t) i].store (notes[i], std::memory_order_relaxed);
+        activeNoteCount.store (clamped, std::memory_order_relaxed);
+    }
     void setSprayMs     (float ms)      { sprayMs.store (ms); }
     void setSpread      (float n)       { spread.store (juce::jlimit (0.0f, 1.0f, n)); }
     void setPosition    (float n)       { position.store (juce::jlimit (0.0f, 1.0f, n)); }
@@ -86,6 +98,11 @@ private:
     std::atomic<float> density     { 28.0f };
     std::atomic<float> pitchSemis  { 0.0f };
     std::atomic<float> noteOffset  { 0.0f };
+
+    // Polyphonic note pool: each new grain picks a random active offset.
+    std::atomic<bool> polyOn { false };
+    std::atomic<int>  activeNoteCount { 0 };
+    std::array<std::atomic<float>, 16> activeNotes {};
     std::atomic<float> sprayMs     { 30.0f };
     std::atomic<float> spread      { 0.4f };
     std::atomic<float> position    { 0.5f };

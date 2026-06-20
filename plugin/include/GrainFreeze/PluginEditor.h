@@ -354,6 +354,8 @@ private:
     juce::Label  midiRootLabel, midiGlideLabel, midiVelAmpLabel;
     std::unique_ptr<ButtonAttachment> midiEnableAttach;
     std::unique_ptr<SliderAttachment> midiRootAttach, midiGlideAttach, midiVelAmpAttach;
+    juce::ToggleButton polyGrainButton { "Poly Grains" };
+    std::unique_ptr<ButtonAttachment> polyGrainAttach;
 
     // Mix tab controls.
     juce::Slider dryLevel, entropySend, entropyReturn, prettifierSend, prettifierReturn, mixOutput, chaosBeauty, mixWidth, mixGlue, mixCeiling;
