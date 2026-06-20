@@ -1098,11 +1098,11 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     setResizable (true, true);
     if (auto* c = getConstrainer())
     {
-        c->setFixedAspectRatio (1020.0 / 860.0);
-        c->setSizeLimits (714, 602, 1428, 1204);
+        c->setFixedAspectRatio (1020.0 / 920.0);
+        c->setSizeLimits (714, 644, 1428, 1288);
     }
     const int savedW = (int) proc.apvts.state.getProperty ("editorWidth",  1020);
-    const int savedH = (int) proc.apvts.state.getProperty ("editorHeight", 860);
+    const int savedH = (int) proc.apvts.state.getProperty ("editorHeight", 920);
     setSize (juce::jlimit (714, 1428, savedW), juce::jlimit (602, 1204, savedH));
     updateTabVisibility();
 
