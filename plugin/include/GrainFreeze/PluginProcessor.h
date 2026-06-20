@@ -63,6 +63,7 @@ public:
     gf::SpectralFreeze      spectralMachine;
     gf::DamageEngine        damageMachine;
     gf::MultibandDamage     damageMultiband;
+    gf::SidechainDucker     ducker;
     gf::TimeBreakerEngine   timeBreaker;
     gf::PitchFormantMachine pitchFormantMachine;
     gf::PresetManager  presets { apvts };
@@ -238,6 +239,11 @@ private:
         std::atomic<float>* damageSplitOn = nullptr;
         std::atomic<float>* damageSplitHz = nullptr;
         std::atomic<float>* damageHighAmount = nullptr;
+        std::atomic<float>* duckOn = nullptr;
+        std::atomic<float>* duckAmount = nullptr;
+        std::atomic<float>* duckThreshold = nullptr;
+        std::atomic<float>* duckAttack = nullptr;
+        std::atomic<float>* duckRelease = nullptr;
         std::atomic<float>* damageBits = nullptr;
         std::atomic<float>* damageRate = nullptr;
         std::atomic<float>* damageJitter = nullptr;

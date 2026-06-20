@@ -461,4 +461,64 @@ private:
     int ringIdx = 0;
 };
 
+// ---- Sidechain Ducker: an envelope follower on a "trigger" buffer drives a
+// gain reduction that gets applied to a "target" buffer. The MK-ULTRA-specific
+// use is "self-sidechain the wet" -- the input is the trigger, the granular +
+// prettifier wet paths are the target, so the original sound breathes through
+// the texture instead of being smothered. Allocation-free in process.
+class SidechainDucker
+{
+public:
+    void prepare (double sampleRate, int numChannels, int maxBlock)
+    {
+        sr = sampleRate > 0.0 ? sampleRate : 44100.0;
+        const int ch = juce::jlimit (1, 2, juce::jmax (1, numChannels));
+        juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) juce::jmax (1, maxBlock), (juce::uint32) ch };
+        env.prepare (spec);
+        env.setLevelCalculationType (juce::dsp::BallisticsFilterLevelCalculationType::peak);
+        env.setAttackTime  (8.0f);
+        env.setReleaseTime (140.0f);
+    }
+
+    void reset() { env.reset(); }
+
+    void setAttackMs  (float ms) { env.setAttackTime  (juce::jlimit (0.1f, 200.0f, ms)); }
+    void setReleaseMs (float ms) { env.setReleaseTime (juce::jlimit (10.0f, 2000.0f, ms)); }
+
+    // Duck `target` by the envelope of `trigger`. `amount` (0..1) sets max
+    // gain reduction (1 = full duck to silence at full trigger). `threshold`
+    // (0..1, linear) is below-which the trigger doesn't duck at all.
+    void process (juce::AudioBuffer<float>& target,
+                  const juce::AudioBuffer<float>& trigger,
+                  float amount, float threshold)
+    {
+        if (amount <= 0.001f)
+            return;
+        const int n  = target.getNumSamples();
+        const int ch = juce::jmin (target.getNumChannels(), trigger.getNumChannels());
+        if (n <= 0 || ch <= 0 || n != trigger.getNumSamples())
+            return;
+
+        for (int i = 0; i < n; ++i)
+        {
+            // Take the rectified MAX across channels as the sidechain signal.
+            float in = 0.0f;
+            for (int c = 0; c < ch; ++c)
+                in = juce::jmax (in, std::abs (trigger.getSample (c, i)));
+            // Envelope-follow with the SAME state on channel 0 (single-channel SC).
+            const float e = env.processSample (0, in);
+            // Gain reduction: linear above threshold, full duck at unity.
+            const float over = juce::jmax (0.0f, e - threshold);
+            const float reduction = juce::jlimit (0.0f, 1.0f, amount * over / juce::jmax (0.001f, 1.0f - threshold));
+            const float g = 1.0f - reduction;
+            for (int c = 0; c < target.getNumChannels(); ++c)
+                target.setSample (c, i, target.getSample (c, i) * g);
+        }
+    }
+
+private:
+    juce::dsp::BallisticsFilter<float> env;
+    double sr = 44100.0;
+};
+
 } // namespace gf

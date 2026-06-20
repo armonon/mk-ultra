@@ -437,7 +437,7 @@ private:
     // ---- MACHINES tab: UI for the four transform machines. Each gets an On
     // toggle, a Mix knob, and its key parameters. Plain knobs (no lock/mod ring).
     juce::Label machinesHeader;
-    juce::Label machSpectralTitle, machPitchTitle, machDamageTitle, machTimeTitle;
+    juce::Label machSpectralTitle, machPitchTitle, machDamageTitle, machTimeTitle, machDuckerTitle;
 
     juce::ToggleButton machSpectralOn { "On" };
     juce::Slider       machSpectralMix, machSpectralAmount;
@@ -459,6 +459,11 @@ private:
     juce::Slider       machDamageSplitHz, machDamageHighAmount;
     juce::Label        machDamageSplitHzL, machDamageHighAmountL;
 
+    // Sidechain Ducker (self-sidechain on input env -> attenuates the wet).
+    juce::ToggleButton machDuckerOn { "On" };
+    juce::Slider       machDuckerAmount, machDuckerThreshold, machDuckerAttack, machDuckerRelease;
+    juce::Label        machDuckerAmountL, machDuckerThresholdL, machDuckerAttackL, machDuckerReleaseL;
+
     juce::ToggleButton machTimeOn { "On" };
     juce::ToggleButton machTimeSync { "Sync" };
     juce::ComboBox     machTimeDivision;
@@ -476,7 +481,7 @@ private:
     juce::TextButton   machTimeMore   { "Advanced" };
 
     std::unique_ptr<ButtonAttachment> machSpectralOnAttach, machPitchOnAttach, machPitchFormantAttach,
-                                      machDamageOnAttach, machDamageSplitAttach, machTimeOnAttach;
+                                      machDamageOnAttach, machDamageSplitAttach, machTimeOnAttach, machDuckerOnAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> machDamageClipAttach, machTimeDivisionAttach,
                                       machTimeRoute1TargetAttach, machTimeRoute2TargetAttach;
     std::unique_ptr<ButtonAttachment> machTimeSyncAttach;
@@ -487,6 +492,8 @@ private:
                                       machDamageBitsAttach, machDamageRateAttach, machDamageJitterAttach,
                                       machDamageNoiseAttach, machDamageDropoutAttach, machDamageToneAttach,
                                       machDamageSplitHzAttach, machDamageHighAmountAttach,
+                                      machDuckerAmountAttach, machDuckerThresholdAttach,
+                                      machDuckerAttackAttach, machDuckerReleaseAttach,
                                       machTimeMixAttach, machTimeRateAttach, machTimeSizeAttach,
                                       machTimeChanceAttach, machTimeReverseAttach;
 

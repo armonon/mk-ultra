@@ -10,6 +10,7 @@ add_executable(GrainFreezeTests
     source/AntiAliasTests.cpp
     source/UpdateCheckerTests.cpp
     source/MultibandDamageTests.cpp
+    source/DuckerTests.cpp
     ${CMAKE_SOURCE_DIR}/plugin/source/GranularEngine.cpp
     ${CMAKE_SOURCE_DIR}/plugin/source/Entropy/EntropyEngine.cpp
     ${CMAKE_SOURCE_DIR}/plugin/source/Mix/MixEngine.cpp

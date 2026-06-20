@@ -113,6 +113,11 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.damageSplitOn, "damageSplitOn");
     bind (paramPtrs.damageSplitHz, "damageSplitHz");
     bind (paramPtrs.damageHighAmount, "damageHighAmount");
+    bind (paramPtrs.duckOn, "duckOn");
+    bind (paramPtrs.duckAmount, "duckAmount");
+    bind (paramPtrs.duckThreshold, "duckThreshold");
+    bind (paramPtrs.duckAttack, "duckAttack");
+    bind (paramPtrs.duckRelease, "duckRelease");
     bind (paramPtrs.motionMatrixOn, "motionMatrixOn");
     bind (paramPtrs.dryWet, "dryWet");
 
@@ -411,6 +416,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addBool   ("damageSplitOn", "Damage Multiband", false);
     addFloat  ("damageSplitHz", "Damage Split",     NormalisableRange<float> (80.0f, 8000.0f, 1.0f, 0.35f), 800.0f);
     addFloat  ("damageHighAmount", "Damage High Drive", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    // Sidechain Ducker: self-sidechains the WET (entropy + prettifier returns) off the
+    // input envelope so the original sound breathes through the texture instead of
+    // being smothered. Pure MK-ULTRA-identity feature.
+    addBool   ("duckOn",        "Ducker",          false);
+    addFloat  ("duckAmount",    "Duck Amount",     NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f);
+    addFloat  ("duckThreshold", "Duck Threshold",  NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.1f);
+    addFloat  ("duckAttack",    "Duck Attack",     NormalisableRange<float> (0.1f, 200.0f, 0.1f, 0.3f), 8.0f);
+    addFloat  ("duckRelease",   "Duck Release",    NormalisableRange<float> (10.0f, 2000.0f, 1.0f, 0.4f), 140.0f);
     addMachine ("motionMatrix", "Motion Matrix", true);
     addFloat ("analyzerScopeMix", "Analyzer / Scopes Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
     addFloat ("analyzerScopeAmount", "Analyzer / Scopes Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
@@ -660,6 +673,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     spectralMachine.prepare (sampleRate, getTotalNumOutputChannels());
     damageMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     damageMultiband.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
+    ducker.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
     pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
 
@@ -880,6 +894,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
                        || pitchMatchOn
                        || ctl.sampleModeOn
                        || sampleFreezePending
+                       || isOn (paramPtrs.duckOn)
                        || (! textureActive && ! beautyActive);
     if (needsDry)
         dryInBuffer.makeCopyOf (buffer, true);
@@ -1132,6 +1147,22 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     mixParams.pitchLockAmount = loadParam (p.pitchLockAmount, 1.0f);
     mixParams.pitchLockFormant = isOn (p.pitchLockFormant);
 
+
+    // Self-sidechain Ducker: drive the WET (entropy + prettifier) attenuation
+    // off the dry-input envelope so the original sound breathes through the
+    // texture. The trigger is the dry input (whether or not needsDry is set --
+    // the input buffer hasn't been replaced yet, the wet copies live in
+    // entropyBuffer/prettifierBuffer).
+    if (isOn (paramPtrs.duckOn))
+    {
+        ducker.setAttackMs  (loadParam (paramPtrs.duckAttack, 8.0f));
+        ducker.setReleaseMs (loadParam (paramPtrs.duckRelease, 140.0f));
+        const float amt = loadParam (paramPtrs.duckAmount, 0.5f);
+        const float thr = loadParam (paramPtrs.duckThreshold, 0.1f);
+        const auto& trigger = needsDry ? dryInBuffer : buffer;
+        if (textureActive)  ducker.process (entropyBuffer,   trigger, amt, thr);
+        if (beautyActive)   ducker.process (prettifierBuffer, trigger, amt, thr);
+    }
 
     // Master bus, minus the final dynamics (deferred until after Sample Mode).
     mixEngine.processParallel (buffer,

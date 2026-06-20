@@ -957,6 +957,17 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machTimeRoute1Depth, machTimeRoute1DepthL, "Depth", "timeBreakerMod1Depth", machTimeRoute1DepthAttach);
     machKnob (machTimeRoute2Depth, machTimeRoute2DepthL, "Depth", "timeBreakerMod2Depth", machTimeRoute2DepthAttach);
 
+    // Sidechain Ducker: lets the original input breathe through the wet texture.
+    setupSectionLabel (machDuckerTitle, "DUCKER", 13.0f);
+    machToggle (machDuckerOn, "duckOn", machDuckerOnAttach);
+    machKnob (machDuckerAmount,    machDuckerAmountL,    "Amount",    "duckAmount",    machDuckerAmountAttach);
+    machKnob (machDuckerThreshold, machDuckerThresholdL, "Threshold", "duckThreshold", machDuckerThresholdAttach);
+    machKnob (machDuckerAttack,    machDuckerAttackL,    "Attack",    "duckAttack",    machDuckerAttackAttach);
+    machKnob (machDuckerRelease,   machDuckerReleaseL,   "Release",   "duckRelease",   machDuckerReleaseAttach);
+    machDuckerOn.setTooltip ("Self-sidechain Ducker: the input envelope attenuates the WET (entropy + Beauty/Space) so the original sound breathes through the texture");
+    machDuckerAmount.setTooltip ("Maximum gain reduction at full trigger (0 = no duck, 1 = full silence at peak)");
+    machDuckerThreshold.setTooltip ("Trigger level below which no ducking happens (so quiet passages keep the full wet)");
+
     // "Advanced" expanders: collapsed by default so each machine shows only its
     // essentials; toggling reveals the deep params and re-lays out the tab.
     auto setupMoreButton = [this] (juce::TextButton& b)
@@ -1353,10 +1364,14 @@ void GrainFreezeEditor::updateTabVisibility()
     const bool damageMore = machDamageMore.getToggleState();
     const bool timeMore   = machTimeMore.getToggleState();
     machinesHeader.setVisible (machinesTab);
-    for (auto* l : { &machSpectralTitle, &machPitchTitle, &machDamageTitle, &machTimeTitle })
+    for (auto* l : { &machSpectralTitle, &machPitchTitle, &machDamageTitle, &machTimeTitle, &machDuckerTitle })
         l->setVisible (machinesTab);
-    for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn, &machTimeSync })
+    for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn, &machTimeSync, &machDuckerOn })
         b->setVisible (machinesTab);
+    for (auto* s : { &machDuckerAmount, &machDuckerThreshold, &machDuckerAttack, &machDuckerRelease })
+        s->setVisible (machinesTab);
+    for (auto* l : { &machDuckerAmountL, &machDuckerThresholdL, &machDuckerAttackL, &machDuckerReleaseL })
+        l->setVisible (machinesTab);
     for (auto* b : { &machDamageMore, &machTimeMore })
         b->setVisible (machinesTab);
     // Always-visible essentials (Spectral + Pitch are already minimal).
@@ -1998,6 +2013,25 @@ void GrainFreezeEditor::resized()
                 routeRow2.removeFromLeft (gap * 2);
                 slot (machTimeRoute2Target, machTimeRoute2Depth, machTimeRoute2DepthL);
             }
+            area.removeFromTop (gap);
+        }
+
+        // Sidechain Ducker: a single compact row -- title + On + 4 knobs inline.
+        {
+            auto block = area.removeFromTop (76);
+            machDuckerTitle.setBounds (block.removeFromLeft (90).withSizeKeepingCentre (90, 22));
+            block.removeFromLeft (gap);
+            machDuckerOn.setBounds (block.removeFromLeft (60).withSizeKeepingCentre (58, 24));
+            block.removeFromLeft (gap);
+            const int kw = 78;
+            std::pair<juce::Slider*, juce::Label*> dk[] = {
+                { &machDuckerAmount,    &machDuckerAmountL },
+                { &machDuckerThreshold, &machDuckerThresholdL },
+                { &machDuckerAttack,    &machDuckerAttackL },
+                { &machDuckerRelease,   &machDuckerReleaseL } };
+            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 4), block.getHeight());
+            for (auto& kv : dk)
+                layoutDialCell (krow, *kv.second, *kv.first, kw);
             area.removeFromTop (gap);
         }
     }
