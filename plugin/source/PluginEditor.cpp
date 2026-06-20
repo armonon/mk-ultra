@@ -1166,7 +1166,17 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     });
 
     if (! (bool) proc.apvts.state.getProperty ("hasSeenTour", false))
-        juce::MessageManager::callAsync ([this] { launchTour(); });
+    {
+        // Defer the auto-launch with a SafePointer so it can't dereference a
+        // freed editor if the host destroys it before the async fires (pluginval
+        // and some DAWs cycle the editor rapidly during scan / state restore).
+        juce::Component::SafePointer<GrainFreezeEditor> safeThis (this);
+        juce::Timer::callAfterDelay (50, [safeThis]
+        {
+            if (safeThis != nullptr && safeThis->isShowing())
+                safeThis->launchTour();
+        });
+    }
 
     updateButton.setVisible (false);
     updateButton.setTooltip ("Click to open the GitHub release page and download the installer");
@@ -1327,6 +1337,12 @@ void GrainFreezeEditor::refreshPresetList()
 
 void GrainFreezeEditor::launchTour()
 {
+    // Guard: hosts can invoke the editor's button onClick handlers before the
+    // window is actually displayed (e.g. during scan/validation), in which case
+    // grabbing keyboard focus or laying out against an empty bounds will crash.
+    if (getLocalBounds().isEmpty())
+        return;
+
     // Five stops walk through the experience: HOME tab -> macros -> Morph Pad
     // -> Browse (presets) -> MACHINES tab. Each step retargets a visible
     // component, switching tabs along the way so the target is in view.
