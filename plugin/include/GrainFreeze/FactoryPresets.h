@@ -109,6 +109,59 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "textureGrainOn", 1 }, { "identityLossOn", 1 }, { "identityLoss", 0.5f }, { "pitch", 7 },
             { "pitchFormantOn", 1 }, { "pitchFormantMix", 0.4f }, { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 },
             { "prettyReverbSize", 0.8f } } },
+
+        // ---- Drums ---- (tuned for transient/percussive material: short grains,
+        // ducker keeps the original punch, multiband damage targets hihats not kick)
+        { "Drums - Tape Saturated", {
+            // Warm tape colour + a gentle granular texture layered behind the dry. Ducker keeps the kick clear.
+            { "textureGrainOn", 1 }, { "grainSize", 40 }, { "density", 80 }, { "spray", 30 },
+            { "textureGrainMix", 0.45f },
+            { "damageOn", 1 }, { "damageClip", 1 }, { "damageAmount", 0.35f }, { "damageMix", 0.7f },
+            { "duckOn", 1 }, { "duckAmount", 0.5f }, { "duckThreshold", 0.15f }, { "duckAttack", 5.0f }, { "duckRelease", 120.0f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.35f }, { "beautySpaceMix", 0.6f } } },
+
+        { "Drums - Destroyed Top", {
+            // Multiband damage hammers the highs (hats/crash) while the low band stays clean.
+            { "textureGrainOn", 1 }, { "grainSize", 30 }, { "density", 110 }, { "textureGrainMix", 0.35f },
+            { "damageOn", 1 }, { "damageClip", 3 /*Fold*/ }, { "damageAmount", 0.25f }, { "damageMix", 0.9f },
+            { "damageSplitOn", 1 }, { "damageSplitHz", 1200.0f }, { "damageHighAmount", 0.9f },
+            { "duckOn", 1 }, { "duckAmount", 0.45f }, { "duckRelease", 90.0f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.3f } } },
+
+        { "Drums - Stutter Fill", {
+            // Time Breaker on 1/16 stutter for fills; mostly dry with rhythmic glitches.
+            { "textureGrainOn", 1 }, { "grainSize", 25 }, { "density", 120 }, { "textureGrainMix", 0.3f },
+            { "timeBreakerOn", 1 }, { "timeBreakerSync", 1 }, { "timeBreakerDivision", 5 /*1/16*/ },
+            { "stutterChance", 0.6f }, { "stutterSize", 0.5f }, { "reverseChance", 0.2f }, { "timeBreakerMix", 0.75f },
+            { "duckOn", 1 }, { "duckAmount", 0.4f }, { "duckAttack", 3.0f }, { "duckRelease", 60.0f },
+            { "beautySpaceOn", 1 }, { "echoOn", 1 }, { "echoMix", 0.15f }, { "echoFeedback", 0.25f },
+            { "beautySpaceMix", 0.55f } } },
+
+        { "Drums - Lo-Fi Dusty", {
+            // Heavy bit-crush + SR reduction + dropouts for a dusty boombap / sampler vibe.
+            { "textureGrainOn", 1 }, { "grainSize", 60 }, { "density", 60 }, { "textureGrainMix", 0.5f },
+            { "damageOn", 1 }, { "damageClip", 1 /*Tape*/ }, { "damageAmount", 0.2f },
+            { "damageBits", 9.0f }, { "damageRate", 8.0f }, { "damageNoise", 0.12f }, { "damageDropout", 0.05f },
+            { "damageTone", 0.5f }, { "damageMix", 0.85f },
+            { "beautySpaceOn", 1 }, { "crushOn", 1 }, { "crushBits", 12.0f }, { "crushMix", 0.65f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.3f }, { "prettyReverbDamping", 0.7f } } },
+
+        { "Drums - Sidechain Pump", {
+            // Big lush reverb on the WET, ducker hammers it down so the dry kick punches through -> the classic
+            // ambient/pump bloom that opens and closes with the groove.
+            { "textureGrainOn", 1 }, { "grainSize", 80 }, { "density", 50 }, { "textureGrainMix", 0.55f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.9f }, { "prettyReverbDamping", 0.3f },
+            { "prettyReverbMix", 0.55f },
+            { "duckOn", 1 }, { "duckAmount", 0.85f }, { "duckThreshold", 0.08f }, { "duckAttack", 2.0f }, { "duckRelease", 220.0f },
+            { "beautySpaceMix", 0.8f } } },
+
+        { "Drums - Shimmer Wash", {
+            // Angel octave-up + Convolve-friendly wide reverb on the wet, ducked so the original hits stay sharp.
+            { "textureGrainOn", 1 }, { "grainSize", 50 }, { "density", 70 }, { "textureGrainMix", 0.4f },
+            { "beautySpaceOn", 1 }, { "angelOn", 1 }, { "angelMix", 0.45f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.85f }, { "prettyReverbMix", 0.4f },
+            { "duckOn", 1 }, { "duckAmount", 0.6f }, { "duckThreshold", 0.1f }, { "duckRelease", 180.0f },
+            { "beautySpaceMix", 0.7f } } },
     };
     return presets;
 }
