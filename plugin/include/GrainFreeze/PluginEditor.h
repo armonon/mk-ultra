@@ -9,6 +9,7 @@
 #include "GrainFreeze/BiohazardLookAndFeel.h"
 #include "GrainFreeze/Biohazard.h"
 #include "GrainFreeze/UpdateChecker.h"
+#include "GrainFreeze/TourOverlay.h"
 #include <array>
 
 // Draws the saturation transfer curve for the current type + drive.
@@ -435,6 +436,13 @@ private:
     gf::UpdateChecker updateChecker;
     juce::TextButton  updateButton;
     juce::String      updateUrl;
+
+    // First-run / help tour: a ? pill in the header opens an overlay that walks
+    // through HOME, the Morph Pad, MACHINES, and Browse. Auto-opens once for
+    // first-time users (persisted via APVTS state).
+    juce::TextButton  tourButton { "?" };
+    gf::TourOverlay   tourOverlay;
+    void launchTour();
 
     // ---- MACHINES tab: UI for the four transform machines. Each gets an On
     // toggle, a Mix knob, and its key parameters. Plain knobs (no lock/mod ring).

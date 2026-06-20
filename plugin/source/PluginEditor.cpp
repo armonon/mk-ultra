@@ -1109,6 +1109,23 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     // Update pill: hidden until a newer GitHub release is found, then it appears
     // and links to the download. The .pkg / Windows installer overrides the old
     // version on install, so users just download + run -- no separate Hub needed.
+    // Tour button: a ? pill that opens the help overlay. Also auto-launches the
+    // tour on first run (until the user finishes or skips it).
+    tourButton.setTooltip ("Open the MK-ULTRA quick tour");
+    tourButton.onClick = [this] { launchTour(); };
+    addAndMakeVisible (tourButton);
+
+    addAndMakeVisible (tourOverlay);
+    tourOverlay.setVisible (false);
+    tourOverlay.setWantsKeyboardFocus (true);
+    tourOverlay.onDismiss ([this]
+    {
+        proc.apvts.state.setProperty ("hasSeenTour", true, nullptr);
+    });
+
+    if (! (bool) proc.apvts.state.getProperty ("hasSeenTour", false))
+        juce::MessageManager::callAsync ([this] { launchTour(); });
+
     updateButton.setVisible (false);
     updateButton.setTooltip ("Click to open the GitHub release page and download the installer");
     addChildComponent (updateButton);
@@ -1264,6 +1281,43 @@ void GrainFreezeEditor::refreshPresetList()
     auto current = proc.presets.getCurrentPresetName();
     if (current.isNotEmpty())
         presetBox.setText (current, juce::dontSendNotification);
+}
+
+void GrainFreezeEditor::launchTour()
+{
+    // Five stops walk through the experience: HOME tab -> macros -> Morph Pad
+    // -> Browse (presets) -> MACHINES tab. Each step retargets a visible
+    // component, switching tabs along the way so the target is in view.
+    switchTab (4);   // HOME
+    std::vector<gf::TourOverlay::Step> steps;
+    steps.push_back ({ tabHome.getBounds(),
+                       "HOME is your cockpit. Most of the time you'll stay here -- pick a preset, "
+                       "turn the 7 macro knobs (Texture, Beauty, Space, Damage...), shape the sound." });
+    if (! macroKnobs.empty())
+    {
+        auto first = macroKnobs.front().getBounds();
+        auto last  = macroKnobs.back().getBounds();
+        steps.push_back ({ first.getUnion (last),
+                           "These are the macros. Each one drives a curated, musical path through the "
+                           "engine. They're enough to finish a sound without ever opening another tab." });
+    }
+    steps.push_back ({ morphPad.getBounds(),
+                       "The Morph Pad blends FOUR captured snapshots. Capture A/B/C/D with the "
+                       "buttons below, then drag the puck to crossfade between them in real time." });
+    steps.push_back ({ browseButton.getBounds().getUnion (presetBox.getBounds()),
+                       "Presets live behind Browse. Pick a vibe (Beautiful, Dream, Alien, Destroyed, "
+                       "Cinematic, Identity Loss) then nudge from there. Click Share to export the "
+                       "current sound as a .mkultra file you can send to anyone." });
+    steps.push_back ({ tabMachines.getBounds(),
+                       "MACHINES holds the deeper modules (Spectral, Pitch, Damage, Time Breaker, "
+                       "Ducker). Each one stays collapsed until you click Advanced -- depth on demand, "
+                       "not in your face." });
+
+    tourOverlay.setSteps (std::move (steps));
+    tourOverlay.setBounds (getLocalBounds());
+    tourOverlay.toFront (false);
+    tourOverlay.setVisible (true);
+    tourOverlay.grabKeyboardFocus();
 }
 
 void GrainFreezeEditor::switchTab (int tabIndex)
@@ -1624,6 +1678,8 @@ void GrainFreezeEditor::resized()
     proc.apvts.state.setProperty ("editorHeight", getHeight(), nullptr);
 
     fadeOverlay.setBounds (getLocalBounds());
+    tourOverlay.setBounds (getLocalBounds());
+    tourOverlay.toFront (false);
     auto area = getLocalBounds().reduced (pad);
 
     // Header band: brand logo (painted in paint()) on the left, tabs aligned
@@ -1673,6 +1729,8 @@ void GrainFreezeEditor::resized()
 
     // Right side: Panic, Freeze, and the update pill (only takes space when visible).
     panicButton.setBounds (util.removeFromRight (104).reduced (2, 4));
+    util.removeFromRight (gap);
+    tourButton.setBounds (util.removeFromRight (28).reduced (2, 4));
     util.removeFromRight (gap);
     freezeButton.setBounds (util.removeFromRight (104).reduced (2, 4));
     if (updateButton.isVisible())
