@@ -540,7 +540,8 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     // (or imports one if cmd/ctrl-clicked).  Drop the file in Slack/Discord/etc
     // to trade sounds.
     addAndMakeVisible (shareButton);
-    shareButton.setTooltip ("Click: export current sound to a .mkultra file.   Cmd-click: import one.");
+    shareButton.setTooltip ("Click: export the current sound to a .mkultra file.   "
+                            "\xe2\x8c\x98/Ctrl-click: import one.");
     shareButton.onClick = [this]
     {
         const bool importMode = juce::ModifierKeys::getCurrentModifiers().isCommandDown();
@@ -572,6 +573,32 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
                         proc.presets.exportPresetToFile (f);
                 });
         }
+    };
+
+    // Delete preset: removes the currently-loaded user preset file (does nothing
+    // for factory presets, which live in code). Confirms first.
+    deletePresetButton.setTooltip ("Delete the currently-selected user preset (factory presets are protected).");
+    addAndMakeVisible (deletePresetButton);
+    deletePresetButton.onClick = [this]
+    {
+        const auto cur = proc.presets.getCurrentPresetName();
+        // Don't delete factory presets -- they live in code, not on disk.
+        const auto factoryNames = []
+        {
+            juce::StringArray a;
+            for (auto& fp : gf::factoryPresets()) a.add (fp.name);
+            return a;
+        }();
+        if (cur.isEmpty() || factoryNames.contains (cur))
+            return;
+        juce::AlertWindow::showOkCancelBox (
+            juce::AlertWindow::QuestionIcon, "Delete preset?",
+            "Permanently delete \"" + cur + "\"?", "Delete", "Cancel", this,
+            juce::ModalCallbackFunction::create ([this, cur] (int r)
+            {
+                if (r == 1 && proc.presets.deletePreset (cur))
+                    refreshPresetList();
+            }));
     };
 
     addAndMakeVisible (browseButton);
@@ -886,7 +913,15 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             });
     };
     addAndMakeVisible (convolutionLoadButton);
-    convolutionIRLabel.setText (juce::File (proc.getConvolutionIRPath()).getFileNameWithoutExtension(), juce::dontSendNotification);
+    {
+        const juce::File savedIR (proc.getConvolutionIRPath());
+        if (savedIR.getFullPathName().isEmpty())
+            convolutionIRLabel.setText ("", juce::dontSendNotification);
+        else if (savedIR.existsAsFile())
+            convolutionIRLabel.setText (savedIR.getFileNameWithoutExtension(), juce::dontSendNotification);
+        else
+            convolutionIRLabel.setText ("IR not found: " + savedIR.getFileName(), juce::dontSendNotification);
+    }
     convolutionIRLabel.setJustificationType (juce::Justification::centredLeft);
     convolutionIRLabel.setColour (juce::Label::textColourId, gf::BiohazardLookAndFeel::textCol);
     addAndMakeVisible (convolutionIRLabel);
@@ -1031,6 +1066,8 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         addAndMakeVisible (modMatrixSource[(size_t) i]);
         addAndMakeVisible (modMatrixTarget[(size_t) i]);
         addAndMakeVisible (modMatrixDepth[(size_t) i]);
+        addAndMakeVisible (modMatrixActivity[(size_t) i]);
+        modMatrixActivity[(size_t) i].setInterceptsMouseClicks (false, false);
         modMatrixArrow[(size_t) i].setText (juce::String (juce::CharPointer_UTF8 ("\xe2\x86\x92")), juce::dontSendNotification);
         modMatrixArrow[(size_t) i].setJustificationType (juce::Justification::centred);
         addAndMakeVisible (modMatrixArrow[(size_t) i]);
@@ -1160,12 +1197,25 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (tourOverlay);
     tourOverlay.setVisible (false);
     tourOverlay.setWantsKeyboardFocus (true);
-    tourOverlay.onDismiss ([this]
+    // User-scoped settings file (not APVTS state) so the tour flag persists
+    // across DAW sessions instead of replaying on every new project.
+    auto getUserSettings = []
     {
-        proc.apvts.state.setProperty ("hasSeenTour", true, nullptr);
+        juce::PropertiesFile::Options opts;
+        opts.applicationName     = "MK-ULTRA";
+        opts.filenameSuffix      = ".settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.folderName          = "MK-ULTRA";
+        static juce::ApplicationProperties props;
+        props.setStorageParameters (opts);
+        return props.getUserSettings();
+    };
+    tourOverlay.onDismiss ([getUserSettings]
+    {
+        if (auto* s = getUserSettings()) { s->setValue ("hasSeenTour", true); s->saveIfNeeded(); }
     });
 
-    if (! (bool) proc.apvts.state.getProperty ("hasSeenTour", false))
+    if (auto* s = getUserSettings(); s == nullptr || ! s->getBoolValue ("hasSeenTour", false))
     {
         // Defer the auto-launch with a SafePointer so it can't dereference a
         // freed editor if the host destroys it before the async fires (pluginval
@@ -1247,6 +1297,38 @@ void GrainFreezeEditor::timerCallback()
     const float lvl = juce::jmax (proc.getOutputLevel (0), proc.getOutputLevel (1));
     const bool globalModOn = proc.apvts.getRawParameterValue ("globalModOn")->load() > 0.5f;
     const bool animating = lvl > 0.001f || globalModOn || proc.getTimeBreakerGate() > 0.001f;
+
+    // Mod-matrix activity LEDs: read each slot's current source value x depth,
+    // light the LED, then nudge the value toward 0 so it decays smoothly.
+    if (currentTab == 3)   // only when MACHINES is showing
+    {
+        const std::array<const char*, 4> ids { "modSlot1", "modSlot2", "modSlot3", "modSlot4" };
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto srcIdx = (int) proc.apvts.getRawParameterValue (juce::String (ids[(size_t) i]) + "Source")->load();
+            const auto tgtIdx = (int) proc.apvts.getRawParameterValue (juce::String (ids[(size_t) i]) + "Target")->load();
+            const auto depth  = proc.apvts.getRawParameterValue (juce::String (ids[(size_t) i]) + "Depth")->load();
+            float level = 0.0f;
+            if (srcIdx > 0 && tgtIdx > 0 && std::abs (depth) > 0.001f)
+            {
+                // Approximate the live source value via the editor's existing reads
+                // (the macros / global LFO output / Time Breaker gate are all
+                // visible to the editor). 1 = LFO; 2 = TB gate; 3+ = macros.
+                float src = 0.0f;
+                if (srcIdx == 2) src = proc.getTimeBreakerGate();
+                else if (srcIdx >= 3 && srcIdx <= 9)
+                {
+                    static const char* macroIds[7] = { "macroTexture", "macroBeauty", "macroSpace",
+                                                       "macroChaos", "macroMotion", "macroDamage", "macroEmotion" };
+                    src = proc.apvts.getRawParameterValue (macroIds[srcIdx - 3])->load();
+                }
+                level = juce::jlimit (0.0f, 1.0f, std::abs (src * depth));
+            }
+            auto& led = modMatrixActivity[(size_t) i];
+            led.level = juce::jmax (level, led.level * 0.85f);   // smooth decay
+            if (led.level > 0.005f) led.repaint();
+        }
+    }
 
     if (animating)
     {
@@ -1819,6 +1901,8 @@ void GrainFreezeEditor::resized()
     browseButton.setBounds (bar.removeFromLeft (84).reduced (2, 4));
     bar.removeFromLeft (gap);
     saveButton.setBounds   (bar.removeFromRight (78).reduced (2, 4));
+    bar.removeFromRight (4);
+    deletePresetButton.setBounds (bar.removeFromRight (32).reduced (2, 4));
     bar.removeFromRight (gap);
     shareButton.setBounds  (bar.removeFromRight (72).reduced (2, 4));
     presetName.setBounds   (bar.reduced (2, 4));
@@ -2199,9 +2283,9 @@ void GrainFreezeEditor::resized()
         // Sidechain Ducker: a single compact row -- title + On + 4 knobs inline.
         {
             auto block = area.removeFromTop (76);
-            machDuckerTitle.setBounds (block.removeFromLeft (90).withSizeKeepingCentre (90, 22));
+            machDuckerTitle.setBounds (block.removeFromLeft (96).withSizeKeepingCentre (96, 22));
             block.removeFromLeft (gap);
-            machDuckerOn.setBounds (block.removeFromLeft (60).withSizeKeepingCentre (58, 24));
+            machDuckerOn.setBounds (block.removeFromLeft (76).withSizeKeepingCentre (74, 24));
             block.removeFromLeft (gap);
             const int kw = 78;
             std::pair<juce::Slider*, juce::Label*> dk[] = {
@@ -2231,7 +2315,9 @@ void GrainFreezeEditor::resized()
                 modMatrixArrow [(size_t) i].setBounds (row.removeFromLeft (24));
                 modMatrixTarget[(size_t) i].setBounds (row.removeFromLeft (160).reduced (2, 1));
                 row.removeFromLeft (gap);
-                modMatrixDepth [(size_t) i].setBounds (row.removeFromLeft (juce::jmin (260, row.getWidth())).reduced (2, 4));
+                modMatrixActivity[(size_t) i].setBounds (row.removeFromLeft (12).withSizeKeepingCentre (10, 10));
+                row.removeFromLeft (4);
+                modMatrixDepth [(size_t) i].setBounds (row.removeFromLeft (juce::jmin (244, row.getWidth())).reduced (2, 4));
                 area.removeFromTop (2);
             }
         }

@@ -263,6 +263,7 @@ private:
     juce::TextButton saveButton      { "Save" };
     juce::TextButton browseButton    { "Browse" };
     juce::TextButton shareButton     { "Share" };          // export current sound to a .mkultra file
+    juce::TextButton deletePresetButton { juce::String (juce::CharPointer_UTF8 ("\xe2\x8a\x97")) };   // ⊗ delete current user preset
     std::unique_ptr<juce::FileChooser> shareFileChooser;
     juce::TextButton prevButton      { "<" };
     juce::TextButton nextButton      { ">" };
@@ -485,6 +486,23 @@ private:
     std::array<juce::ComboBox, 4> modMatrixSource, modMatrixTarget;
     std::array<juce::Slider,  4> modMatrixDepth;
     std::array<juce::Label,   4> modMatrixArrow;   // "->" between source and target
+
+    // Tiny activity LED per slot -- brightens with |source x depth| so users see
+    // the routing is actually doing something. Painted by the editor's timer.
+    struct ModActivity : juce::Component
+    {
+        float level = 0.0f;
+        void paint (juce::Graphics& g) override
+        {
+            const auto b = getLocalBounds().toFloat().reduced (1.0f);
+            const float a = juce::jlimit (0.05f, 1.0f, level);
+            g.setColour (gf::BiohazardLookAndFeel::toxic.withAlpha (a));
+            g.fillEllipse (b);
+            g.setColour (juce::Colours::black.withAlpha (0.5f));
+            g.drawEllipse (b, 1.0f);
+        }
+    };
+    std::array<ModActivity, 4> modMatrixActivity;
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>, 4>
         modMatrixSourceAttach, modMatrixTargetAttach;
     std::array<std::unique_ptr<SliderAttachment>, 4> modMatrixDepthAttach;

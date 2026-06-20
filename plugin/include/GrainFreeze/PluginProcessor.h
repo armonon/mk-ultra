@@ -397,6 +397,7 @@ private:
 
     gf::MidiNoteController midiCtrl;
     gf::MPEVoiceTracker    mpeTracker;
+    bool mpeWasOn = false;
     gf::SampleFreezeEngine sampleEngine;
     std::atomic<bool> sampleFreezeRequested { false };
     // Spectral machine: capture a fresh spectrum for a short window each time it

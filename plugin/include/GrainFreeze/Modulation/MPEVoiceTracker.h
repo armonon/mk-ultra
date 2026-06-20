@@ -84,8 +84,15 @@ private:
                 return;
             }
         }
-        // All full -- steal the oldest by overwriting slot 0.
-        writeVoice (0, newNote, true);
+        // All full -- steal the OLDEST active voice (lowest startTime).
+        int oldest = 0;
+        std::uint64_t oldestT = voices[0].startTime.load (std::memory_order_relaxed);
+        for (int i = 1; i < (int) voices.size(); ++i)
+        {
+            const auto t = voices[(size_t) i].startTime.load (std::memory_order_relaxed);
+            if (t < oldestT) { oldest = i; oldestT = t; }
+        }
+        writeVoice ((size_t) oldest, newNote, true);
     }
 
     void notePressureChanged (juce::MPENote n) override   { updateVoice (n); }
@@ -107,7 +114,10 @@ private:
         voices[slot].pressure .store (n.pressure.asUnsignedFloat(), std::memory_order_relaxed);
         voices[slot].timbre   .store (2.0f * n.timbre.asUnsignedFloat() - 1.0f, std::memory_order_relaxed);
         if (isNew)
+        {
             voices[slot].velocity.store (n.noteOnVelocity.asUnsignedFloat(), std::memory_order_relaxed);
+            voices[slot].startTime.store (++noteCounter, std::memory_order_relaxed);
+        }
         voices[slot].active.store (true, std::memory_order_release);
     }
 
@@ -127,11 +137,13 @@ private:
         std::atomic<float> pressure  { 0.0f };
         std::atomic<float> timbre    { 0.0f };
         std::atomic<float> velocity  { 0.0f };
+        std::atomic<std::uint64_t> startTime { 0 };  // monotonic counter -> oldest-first stealing
     };
 
     juce::MPEInstrument instrument;
     std::array<Voice, 16> voices {};
     std::atomic<int> root { 60 };
+    std::atomic<std::uint64_t> noteCounter { 0 };
 };
 
 } // namespace gf

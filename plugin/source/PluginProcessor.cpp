@@ -972,6 +972,9 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     //   modulate grain amplitude (pressure) and grain size (timbre).
     const bool mpeMode = ctl.midiEnabled && isOn (paramPtrs.mpeOn);
     const bool polyOn = mpeMode || (ctl.midiEnabled && isOn (paramPtrs.polyGrain));
+    if (mpeWasOn && ! mpeMode)
+        mpeTracker.releaseAllNotes();   // drop stale voices when MPE is toggled off mid-note
+    mpeWasOn = mpeMode;
     entropyEngine.setPolyOn (polyOn);
     entropyEngine.setMpeOn (mpeMode);
     if (mpeMode)
@@ -1539,6 +1542,8 @@ void GrainFreezeProcessor::setStateInformation (const void* data, int sizeInByte
             const juce::File f (savedIR);
             if (f.existsAsFile())
                 loadConvolutionIR (f);
+            else
+                convolutionIRPath = savedIR;   // remember the name so the editor can flag "IR not found"
         }
         apvts.replaceState (tree);
     }
