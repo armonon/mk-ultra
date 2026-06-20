@@ -261,6 +261,8 @@ private:
     juce::TextButton randomizeButton { "Randomize" };
     juce::TextButton saveButton      { "Save" };
     juce::TextButton browseButton    { "Browse" };
+    juce::TextButton shareButton     { "Share" };          // export current sound to a .mkultra file
+    std::unique_ptr<juce::FileChooser> shareFileChooser;
     juce::TextButton prevButton      { "<" };
     juce::TextButton nextButton      { ">" };
     juce::ComboBox   presetBox;

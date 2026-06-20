@@ -38,7 +38,13 @@ public:
     // Apply the built-in default patch (used as the first-insert sound).
     void loadDefaultPatch();
 
+    // Shareable preset export/import to any file path -- so users can trade
+    // sounds (drop the .mkultra file in a message and the other side imports it).
+    bool exportPresetToFile (const juce::File& file) const;
+    bool importPresetFromFile (const juce::File& file);
+
     static constexpr const char* kExtension = ".preset";
+    static constexpr const char* kShareExtension = ".mkultra";
 
 private:
     int indexOfCurrent (const juce::StringArray& names) const;

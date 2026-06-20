@@ -80,6 +80,25 @@ bool PresetManager::loadPreset (const juce::String& name)
     return true;
 }
 
+bool PresetManager::exportPresetToFile (const juce::File& file) const
+{
+    auto state = apvts.copyState();
+    auto xml   = state.createXml();
+    return xml != nullptr && xml->writeTo (file, {});
+}
+
+bool PresetManager::importPresetFromFile (const juce::File& file)
+{
+    if (! file.existsAsFile()) return false;
+    auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr) return false;
+    auto tree = juce::ValueTree::fromXml (*xml);
+    if (! tree.isValid()) return false;
+    apvts.replaceState (tree);
+    currentPreset = file.getFileNameWithoutExtension();
+    return true;
+}
+
 bool PresetManager::deletePreset (const juce::String& name)
 {
     auto file = getPresetDirectory().getChildFile (name + kExtension);

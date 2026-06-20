@@ -536,6 +536,44 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (nextButton);
     nextButton.onClick = [this] { proc.preserveLocked ([this] { proc.presets.loadNext(); });     refreshPresetList(); };
 
+    // Share: a single button that exports the current sound to a .mkultra file
+    // (or imports one if cmd/ctrl-clicked).  Drop the file in Slack/Discord/etc
+    // to trade sounds.
+    addAndMakeVisible (shareButton);
+    shareButton.setTooltip ("Click: export current sound to a .mkultra file.   Cmd-click: import one.");
+    shareButton.onClick = [this]
+    {
+        const bool importMode = juce::ModifierKeys::getCurrentModifiers().isCommandDown();
+        const auto musicDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+        if (importMode)
+        {
+            shareFileChooser = std::make_unique<juce::FileChooser> (
+                "Import MK-ULTRA preset", musicDir, "*.mkultra;*.preset");
+            shareFileChooser->launchAsync (
+                juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                [this] (const juce::FileChooser& fc)
+                {
+                    const auto f = fc.getResult();
+                    if (f.existsAsFile() && proc.presets.importPresetFromFile (f))
+                        refreshPresetList();
+                });
+        }
+        else
+        {
+            const auto stem = presetName.getText().isNotEmpty() ? presetName.getText() : juce::String ("MK Ultra Patch");
+            shareFileChooser = std::make_unique<juce::FileChooser> (
+                "Share MK-ULTRA preset", musicDir.getChildFile (stem + ".mkultra"), "*.mkultra");
+            shareFileChooser->launchAsync (
+                juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+                [this] (const juce::FileChooser& fc)
+                {
+                    const auto f = fc.getResult();
+                    if (f.getFullPathName().isNotEmpty())
+                        proc.presets.exportPresetToFile (f);
+                });
+        }
+    };
+
     addAndMakeVisible (browseButton);
     browseButton.onClick = [this]
     {
@@ -1054,7 +1092,18 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     knobs[2].slider.setTooltip ("Pitches the grains. Master shift = Pitch/Formant machine; scale snap = Pitch Lock (Master)");
 
     refreshPresetList();
-    setSize (1020, 860);
+    // Resizable editor: keep the 1020x860 design ratio so the layout never
+    // distorts, but let the user scale 70% .. 140% to fit their monitor / DAW
+    // window. The last size is persisted across sessions via APVTS state.
+    setResizable (true, true);
+    if (auto* c = getConstrainer())
+    {
+        c->setFixedAspectRatio (1020.0 / 860.0);
+        c->setSizeLimits (714, 602, 1428, 1204);
+    }
+    const int savedW = (int) proc.apvts.state.getProperty ("editorWidth",  1020);
+    const int savedH = (int) proc.apvts.state.getProperty ("editorHeight", 860);
+    setSize (juce::jlimit (714, 1428, savedW), juce::jlimit (602, 1204, savedH));
     updateTabVisibility();
 
     // Update pill: hidden until a newer GitHub release is found, then it appears
@@ -1569,6 +1618,11 @@ void GrainFreezeEditor::resized()
     constexpr int pad = 20;
     constexpr int gap = 10;
     constexpr bool inputToolsVisible = kMkUltraExperimentalInputTools;
+
+    // Persist the editor size so it survives session reload.
+    proc.apvts.state.setProperty ("editorWidth",  getWidth(),  nullptr);
+    proc.apvts.state.setProperty ("editorHeight", getHeight(), nullptr);
+
     fadeOverlay.setBounds (getLocalBounds());
     auto area = getLocalBounds().reduced (pad);
 
@@ -1640,8 +1694,10 @@ void GrainFreezeEditor::resized()
     bar.removeFromLeft (gap);
     browseButton.setBounds (bar.removeFromLeft (84).reduced (2, 4));
     bar.removeFromLeft (gap);
-    saveButton.setBounds  (bar.removeFromRight (88).reduced (2, 4));
-    presetName.setBounds  (bar.reduced (2, 4));
+    saveButton.setBounds   (bar.removeFromRight (78).reduced (2, 4));
+    bar.removeFromRight (gap);
+    shareButton.setBounds  (bar.removeFromRight (72).reduced (2, 4));
+    presetName.setBounds   (bar.reduced (2, 4));
 
     area.removeFromTop (gap + 4);
 
