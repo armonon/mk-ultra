@@ -118,6 +118,18 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.duckThreshold, "duckThreshold");
     bind (paramPtrs.duckAttack, "duckAttack");
     bind (paramPtrs.duckRelease, "duckRelease");
+
+    {
+        static const char* sourceIds[4] = { "modSlot1Source", "modSlot2Source", "modSlot3Source", "modSlot4Source" };
+        static const char* targetIds[4] = { "modSlot1Target", "modSlot2Target", "modSlot3Target", "modSlot4Target" };
+        static const char* depthIds[4]  = { "modSlot1Depth",  "modSlot2Depth",  "modSlot3Depth",  "modSlot4Depth" };
+        for (int i = 0; i < 4; ++i)
+        {
+            bind (paramPtrs.modSlotSource[(size_t) i], sourceIds[i]);
+            bind (paramPtrs.modSlotTarget[(size_t) i], targetIds[i]);
+            bind (paramPtrs.modSlotDepth[(size_t) i],  depthIds[i]);
+        }
+    }
     bind (paramPtrs.motionMatrixOn, "motionMatrixOn");
     bind (paramPtrs.dryWet, "dryWet");
 
@@ -394,6 +406,27 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         addFloat  ("timeBreakerMod1Depth",  "Time Breaker Route 1 Depth", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
         addChoice ("timeBreakerMod2Target", "Time Breaker Route 2", tbTargets, 0);
         addFloat  ("timeBreakerMod2Depth",  "Time Breaker Route 2 Depth", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+    }
+
+    // Universal Modulation Matrix: 4 generic slots that each pick a SOURCE and
+    // route it (with a signed depth) to any TARGET parameter. This generalises
+    // the Time Breaker routing pattern -- any source can hit any knob now.
+    {
+        const StringArray sources { "None", "Global LFO", "Time Breaker", "Macro Texture",
+                                    "Macro Beauty", "Macro Space", "Macro Chaos", "Macro Motion",
+                                    "Macro Damage", "Macro Emotion", "Morph X", "Morph Y" };
+        const StringArray targets { "None", "Grain Size", "Density", "Pitch", "Spray", "Spread",
+                                    "Position", "Pitch Jitter", "Output", "Reverb (Grain)",
+                                    "Echo Time", "Echo Feedback", "Echo Mix", "Reverb (Beauty)",
+                                    "Chorus Rate", "Chorus Depth", "Beauty Amount", "Width",
+                                    "Bit Crush" };
+        for (int i = 1; i <= 4; ++i)
+        {
+            addChoice ("modSlot" + juce::String (i) + "Source", "Mod Slot " + juce::String (i) + " Source", sources, 0);
+            addChoice ("modSlot" + juce::String (i) + "Target", "Mod Slot " + juce::String (i) + " Target", targets, 0);
+            addFloat  ("modSlot" + juce::String (i) + "Depth",  "Mod Slot " + juce::String (i) + " Depth",
+                       NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+        }
     }
     // Tempo sync for the Echo time and the Global Mod LFO rate. "Free" = use the
     // free knob; any division locks to the host BPM.
@@ -979,19 +1012,82 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const int   tbT2 = tbTargetId ((int) loadParam (p.timeBreakerMod2Target));
     const float tbD2 = loadParam (p.timeBreakerMod2Depth);
 
-    auto target = [this, &ctl, tbGate, tbT1, tbD1, tbT2, tbD2] (gf::ParamId id)
+    // ---- Universal Modulation Matrix: read all 4 slots up front. The source
+    // value is in [-1, +1] for the LFO/morph axes and [0, 1] for the macros and
+    // the Time Breaker gate -- we treat both as one mod signal that's scaled
+    // by the depth and added to the target param like the existing TB routing.
+    auto matrixSourceValue = [this, &ctl, tbGate] (int sourceIdx) -> float
+    {
+        switch (sourceIdx)
+        {
+            case 0:  return 0.0f;                                   // None
+            case 1:  return modMatrix.getGlobalValue();             // Global LFO  -1..+1
+            case 2:  return tbGate;                                 // Time Breaker 0..1
+            case 3:  return ctl.texture;
+            case 4:  return ctl.beauty;
+            case 5:  return ctl.space;
+            case 6:  return ctl.chaos;
+            case 7:  return ctl.motion;
+            case 8:  return ctl.damage;
+            case 9:  return ctl.emotion;
+            case 10: return 2.0f * (apvts.getRawParameterValue ("macroMorph")  ? apvts.getRawParameterValue ("macroMorph")->load()  : 0.5f) - 1.0f;
+            case 11: return 2.0f * (apvts.getRawParameterValue ("macroMorphY") ? apvts.getRawParameterValue ("macroMorphY")->load() : 0.5f) - 1.0f;
+            default: return 0.0f;
+        }
+    };
+    auto matrixTargetId = [] (int idx) -> int
+    {
+        // Maps the "Target" dropdown index to a ParamId. Index 0 is None.
+        switch (idx)
+        {
+            case 1:  return (int) gf::ParamId::grainSize;
+            case 2:  return (int) gf::ParamId::density;
+            case 3:  return (int) gf::ParamId::pitch;
+            case 4:  return (int) gf::ParamId::spray;
+            case 5:  return (int) gf::ParamId::spread;
+            case 6:  return (int) gf::ParamId::position;
+            case 7:  return (int) gf::ParamId::pitchJitter;
+            case 8:  return (int) gf::ParamId::output;
+            case 9:  return (int) gf::ParamId::reverbMix;
+            case 10: return (int) gf::ParamId::echoTime;
+            case 11: return (int) gf::ParamId::echoFeedback;
+            case 12: return (int) gf::ParamId::echoMix;
+            case 13: return (int) gf::ParamId::prettyReverbMix;
+            case 14: return (int) gf::ParamId::chorusRate;
+            case 15: return (int) gf::ParamId::chorusDepth;
+            case 16: return (int) gf::ParamId::beautyAmount;
+            case 17: return (int) gf::ParamId::polishWidth;
+            case 18: return (int) gf::ParamId::bitCrush;
+            default: return -1;
+        }
+    };
+    std::array<int,   4> mmTarget {};
+    std::array<float, 4> mmContrib {};   // source value × depth (computed once per block)
+    for (int i = 0; i < 4; ++i)
+    {
+        const int srcIdx = (int) loadParam (paramPtrs.modSlotSource[(size_t) i]);
+        const int tgtIdx = (int) loadParam (paramPtrs.modSlotTarget[(size_t) i]);
+        const float depth = loadParam (paramPtrs.modSlotDepth[(size_t) i]);
+        mmTarget[(size_t) i] = matrixTargetId (tgtIdx);
+        mmContrib[(size_t) i] = (srcIdx > 0 && tgtIdx > 0) ? matrixSourceValue (srcIdx) * depth : 0.0f;
+    }
+
+    auto target = [this, &ctl, tbGate, tbT1, tbD1, tbT2, tbD2, mmTarget, mmContrib] (gf::ParamId id)
     {
         const auto idx = (size_t) id;
         float v = ctl.motionMatrixOn ? modulated (id) : loadParam (modTargetPtrs[idx]);
-        if (tbGate > 0.0001f && (tbT1 == (int) id || tbT2 == (int) id))
-        {
-            const auto& r = modTargetRanges[idx];
-            const float span = r.end - r.start;
-            float off = 0.0f;
-            if (tbT1 == (int) id) off += tbD1 * tbGate * span * 0.5f;
-            if (tbT2 == (int) id) off += tbD2 * tbGate * span * 0.5f;
+        const auto& r = modTargetRanges[idx];
+        const float span = r.end - r.start;
+        float off = 0.0f;
+        if (tbGate > 0.0001f && tbT1 == (int) id) off += tbD1 * tbGate * span * 0.5f;
+        if (tbGate > 0.0001f && tbT2 == (int) id) off += tbD2 * tbGate * span * 0.5f;
+        // Universal Modulation Matrix: any slot whose target == this param adds
+        // (sourceValue * depth) scaled by the param's range.
+        for (int s = 0; s < 4; ++s)
+            if (mmTarget[(size_t) s] == (int) id)
+                off += mmContrib[(size_t) s] * span * 0.5f;
+        if (off != 0.0f)
             v = juce::jlimit (r.start, r.end, v + off);
-        }
         return v;
     };
 

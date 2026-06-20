@@ -1006,6 +1006,41 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machDuckerAmount.setTooltip ("Maximum gain reduction at full trigger (0 = no duck, 1 = full silence at peak)");
     machDuckerThreshold.setTooltip ("Trigger level below which no ducking happens (so quiet passages keep the full wet)");
 
+    // ---- Universal Modulation Matrix ----
+    setupSectionLabel (modMatrixTitle, "MOD MATRIX", 13.0f);
+    addAndMakeVisible (modMatrixTitle);
+    const juce::StringArray mmSourceNames { "None", "Global LFO", "Time Breaker", "Macro Texture",
+                                            "Macro Beauty", "Macro Space", "Macro Chaos", "Macro Motion",
+                                            "Macro Damage", "Macro Emotion", "Morph X", "Morph Y" };
+    const juce::StringArray mmTargetNames { "None", "Grain Size", "Density", "Pitch", "Spray", "Spread",
+                                            "Position", "Pitch Jitter", "Output", "Reverb (Grain)",
+                                            "Echo Time", "Echo Feedback", "Echo Mix", "Reverb (Beauty)",
+                                            "Chorus Rate", "Chorus Depth", "Beauty Amount", "Width",
+                                            "Bit Crush" };
+    for (int i = 0; i < 4; ++i)
+    {
+        modMatrixSource[(size_t) i].addItemList (mmSourceNames, 1);
+        modMatrixTarget[(size_t) i].addItemList (mmTargetNames, 1);
+        addAndMakeVisible (modMatrixSource[(size_t) i]);
+        addAndMakeVisible (modMatrixTarget[(size_t) i]);
+        addAndMakeVisible (modMatrixDepth[(size_t) i]);
+        modMatrixArrow[(size_t) i].setText (juce::String (juce::CharPointer_UTF8 ("\xe2\x86\x92")), juce::dontSendNotification);
+        modMatrixArrow[(size_t) i].setJustificationType (juce::Justification::centred);
+        addAndMakeVisible (modMatrixArrow[(size_t) i]);
+        modMatrixDepth[(size_t) i].setSliderStyle (juce::Slider::LinearHorizontal);
+        modMatrixDepth[(size_t) i].setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        modMatrixDepth[(size_t) i].setRange (-1.0, 1.0);
+        modMatrixDepth[(size_t) i].setTooltip ("Mod depth (signed): how much this source moves the target. Drag negative to invert.");
+
+        const juce::String s ("modSlot" + juce::String (i + 1));
+        modMatrixSourceAttach[(size_t) i] = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+            proc.apvts, s + "Source", modMatrixSource[(size_t) i]);
+        modMatrixTargetAttach[(size_t) i] = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+            proc.apvts, s + "Target", modMatrixTarget[(size_t) i]);
+        modMatrixDepthAttach[(size_t) i] = std::make_unique<SliderAttachment> (
+            proc.apvts, s + "Depth", modMatrixDepth[(size_t) i]);
+    }
+
     // "Advanced" expanders: collapsed by default so each machine shows only its
     // essentials; toggling reveals the deep params and re-lays out the tab.
     auto setupMoreButton = [this] (juce::TextButton& b)
@@ -1098,11 +1133,11 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     setResizable (true, true);
     if (auto* c = getConstrainer())
     {
-        c->setFixedAspectRatio (1020.0 / 920.0);
-        c->setSizeLimits (714, 644, 1428, 1288);
+        c->setFixedAspectRatio (1020.0 / 1040.0);
+        c->setSizeLimits (714, 728, 1428, 1456);
     }
     const int savedW = (int) proc.apvts.state.getProperty ("editorWidth",  1020);
-    const int savedH = (int) proc.apvts.state.getProperty ("editorHeight", 920);
+    const int savedH = (int) proc.apvts.state.getProperty ("editorHeight", 1040);
     setSize (juce::jlimit (714, 1428, savedW), juce::jlimit (602, 1204, savedH));
     updateTabVisibility();
 
@@ -1475,6 +1510,12 @@ void GrainFreezeEditor::updateTabVisibility()
         s->setVisible (machinesTab);
     for (auto* l : { &machDuckerAmountL, &machDuckerThresholdL, &machDuckerAttackL, &machDuckerReleaseL })
         l->setVisible (machinesTab);
+
+    modMatrixTitle.setVisible (machinesTab);
+    for (auto& c : modMatrixSource) c.setVisible (machinesTab);
+    for (auto& c : modMatrixTarget) c.setVisible (machinesTab);
+    for (auto& s : modMatrixDepth)  s.setVisible (machinesTab);
+    for (auto& l : modMatrixArrow)  l.setVisible (machinesTab);
     for (auto* b : { &machDamageMore, &machTimeMore })
         b->setVisible (machinesTab);
     // Always-visible essentials (Spectral + Pitch are already minimal).
@@ -2147,6 +2188,22 @@ void GrainFreezeEditor::resized()
             for (auto& kv : dk)
                 layoutDialCell (krow, *kv.second, *kv.first, kw);
             area.removeFromTop (gap);
+        }
+
+        // Universal Modulation Matrix: 4 rows of [Source -> Target  Depth].
+        {
+            modMatrixTitle.setBounds (area.removeFromTop (20).reduced (4, 0));
+            area.removeFromTop (4);
+            for (int i = 0; i < 4; ++i)
+            {
+                auto row = area.removeFromTop (24);
+                modMatrixSource[(size_t) i].setBounds (row.removeFromLeft (160).reduced (2, 1));
+                modMatrixArrow [(size_t) i].setBounds (row.removeFromLeft (24));
+                modMatrixTarget[(size_t) i].setBounds (row.removeFromLeft (160).reduced (2, 1));
+                row.removeFromLeft (gap);
+                modMatrixDepth [(size_t) i].setBounds (row.removeFromLeft (juce::jmin (260, row.getWidth())).reduced (2, 4));
+                area.removeFromTop (2);
+            }
         }
     }
     else if (currentTab == 4)   // HOME cockpit

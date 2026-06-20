@@ -474,6 +474,17 @@ private:
     juce::Slider       machDuckerAmount, machDuckerThreshold, machDuckerAttack, machDuckerRelease;
     juce::Label        machDuckerAmountL, machDuckerThresholdL, machDuckerAttackL, machDuckerReleaseL;
 
+    // Universal Modulation Matrix: 4 rows of [Source -> Target  Depth]. Each row
+    // is a generic "drag-style" mod link that takes the Time Breaker routing
+    // pattern and lets ANY source hit any of the 18 main parameters.
+    juce::Label modMatrixTitle;
+    std::array<juce::ComboBox, 4> modMatrixSource, modMatrixTarget;
+    std::array<juce::Slider,  4> modMatrixDepth;
+    std::array<juce::Label,   4> modMatrixArrow;   // "->" between source and target
+    std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>, 4>
+        modMatrixSourceAttach, modMatrixTargetAttach;
+    std::array<std::unique_ptr<SliderAttachment>, 4> modMatrixDepthAttach;
+
     juce::ToggleButton machTimeOn { "On" };
     juce::ToggleButton machTimeSync { "Sync" };
     juce::ComboBox     machTimeDivision;

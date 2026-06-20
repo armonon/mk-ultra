@@ -244,6 +244,11 @@ private:
         std::atomic<float>* duckThreshold = nullptr;
         std::atomic<float>* duckAttack = nullptr;
         std::atomic<float>* duckRelease = nullptr;
+
+        // Universal modulation matrix slots (4 of each).
+        std::array<std::atomic<float>*, 4> modSlotSource { nullptr, nullptr, nullptr, nullptr };
+        std::array<std::atomic<float>*, 4> modSlotTarget { nullptr, nullptr, nullptr, nullptr };
+        std::array<std::atomic<float>*, 4> modSlotDepth  { nullptr, nullptr, nullptr, nullptr };
         std::atomic<float>* damageBits = nullptr;
         std::atomic<float>* damageRate = nullptr;
         std::atomic<float>* damageJitter = nullptr;
