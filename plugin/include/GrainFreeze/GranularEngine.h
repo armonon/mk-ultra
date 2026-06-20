@@ -53,7 +53,28 @@ public:
     {
         const int clamped = juce::jlimit (0, (int) activeNotes.size(), n);
         for (int i = 0; i < clamped; ++i)
-            activeNotes[(size_t) i].store (notes[i], std::memory_order_relaxed);
+        {
+            activeNotes  [(size_t) i].store (notes[i], std::memory_order_relaxed);
+            voicePressure[(size_t) i].store (1.0f,     std::memory_order_relaxed);
+            voiceTimbre  [(size_t) i].store (0.0f,     std::memory_order_relaxed);
+        }
+        activeNoteCount.store (clamped, std::memory_order_relaxed);
+    }
+
+    // Full MPE-style voice push: each voice carries pitch + pressure + timbre.
+    // Pressure modulates grain amplitude, timbre modulates grain size, so the
+    // MPE expression layer actually moves the grain cloud per-note.
+    void setMpeOn (bool b) { mpeOn.store (b, std::memory_order_relaxed); }
+    struct VoicePush { float semis; float pressure; float timbre; };
+    void setActiveVoices (const VoicePush* v, int n)
+    {
+        const int clamped = juce::jlimit (0, (int) activeNotes.size(), n);
+        for (int i = 0; i < clamped; ++i)
+        {
+            activeNotes  [(size_t) i].store (v[i].semis,    std::memory_order_relaxed);
+            voicePressure[(size_t) i].store (v[i].pressure, std::memory_order_relaxed);
+            voiceTimbre  [(size_t) i].store (v[i].timbre,   std::memory_order_relaxed);
+        }
         activeNoteCount.store (clamped, std::memory_order_relaxed);
     }
     void setSprayMs     (float ms)      { sprayMs.store (ms); }
@@ -101,8 +122,11 @@ private:
 
     // Polyphonic note pool: each new grain picks a random active offset.
     std::atomic<bool> polyOn { false };
+    std::atomic<bool> mpeOn  { false };
     std::atomic<int>  activeNoteCount { 0 };
-    std::array<std::atomic<float>, 16> activeNotes {};
+    std::array<std::atomic<float>, 16> activeNotes   {};
+    std::array<std::atomic<float>, 16> voicePressure {};   // 0..1, modulates grain amp
+    std::array<std::atomic<float>, 16> voiceTimbre   {};   // -1..+1, modulates grain size
     std::atomic<float> sprayMs     { 30.0f };
     std::atomic<float> spread      { 0.4f };
     std::atomic<float> position    { 0.5f };

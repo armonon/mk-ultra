@@ -10,6 +10,7 @@
 #include "GrainFreeze/Prettifier/PrettifierEngine.h"
 #include "GrainFreeze/Presets/SnapshotManager.h"
 #include "GrainFreeze/PresetManager.h"
+#include "GrainFreeze/Modulation/MPEVoiceTracker.h"
 #include "GrainFreeze/Randomizer.h"
 #include "GrainFreeze/SampleFreeze.h"
 #include "GrainFreeze/SpectralFreeze.h"
@@ -246,6 +247,7 @@ private:
         std::atomic<float>* duckRelease = nullptr;
 
         std::atomic<float>* polyGrain = nullptr;
+        std::atomic<float>* mpeOn = nullptr;
 
         // Universal modulation matrix slots (4 of each).
         std::array<std::atomic<float>*, 4> modSlotSource { nullptr, nullptr, nullptr, nullptr };
@@ -394,6 +396,7 @@ private:
     int    waveformDecimateCounter = 0;
 
     gf::MidiNoteController midiCtrl;
+    gf::MPEVoiceTracker    mpeTracker;
     gf::SampleFreezeEngine sampleEngine;
     std::atomic<bool> sampleFreezeRequested { false };
     // Spectral machine: capture a fresh spectrum for a short window each time it

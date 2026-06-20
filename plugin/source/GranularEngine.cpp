@@ -106,19 +106,28 @@ void GranularEngine::spawnGrain()
     // Polyphonic mode: pick a random held note's offset for this grain so a
     // chord becomes a polyphonic granular cloud. Falls through to noteOffset if
     // no notes are held or poly is off.
+    // With MPE enabled the chosen voice also contributes pressure -> amplitude
+    // and timbre -> grain-size scaling, so per-note expression actually moves
+    // the cloud per voice.
     float noteOff = noteOffset.load();
+    float voicePress = 1.0f, voiceTimb = 0.0f;
     if (polyOn.load (std::memory_order_relaxed))
     {
         const int n = activeNoteCount.load (std::memory_order_relaxed);
         if (n > 0)
         {
             const int pick = juce::jlimit (0, n - 1, (int) (rand01() * n));
-            noteOff = activeNotes[(size_t) pick].load (std::memory_order_relaxed);
+            noteOff   = activeNotes  [(size_t) pick].load (std::memory_order_relaxed);
+            voicePress = voicePressure[(size_t) pick].load (std::memory_order_relaxed);
+            voiceTimb  = voiceTimbre  [(size_t) pick].load (std::memory_order_relaxed);
         }
     }
     const float semis  = pitchSemis.load() + noteOff + jit;
     const double rate   = std::pow (2.0, semis / 12.0);
-    const int    lenSm  = juce::jmax (4, (int) ((grainSizeMs.load() / 1000.0) * sr));
+    // Timbre (-1..+1) gives ±35% grain-size shift when MPE is on -- a useful but
+    // not extreme range, so users can sweep CC74 without making grains absurd.
+    const float sizeScale = mpeOn.load (std::memory_order_relaxed) ? (1.0f + voiceTimb * 0.35f) : 1.0f;
+    const int    lenSm  = juce::jmax (4, (int) ((grainSizeMs.load() / 1000.0) * sr * sizeScale));
 
     slot->active      = true;
     slot->readPos     = anchor + jitter;
@@ -129,6 +138,10 @@ void GranularEngine::spawnGrain()
     const float vToA  = velocityToAmp.load();
     const float vel   = velocity.load();
     slot->amp        *= (1.0f - vToA) + vToA * vel;
+    // MPE pressure: scale grain amplitude by [0.3 .. 1.5] across the voice's
+    // pressure range so harder presses = louder grains. Off when MPE is off.
+    if (mpeOn.load (std::memory_order_relaxed))
+        slot->amp *= 0.3f + 1.2f * voicePress;
 
     const float sp = spread.load();
     slot->pan = 0.5f + (rand01() - 0.5f) * sp;

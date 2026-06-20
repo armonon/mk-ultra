@@ -119,6 +119,7 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.duckAttack, "duckAttack");
     bind (paramPtrs.duckRelease, "duckRelease");
     bind (paramPtrs.polyGrain, "polyGrain");
+    bind (paramPtrs.mpeOn, "mpeOn");
 
     {
         static const char* sourceIds[4] = { "modSlot1Source", "modSlot2Source", "modSlot3Source", "modSlot4Source" };
@@ -412,6 +413,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     // Polyphonic granular: when on AND MIDI is enabled, each grain picks a random
     // active note for its pitch, so a held chord becomes a polyphonic grain cloud.
     addBool ("polyGrain", "Polyphonic Grains", false);
+    // MPE: when on, MIDI is parsed via juce::MPEInstrument and each voice's
+    // pitch bend + pressure + timbre is routed into the grain cloud per voice.
+    // Implies polyGrain (a single MPE note still gets its own pitch bend).
+    addBool ("mpeOn", "MPE Mode", false);
 
     // Universal Modulation Matrix: 4 generic slots that each pick a SOURCE and
     // route it (with a signed depth) to any TARGET parameter. This generalises
@@ -961,11 +966,29 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         midiVelocity = midiCtrl.getVelocity();
     }
 
-    // Polyphonic granular: push the active note set into the granular engine
-    // (which picks a random held offset for each new grain).
-    const bool polyOn = ctl.midiEnabled && isOn (paramPtrs.polyGrain);
+    // Polyphonic / MPE granular: push the active voices into the granular engine.
+    // - polyGrain: pick a random held note for each grain's pitch (mono pressure).
+    // - mpeOn: each MPE voice also carries pitch bend + pressure + timbre, which
+    //   modulate grain amplitude (pressure) and grain size (timbre).
+    const bool mpeMode = ctl.midiEnabled && isOn (paramPtrs.mpeOn);
+    const bool polyOn = mpeMode || (ctl.midiEnabled && isOn (paramPtrs.polyGrain));
     entropyEngine.setPolyOn (polyOn);
-    if (polyOn)
+    entropyEngine.setMpeOn (mpeMode);
+    if (mpeMode)
+    {
+        // Feed the MIDI through the MPE tracker (we already passed it through the
+        // mono midiCtrl; MPE tracker is the additional listener for full voices).
+        mpeTracker.setRoot ((int) loadParam (p.midiRoot, 60.0f));
+        for (const auto meta : midi)
+            mpeTracker.handleMessage (meta.getMessage());
+        gf::MPEVoiceTracker::VoiceData vs[16];
+        const int n_ = mpeTracker.copyActiveVoices (vs, 16);
+        gf::GranularEngine::VoicePush pushes[16];
+        for (int i = 0; i < n_; ++i)
+            pushes[i] = { vs[i].semitones, vs[i].pressure, vs[i].timbre };
+        entropyEngine.setActiveVoices (pushes, n_);
+    }
+    else if (polyOn)
     {
         float buf[16] {};
         const int n_ = midiCtrl.copyActiveOffsets (buf, 16);

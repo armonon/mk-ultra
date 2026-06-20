@@ -910,6 +910,9 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     polyGrainButton.setTooltip ("Polyphonic Grains: hold a chord -- each grain picks a random held note for its pitch, so the granulator becomes a polyphonic cloud. Requires MIDI on.");
     addAndMakeVisible (polyGrainButton);
     polyGrainAttach = std::make_unique<ButtonAttachment> (proc.apvts, "polyGrain", polyGrainButton);
+    mpeOnButton.setTooltip ("MPE: each MPE voice's pitch bend, channel pressure (Y) and CC74 timbre (Z) are routed per-grain. Pressure scales grain amplitude, timbre scales grain size. Implies Poly Grains.");
+    addAndMakeVisible (mpeOnButton);
+    mpeOnAttach = std::make_unique<ButtonAttachment> (proc.apvts, "mpeOn", mpeOnButton);
     setupDialLabel (midiRootLabel, "Root");
 
     setupMixKnob (midiGlideSlider);
@@ -1521,6 +1524,7 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto& s : modMatrixDepth)  s.setVisible (machinesTab);
     for (auto& l : modMatrixArrow)  l.setVisible (machinesTab);
     polyGrainButton.setVisible (machinesTab);
+    mpeOnButton.setVisible (machinesTab);
     for (auto* b : { &machDamageMore, &machTimeMore })
         b->setVisible (machinesTab);
     // Always-visible essentials (Spectral + Pitch are already minimal).
@@ -2200,7 +2204,9 @@ void GrainFreezeEditor::resized()
             auto head = area.removeFromTop (22);
             modMatrixTitle.setBounds (head.removeFromLeft (140).withSizeKeepingCentre (140, 20));
             head.removeFromLeft (gap);
-            polyGrainButton.setBounds (head.removeFromLeft (130).withSizeKeepingCentre (124, 22));
+            polyGrainButton.setBounds (head.removeFromLeft (124).withSizeKeepingCentre (122, 22));
+            head.removeFromLeft (gap);
+            mpeOnButton.setBounds (head.removeFromLeft (60).withSizeKeepingCentre (58, 22));
             area.removeFromTop (4);
             for (int i = 0; i < 4; ++i)
             {
