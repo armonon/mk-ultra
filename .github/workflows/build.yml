@@ -40,7 +40,13 @@ jobs:
         run: cmake --preset ci
 
       - name: Build
+        # 'all' picks up every juce_add_plugin target available on the platform
+        # (VST3 + Standalone + CLAP everywhere, plus AU on macOS).
         run: cmake --build --preset ci
+      - name: Verify CLAP target built
+        # Sanity-check: clap-juce-extensions should have produced an Entropy_CLAP
+        # target as part of 'all'; this re-runs it to fail loudly if not.
+        run: cmake --build --preset ci --target Entropy_CLAP
 
       - name: Test
         run: ctest --preset ci
@@ -78,4 +84,5 @@ jobs:
             build/ci/plugin/Entropy_artefacts/**/AU
             build/ci/plugin/Entropy_artefacts/**/Standalone
             build/ci/plugin/Entropy_artefacts/**/LV2
+            build/ci/plugin/Entropy_artefacts/**/CLAP
           if-no-files-found: ignore
