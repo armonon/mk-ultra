@@ -21,10 +21,13 @@ trap 'rm -rf "$WORK"' EXIT
 
 VST3="$ART/VST3/MK Ultra.vst3"
 AU="$ART/AU/MK Ultra.component"
+CLAP="$ART/CLAP/MK Ultra.clap"
 APP="$ART/Standalone/MK Ultra.app"
 for b in "$VST3" "$AU" "$APP"; do
     [ -e "$b" ] || { echo "ERROR: missing artefact: $b (build build/universal first)"; exit 1; }
 done
+# CLAP is optional -- only install it if the build produced one.
+HAVE_CLAP=0; [ -e "$CLAP" ] && HAVE_CLAP=1
 
 # Confirm the artefacts are actually universal before we ship them.
 echo "==> Verifying universal slices..."
@@ -37,8 +40,10 @@ echo "    VST3 archs: $(lipo -archs "$VST3/Contents/MacOS/MK Ultra")"
 echo "==> Staging payload..."
 mkdir -p "$PAYROOT/Library/Audio/Plug-Ins/VST3" \
          "$PAYROOT/Library/Audio/Plug-Ins/Components" \
+         "$PAYROOT/Library/Audio/Plug-Ins/CLAP" \
          "$PAYROOT/Applications"
 cp -R "$VST3" "$PAYROOT/Library/Audio/Plug-Ins/VST3/"
+[ "$HAVE_CLAP" = "1" ] && cp -R "$CLAP" "$PAYROOT/Library/Audio/Plug-Ins/CLAP/" && echo "    + CLAP"
 cp -R "$AU"   "$PAYROOT/Library/Audio/Plug-Ins/Components/"
 cp -R "$APP"  "$PAYROOT/Applications/"
 
@@ -48,6 +53,7 @@ cat > "$SCRIPTS/postinstall" <<'POST'
 #!/bin/bash
 xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/VST3/MK Ultra.vst3" 2>/dev/null || true
 xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/MK Ultra.component" 2>/dev/null || true
+xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/CLAP/MK Ultra.clap" 2>/dev/null || true
 xattr -dr com.apple.quarantine "/Applications/MK Ultra.app" 2>/dev/null || true
 exit 0
 POST
