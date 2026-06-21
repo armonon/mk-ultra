@@ -10,7 +10,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version" FORCE)
 endif()
 
-project(GrainFreeze VERSION 2.3.0 LANGUAGES C CXX)
+project(GrainFreeze VERSION 2.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,6 +24,15 @@ CPMAddPackage(
     NAME JUCE
     GITHUB_REPOSITORY juce-framework/JUCE
     GIT_TAG 8.0.12
+)
+
+# CLAP support: wrap our juce_add_plugin target with the CLAP plugin format.
+# JUCE 8.0.12 doesn't ship CLAP natively, so we pull free-audio/clap-juce-
+# extensions. The wrapper produces a parallel .clap binary alongside VST3/AU.
+CPMAddPackage(
+    NAME clap-juce-extensions
+    GITHUB_REPOSITORY free-audio/clap-juce-extensions
+    GIT_TAG main
 )
 
 add_subdirectory(plugin)

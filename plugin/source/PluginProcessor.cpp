@@ -148,6 +148,7 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.globalShape, "globalShape");
     bind (paramPtrs.globalModOn, "globalModOn");
     bind (paramPtrs.echoDivision, "echoDivision");
+    bind (paramPtrs.densityDivision, "densityDivision");
     bind (paramPtrs.lfoDivision, "lfoDivision");
 
     bind (paramPtrs.sampleMode, "sampleMode");
@@ -424,7 +425,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     {
         const StringArray sources { "None", "Global LFO", "Time Breaker", "Macro Texture",
                                     "Macro Beauty", "Macro Space", "Macro Chaos", "Macro Motion",
-                                    "Macro Damage", "Macro Emotion", "Morph X", "Morph Y" };
+                                    "Macro Damage", "Macro Emotion", "Morph X", "Morph Y",
+                                    "Input Env" };
         const StringArray targets { "None", "Grain Size", "Density", "Pitch", "Spray", "Spread",
                                     "Position", "Pitch Jitter", "Output", "Reverb (Grain)",
                                     "Echo Time", "Echo Feedback", "Echo Mix", "Reverb (Beauty)",
@@ -442,8 +444,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     // free knob; any division locks to the host BPM.
     {
         const StringArray divs { "Free", "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
-        addChoice ("echoDivision", "Echo Sync", divs, 0);
-        addChoice ("lfoDivision",  "Mod LFO Sync", divs, 0);
+        addChoice ("echoDivision",    "Echo Sync",     divs, 0);
+        addChoice ("lfoDivision",     "Mod LFO Sync",  divs, 0);
+        // Density sync: when not Free, grain density tracks host BPM. Useful for
+        // rhythmic granular textures that lock to the groove.
+        addChoice ("densityDivision", "Density Sync",  divs, 0);
     }
     addMachine ("damage", "Damage", false);
     // Damage detail: a full destruction stage. damageAmount is the master drive.
@@ -717,6 +722,14 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     damageMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     damageMultiband.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     ducker.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
+    {
+        juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock,
+                                      (juce::uint32) juce::jmax (1, getTotalNumOutputChannels()) };
+        inputEnv.prepare (spec);
+        inputEnv.setLevelCalculationType (juce::dsp::BallisticsFilterLevelCalculationType::peak);
+        inputEnv.setAttackTime (10.0f);
+        inputEnv.setReleaseTime (120.0f);
+    }
     timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
     pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
 
@@ -942,6 +955,23 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     if (needsDry)
         dryInBuffer.makeCopyOf (buffer, true);
 
+    // Always-on input envelope follower (independent of the Ducker) for the
+    // Mod Matrix "Input Env" source. Take the block-end peak across channels
+    // through the ballistics filter; users get an audio-reactive mod source.
+    {
+        const int n_ = buffer.getNumSamples();
+        const int ch_ = buffer.getNumChannels();
+        float e = 0.0f;
+        for (int i = 0; i < n_; ++i)
+        {
+            float maxAbs = 0.0f;
+            for (int c = 0; c < ch_; ++c)
+                maxAbs = juce::jmax (maxAbs, std::abs (buffer.getSample (c, i)));
+            e = inputEnv.processSample (0, maxAbs);
+        }
+        inputEnvelopeValue.store (juce::jlimit (0.0f, 1.0f, e), std::memory_order_relaxed);
+    }
+
     if (ctl.sampleModeOn || sampleFreezePending)
         sampleEngine.pushInput (needsDry ? dryInBuffer : buffer);
 
@@ -1074,6 +1104,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             case 9:  return ctl.emotion;
             case 10: return 2.0f * (apvts.getRawParameterValue ("macroMorph")  ? apvts.getRawParameterValue ("macroMorph")->load()  : 0.5f) - 1.0f;
             case 11: return 2.0f * (apvts.getRawParameterValue ("macroMorphY") ? apvts.getRawParameterValue ("macroMorphY")->load() : 0.5f) - 1.0f;
+            case 12: return inputEnvelopeValue.load (std::memory_order_relaxed);   // Input Env (0..1)
             default: return 0.0f;
         }
     };
@@ -1138,6 +1169,15 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     entropyParams.frozen = isOn (p.frozen);
     entropyParams.grainSize = target (gf::ParamId::grainSize) * (1.0f + identity * 0.35f);
     entropyParams.density = target (gf::ParamId::density) * (1.0f + ctl.chaos * 0.5f + ctl.texture * 0.75f + identity * 0.8f);
+    // Density Sync: when a tempo division is selected (>=1), the density (in
+    // grains/sec) is locked to the host BPM times that beat ratio, so the grain
+    // cloud pulses rhythmically with the groove instead of floating freely.
+    if (const int densDiv = (int) loadParam (p.densityDivision, 0.0f); densDiv >= 1)
+    {
+        static const float kBeats[] = { 0.0f, 4.0f, 2.0f, 1.0f, 0.5f, 1.0f/3.0f, 0.25f, 1.0f/6.0f, 0.125f };
+        const float bps = (float) (juce::jmax (20.0, currentBpm) / 60.0);
+        entropyParams.density = bps / juce::jmax (0.001f, kBeats[juce::jlimit (1, 8, densDiv)]);
+    }
     entropyParams.pitch = target (gf::ParamId::pitch);
     entropyParams.noteOffset = ctl.midiEnabled ? noteOffset : 0.0f; // grains only follow MIDI when enabled
     entropyParams.spray = target (gf::ParamId::spray) * (1.0f + ctl.chaos * 0.6f) + ctl.texture * 300.0f + identity * 1200.0f;

@@ -138,6 +138,10 @@ public:
         convolutionIRPath = irFile.getFullPathName();
     }
     juce::String getConvolutionIRPath() const { return convolutionIRPath; }
+
+    // Grain cloud visualization (editor-side).
+    int copyGrainSnapshot (gf::GranularEngine::GrainSnapshot* out, int maxOut) const
+    { return entropyEngine.copyGrainSnapshot (out, maxOut); }
     bool sampleFreezeReady() const { return sampleEngine.ready(); }
 
 private:
@@ -276,6 +280,7 @@ private:
         std::atomic<float>* globalModOn = nullptr;
         std::atomic<float>* echoDivision = nullptr;
         std::atomic<float>* lfoDivision = nullptr;
+        std::atomic<float>* densityDivision = nullptr;
 
         std::atomic<float>* sampleMode = nullptr;
         std::atomic<float>* sampleWindow = nullptr;
@@ -398,6 +403,15 @@ private:
     gf::MidiNoteController midiCtrl;
     gf::MPEVoiceTracker    mpeTracker;
     bool mpeWasOn = false;
+
+    // Lightweight always-on envelope follower on the input. Independent of the
+    // Ducker so the Mod Matrix can route it as a source even when the Ducker
+    // is off. ~10ms attack, ~120ms release.
+    juce::dsp::BallisticsFilter<float> inputEnv;
+    std::atomic<float> inputEnvelopeValue { 0.0f };
+public:
+    float getInputEnvelope() const { return inputEnvelopeValue.load (std::memory_order_relaxed); }
+private:
     gf::SampleFreezeEngine sampleEngine;
     std::atomic<bool> sampleFreezeRequested { false };
     // Spectral machine: capture a fresh spectrum for a short window each time it

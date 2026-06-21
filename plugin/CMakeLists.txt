@@ -61,3 +61,10 @@ target_link_libraries(Entropy
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+# CLAP wrapper: produces "MK Ultra.clap" alongside the VST3/AU. CLAP id uses
+# reverse-DNS; features describe the plugin as an audio effect with granular
+# + reverb capabilities so CLAP-aware hosts can categorise it correctly.
+clap_juce_extensions_plugin(TARGET Entropy
+    CLAP_ID "com.yourcompany.mkultra"
+    CLAP_FEATURES audio-effect texturizer reverb granular)

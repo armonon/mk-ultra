@@ -162,6 +162,140 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.85f }, { "prettyReverbMix", 0.4f },
             { "duckOn", 1 }, { "duckAmount", 0.6f }, { "duckThreshold", 0.1f }, { "duckRelease", 180.0f },
             { "beautySpaceMix", 0.7f } } },
+
+        // ---- Synth ---- (the core use case: pads, leads, plucks get layered grain texture)
+        { "Synth - Pad Bloom", {
+            { "textureGrainOn", 1 }, { "grainSize", 360 }, { "density", 35 }, { "spray", 200 },
+            { "textureGrainMix", 0.7f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.85f }, { "prettyReverbMix", 0.4f },
+            { "chorusOn", 1 }, { "chorusMix", 0.25f } } },
+
+        { "Synth - Wide Lead", {
+            { "textureGrainOn", 1 }, { "grainSize", 90 }, { "density", 70 }, { "spray", 80 },
+            { "textureGrainMix", 0.5f }, { "spread", 0.85f },
+            { "beautySpaceOn", 1 }, { "chorusOn", 1 }, { "chorusDepth", 0.55f }, { "chorusMix", 0.35f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.4f }, { "prettyReverbMix", 0.18f } } },
+
+        { "Synth - Pluck Cloud", {
+            { "textureGrainOn", 1 }, { "grainSize", 70 }, { "density", 90 }, { "spray", 50 },
+            { "textureGrainMix", 0.55f },
+            { "duckOn", 1 }, { "duckAmount", 0.4f }, { "duckRelease", 120.0f },
+            { "beautySpaceOn", 1 }, { "echoOn", 1 }, { "echoMix", 0.22f }, { "echoFeedback", 0.4f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.55f } } },
+
+        { "Synth - Detuned Choir", {
+            { "textureGrainOn", 1 }, { "grainSize", 240 }, { "density", 50 }, { "pitchJitter", 0.4f },
+            { "textureGrainMix", 0.65f },
+            { "beautySpaceOn", 1 }, { "chorusOn", 1 }, { "chorusDepth", 0.7f }, { "chorusMix", 0.4f },
+            { "harmonyOn", 1 }, { "harmonyMix", 0.25f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.75f } } },
+
+        { "Synth - Movement Loop", {
+            // Tempo-synced density rides the 1/8 grid, perfect under arps.
+            { "textureGrainOn", 1 }, { "grainSize", 80 }, { "densityDivision", 4 /* 1/8 */ },
+            { "textureGrainMix", 0.6f },
+            { "beautySpaceOn", 1 }, { "echoOn", 1 }, { "echoMix", 0.18f }, { "echoDivision", 6 /* 1/16 */ },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.5f } } },
+
+        { "Synth - Glass Pluck", {
+            { "textureGrainOn", 1 }, { "grainSize", 50 }, { "density", 80 }, { "pitch", 12 },
+            { "textureGrainMix", 0.5f },
+            { "beautySpaceOn", 1 }, { "angelOn", 1 }, { "angelMix", 0.5f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.7f } } },
+
+        // ---- Vocal ---- (designed for vocal sources -- Pitch Lock, formant care, ducker keeps lyrics clear)
+        { "Vocal - Heaven Stack", {
+            { "textureGrainOn", 1 }, { "grainSize", 180 }, { "density", 50 }, { "textureGrainMix", 0.45f },
+            { "duckOn", 1 }, { "duckAmount", 0.55f }, { "duckRelease", 200.0f },
+            { "beautySpaceOn", 1 }, { "angelOn", 1 }, { "angelMix", 0.4f },
+            { "harmonyOn", 1 }, { "harmonyMix", 0.3f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.8f }, { "prettyReverbMix", 0.35f } } },
+
+        { "Vocal - Whisper Cloud", {
+            { "textureGrainOn", 1 }, { "grainSize", 110 }, { "density", 90 }, { "spray", 120 },
+            { "textureGrainMix", 0.7f }, { "spread", 0.8f },
+            { "duckOn", 1 }, { "duckAmount", 0.4f }, { "duckRelease", 160.0f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.6f } } },
+
+        { "Vocal - Formant Doubler", {
+            { "textureGrainOn", 1 }, { "grainSize", 120 }, { "density", 60 },
+            { "textureGrainMix", 0.4f },
+            { "pitchFormantOn", 1 }, { "pitchFormantMix", 0.5f }, { "pitch", -5 }, { "pitchLockFormant", 1 },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.55f } } },
+
+        { "Vocal - Reverse Halo", {
+            { "textureGrainOn", 1 }, { "grainSize", 280 }, { "density", 40 },
+            { "textureGrainMix", 0.55f },
+            { "timeBreakerOn", 1 }, { "timeBreakerSync", 1 }, { "timeBreakerDivision", 3 /*1/4*/ },
+            { "reverseChance", 0.45f }, { "stutterChance", 0.15f }, { "timeBreakerMix", 0.35f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.75f } } },
+
+        { "Vocal - Tape Texture", {
+            { "textureGrainOn", 1 }, { "grainSize", 80 }, { "density", 70 }, { "textureGrainMix", 0.45f },
+            { "damageOn", 1 }, { "damageClip", 1 /*Tape*/ }, { "damageAmount", 0.25f }, { "damageMix", 0.6f },
+            { "damageNoise", 0.05f }, { "damageTone", 0.6f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.5f } } },
+
+        // ---- Field ---- (texture-on-field-recording: ambient, drones, sound design)
+        { "Field - Soft Wind", {
+            { "textureGrainOn", 1 }, { "grainSize", 320 }, { "density", 30 }, { "spray", 250 },
+            { "textureGrainMix", 0.7f }, { "spread", 0.7f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.9f }, { "prettyReverbMix", 0.3f } } },
+
+        { "Field - Distant Choir", {
+            { "textureGrainOn", 1 }, { "grainSize", 500 }, { "density", 25 }, { "pitchJitter", 0.2f },
+            { "textureGrainMix", 0.65f }, { "pitch", 7 },
+            { "beautySpaceOn", 1 }, { "angelOn", 1 }, { "angelMix", 0.35f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.92f } } },
+
+        { "Field - Tape Ruined", {
+            { "textureGrainOn", 1 }, { "grainSize", 150 }, { "density", 50 }, { "textureGrainMix", 0.6f },
+            { "damageOn", 1 }, { "damageClip", 1 /*Tape*/ }, { "damageAmount", 0.4f }, { "damageMix", 0.85f },
+            { "damageBits", 11.0f }, { "damageNoise", 0.18f }, { "damageDropout", 0.1f }, { "damageTone", 0.5f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.6f } } },
+
+        { "Field - Glacier Drift", {
+            { "textureGrainOn", 1 }, { "grainSize", 600 }, { "density", 15 }, { "spray", 400 },
+            { "textureGrainMix", 0.8f }, { "spread", 0.95f }, { "pitch", -7 },
+            { "beautySpaceOn", 1 }, { "dreamOn", 1 }, { "dreamMix", 0.45f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.95f }, { "prettyReverbMix", 0.45f } } },
+
+        { "Field - Insect Garden", {
+            { "textureGrainOn", 1 }, { "grainSize", 40 }, { "density", 140 }, { "spray", 60 },
+            { "textureGrainMix", 0.65f }, { "pitchJitter", 0.6f }, { "spread", 0.9f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.7f } } },
+
+        { "Field - Underwater Cave", {
+            { "textureGrainOn", 1 }, { "grainSize", 240 }, { "density", 40 }, { "pitch", -12 },
+            { "textureGrainMix", 0.7f },
+            { "beautySpaceOn", 1 }, { "phaserOn", 1 }, { "phaserMix", 0.35f },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.88f }, { "prettyReverbDamping", 0.65f } } },
+
+        // ---- Bass ---- (sub emphasis, multiband Damage destroys highs not low)
+        { "Bass - Subterranean", {
+            { "textureGrainOn", 1 }, { "grainSize", 200 }, { "density", 40 }, { "pitch", -12 },
+            { "textureGrainMix", 0.4f }, { "spread", 0.2f },
+            { "damageOn", 1 }, { "damageClip", 1 /*Tape*/ }, { "damageAmount", 0.3f }, { "damageMix", 0.7f },
+            { "damageSplitOn", 1 }, { "damageSplitHz", 600.0f }, { "damageHighAmount", 0.6f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.3f } } },
+
+        { "Bass - Reese Texture", {
+            { "textureGrainOn", 1 }, { "grainSize", 100 }, { "density", 80 }, { "pitchJitter", 0.5f },
+            { "textureGrainMix", 0.55f }, { "spread", 0.75f },
+            { "damageOn", 1 }, { "damageClip", 0 /*Tube*/ }, { "damageAmount", 0.4f }, { "damageMix", 0.75f },
+            { "damageSplitOn", 1 }, { "damageSplitHz", 800.0f }, { "damageHighAmount", 0.75f },
+            { "beautySpaceOn", 1 }, { "chorusOn", 1 }, { "chorusMix", 0.2f } } },
+
+        { "Bass - Granular Drone", {
+            { "textureGrainOn", 1 }, { "grainSize", 480 }, { "density", 20 }, { "pitch", -7 },
+            { "textureGrainMix", 0.75f }, { "spread", 0.4f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.85f }, { "prettyReverbDamping", 0.7f } } },
+
+        { "Bass - Wobble Crush", {
+            { "textureGrainOn", 1 }, { "grainSize", 60 }, { "density", 90 }, { "textureGrainMix", 0.45f },
+            { "damageOn", 1 }, { "damageClip", 3 /*Fold*/ }, { "damageAmount", 0.5f }, { "damageMix", 0.85f },
+            { "damageBits", 6.0f }, { "damageMix", 0.85f },
+            { "duckOn", 1 }, { "duckAmount", 0.5f }, { "duckRelease", 100.0f } } },
     };
     return presets;
 }

@@ -136,6 +136,55 @@ private:
     std::function<void (juce::String)> choose;
 };
 
+// Small grain cloud visualization. Reads a snapshot of active grains from the
+// processor and paints them as fading dots distributed by pan (x) and panned
+// vertically by amp (y). Updates from the editor's timer; bypasses paint when
+// no grains are active so idle CPU stays at zero.
+class GrainViz : public juce::Component,
+                 public juce::SettableTooltipClient
+{
+public:
+    explicit GrainViz (GrainFreezeProcessor& p) : proc (p) {}
+
+    void refresh()
+    {
+        count = proc.copyGrainSnapshot (snap.data(), (int) snap.size());
+        if (count > 0 || hadGrains)
+            repaint();
+        hadGrains = (count > 0);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto b = getLocalBounds().toFloat().reduced (1.0f);
+        // Background frame -- matches the morph pad styling so they read as a pair.
+        g.setColour (gf::BiohazardLookAndFeel::metal);
+        g.fillRoundedRectangle (b, 4.0f);
+        g.setColour (gf::BiohazardLookAndFeel::textCol.withAlpha (0.18f));
+        g.drawRoundedRectangle (b, 4.0f, 1.0f);
+
+        if (count <= 0) return;
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& s = snap[(size_t) i];
+            const float x = b.getX() + s.pan * b.getWidth();
+            // Amplitude maps to vertical position so loud grains pop to the top.
+            const float y = b.getBottom() - juce::jlimit (0.05f, 0.95f, s.amp) * b.getHeight();
+            // Age fades the grain out near the end of its life.
+            const float alpha = juce::jlimit (0.0f, 1.0f, 1.0f - s.age01) * 0.85f;
+            const float r = 2.0f + 2.0f * s.amp;
+            g.setColour (gf::BiohazardLookAndFeel::toxic.withAlpha (alpha));
+            g.fillEllipse (x - r, y - r, r * 2, r * 2);
+        }
+    }
+
+private:
+    GrainFreezeProcessor& proc;
+    std::array<gf::GranularEngine::GrainSnapshot, 64> snap {};
+    int  count = 0;
+    bool hadGrains = false;
+};
+
 // Draggable 2-D morph pad. The puck position drives macroMorph (X) and
 // macroMorphY (Y), which bilinearly blend the four corner snapshots (A/B/C/D).
 class MorphPad : public juce::Component,
@@ -287,6 +336,7 @@ private:
 
     // Morph pad + its four corner-capture buttons.
     MorphPad morphPad { proc };
+    GrainViz grainViz { proc };
     juce::Label morphPadLabel;
     juce::TextButton morphCapA { "A" }, morphCapB { "B" }, morphCapC { "C" }, morphCapD { "D" };
 

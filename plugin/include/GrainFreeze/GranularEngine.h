@@ -62,6 +62,29 @@ public:
     }
 
     // Full MPE-style voice push: each voice carries pitch + pressure + timbre.
+    // Visualization snapshot: copy the current grain cloud into `out` and
+    // return the count of active grains. Called from the message thread for the
+    // editor's grain cloud display; reads of `grains` are racy (the audio thread
+    // may be mutating them) but only a viz uses this -- audio is unaffected, and
+    // a stale frame is invisible at the editor refresh rate.
+    struct GrainSnapshot { float pan; float age01; float amp; };
+    int copyGrainSnapshot (GrainSnapshot* out, int maxOut) const
+    {
+        int n = 0;
+        for (int i = 0; i < (int) grains.size() && n < maxOut; ++i)
+        {
+            const auto& g = grains[(size_t) i];
+            if (! g.active) continue;
+            out[n].pan   = g.pan;
+            out[n].age01 = g.lengthSamps > 0
+                              ? 1.0f - (float) g.samplesLeft / (float) g.lengthSamps
+                              : 0.0f;
+            out[n].amp   = g.amp;
+            ++n;
+        }
+        return n;
+    }
+
     // Pressure modulates grain amplitude, timbre modulates grain size, so the
     // MPE expression layer actually moves the grain cloud per-note.
     void setMpeOn (bool b) { mpeOn.store (b, std::memory_order_relaxed); }

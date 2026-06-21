@@ -1053,7 +1053,8 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (modMatrixTitle);
     const juce::StringArray mmSourceNames { "None", "Global LFO", "Time Breaker", "Macro Texture",
                                             "Macro Beauty", "Macro Space", "Macro Chaos", "Macro Motion",
-                                            "Macro Damage", "Macro Emotion", "Morph X", "Morph Y" };
+                                            "Macro Damage", "Macro Emotion", "Morph X", "Morph Y",
+                                            "Input Env" };
     const juce::StringArray mmTargetNames { "None", "Grain Size", "Density", "Pitch", "Spray", "Spread",
                                             "Position", "Pitch Jitter", "Output", "Reverb (Grain)",
                                             "Echo Time", "Echo Feedback", "Echo Mix", "Reverb (Beauty)",
@@ -1122,6 +1123,10 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (morphPad);
     setupSectionLabel (morphPadLabel, "MORPH PAD", 12.0f);
     morphPad.setTooltip ("Drag to blend the four corner sounds. Capture each corner with the A/B/C/D buttons below.");
+
+    addAndMakeVisible (grainViz);
+    grainViz.setInterceptsMouseClicks (false, false);
+    grainViz.setTooltip ("Live grain cloud -- each dot is an active grain (x = pan, y = amplitude, fading by age).");
     morphCapA.onClick = [this] { proc.storeSlotA(); };
     morphCapB.onClick = [this] { proc.storeSlotB(); };
     morphCapC.onClick = [this] { proc.storeSlotC(); };
@@ -1322,6 +1327,7 @@ void GrainFreezeEditor::timerCallback()
                                                        "macroChaos", "macroMotion", "macroDamage", "macroEmotion" };
                     src = proc.apvts.getRawParameterValue (macroIds[srcIdx - 3])->load();
                 }
+                else if (srcIdx == 12) src = proc.getInputEnvelope();
                 level = juce::jlimit (0.0f, 1.0f, std::abs (src * depth));
             }
             auto& led = modMatrixActivity[(size_t) i];
@@ -1329,6 +1335,10 @@ void GrainFreezeEditor::timerCallback()
             if (led.level > 0.005f) led.repaint();
         }
     }
+
+    // Grain cloud viz: only refresh when HOME is showing AND audio is active.
+    if (currentTab == 4 && animating)
+        grainViz.refresh();
 
     if (animating)
     {
@@ -1503,6 +1513,7 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto& l : macroLabels) l.setVisible (homeTab);
     morphPad.setVisible (homeTab);
     morphPadLabel.setVisible (homeTab);
+    grainViz.setVisible (homeTab);
     for (auto* b : { &morphCapA, &morphCapB, &morphCapC, &morphCapD })
         b->setVisible (homeTab);
     for (auto* b : { &homeTextureOn, &homeMachinesLabel, &homeSpaceOn, &homeMasterLabel })
@@ -2354,6 +2365,8 @@ void GrainFreezeEditor::resized()
         auto pad = padBlock.withSizeKeepingCentre (200, juce::jmax (90, padBlock.getHeight() - 34));
         pad.setY (padBlock.getY());
         morphPad.setBounds (pad);
+        // Grain cloud strip beside the morph pad: same height, narrower.
+        grainViz.setBounds (pad.getRight() + 24, pad.getY(), 220, pad.getHeight());
         auto capRow = juce::Rectangle<int> (pad.getX(), pad.getBottom() + 6, pad.getWidth(), 24);
         const int cw = (capRow.getWidth() - 18) / 4;
         morphCapA.setBounds (capRow.removeFromLeft (cw)); capRow.removeFromLeft (6);
