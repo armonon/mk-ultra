@@ -2099,11 +2099,10 @@ void GrainFreezeEditor::resized()
     area.removeFromBottom (gap);
 
     // Entropy-only support rows (saturation / spectral) carved from the bottom.
-    auto bottom = area.removeFromBottom (currentTab == 0 ? 122 : 0);
-    if (currentTab == 0) area.removeFromBottom (gap);
+    // Texture-only support rows (Warmth strip; Global Mod when Advanced) flow
+    // directly under the knob grid, so they're carved inside the branch.
     const bool showGlobalMod = (currentTab == 0 && advancedMode);
-    auto specRow = area.removeFromBottom (showGlobalMod ? 74 : 0);
-    if (showGlobalMod) area.removeFromBottom (gap);
+    juce::Rectangle<int> specRow, bottom;
 
     // One row grammar for every stage: [title][on][extra slot][knob][knob]...
     // The extra slot is always reserved (combo / second toggle / nothing) so the
@@ -2154,7 +2153,7 @@ void GrainFreezeEditor::resized()
         auto wmBounds = juce::Rectangle<float> (wmSize, wmSize).withCentre (area.toFloat().getCentre());
         watermark = gf::makeBiohazardPath (wmBounds);
 
-        auto grid = area.removeFromTop (juce::jmin (area.getHeight(), 2 * (kRowH + 12)));
+        auto grid = area.removeFromTop (juce::jmin (area.getHeight(), 2 * (kRowH + 24)));
         layoutKnobGrid (grid, 5, 2, kNumKnobs, [this] (int idx, juce::Rectangle<int> cell)
         {
             auto top = cell.removeFromTop (20);
@@ -2170,14 +2169,17 @@ void GrainFreezeEditor::resized()
             if (knobs[(size_t) idx].ring != nullptr)
                 knobs[(size_t) idx].ring->setBounds (k);
         });
+        area.removeFromTop (gap);
+        bottom = area.removeFromTop (122);
+        if (showGlobalMod)
+        {
+            area.removeFromTop (gap);
+            specRow = area.removeFromTop (74);
+        }
     }
     else if (currentTab == 2)
     {
-        // Modules (toggles) + Color (10 character knobs) reserved at the bottom.
-        auto dnaSection = area.removeFromBottom (168);
-        area.removeFromBottom (gap);
-
-        auto grid = area.removeFromTop (juce::jmin (area.getHeight(), 2 * (kRowH + 12)));
+        auto grid = area.removeFromTop (juce::jmin (area.getHeight() - 180, 2 * (kRowH + 24)));
         layoutKnobGrid (grid, 5, 2, kNumPrettyKnobs, [this] (int idx, juce::Rectangle<int> cell)
         {
             auto top = cell.removeFromTop (20);
@@ -2205,7 +2207,9 @@ void GrainFreezeEditor::resized()
             prettyOutputKnob.setBounds (outCell.withSizeKeepingCentre (d, d));
         }
 
-        // MODULES: on/off pills. COLOR: the ten character knobs.
+        // MODULES: on/off pills. COLOR: the ten character knobs. Flow under the grid.
+        area.removeFromTop (gap);
+        auto dnaSection = area.removeFromTop (168);
         dnaHeader.setBounds (dnaSection.removeFromTop (16).reduced (4, 0));
         juce::ToggleButton* mods[10] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
                                          &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton,

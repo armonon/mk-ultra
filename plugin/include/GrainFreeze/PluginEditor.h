@@ -332,7 +332,7 @@ private:
     int currentTab = -1;
     bool advancedMode = false;                   // global: reveal locks/gears/rings/matrix/etc.
     juce::TextButton advancedButton { "Advanced" };
-    juce::TextButton moreButton { juce::String (juce::CharPointer_UTF8 ("\xe2\x8b\xaf")) };   // "..." menu
+    juce::TextButton moreButton { "..." };       // the overflow menu (the ellipsis glyph is missing from the UI font)
     void showMoreMenu();
 
     // ---- HOME cockpit: the macros that drive the whole chain + a stage strip. ----
