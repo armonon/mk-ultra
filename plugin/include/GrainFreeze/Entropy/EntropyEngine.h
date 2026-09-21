@@ -20,6 +20,7 @@ struct Params
     float noteOffset = 0.0f;
     float spray = 30.0f;
     float spread = 0.4f;
+    float grainShape = 0.5f;   // 0 = percussive, 0.5 = symmetric Hann, 1 = swell
     float position = 0.5f;
     float pitchJitter = 0.0f;
     float output = 0.75f;

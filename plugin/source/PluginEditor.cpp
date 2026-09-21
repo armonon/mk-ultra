@@ -17,6 +17,7 @@ namespace
         { gf::ParamId::pitch,       "pitch",       "Grain Pitch" },
         { gf::ParamId::spray,       "spray",       "Spray" },
         { gf::ParamId::spread,      "spread",      "Spread" },
+        { gf::ParamId::grainShape,  "grainShape",  "Shape" },
         { gf::ParamId::position,    "position",    "Position" },
         { gf::ParamId::pitchJitter, "pitchJitter", "Pitch Jitter" },
         { gf::ParamId::reverbMix,   "reverbMix",   "Grain Space" },
@@ -439,18 +440,20 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (freezeButton);
     freezeAttachment = std::make_unique<ButtonAttachment> (proc.apvts, "frozen", freezeButton);
 
-    for (auto* tab : { &tabHome, &tabEntropy, &tabMachines, &tabMix, &tabPrettifier })
+    for (auto* tab : { &tabHome, &tabEntropy, &tabMachines, &tabMix, &tabPrettifier, &tabAir })
         addAndMakeVisible (*tab);
     tabHome.onClick = [this] { switchTab (4); };
     tabEntropy.onClick = [this] { switchTab (0); };
     tabMix.onClick = [this] { switchTab (1); };
     tabPrettifier.onClick = [this] { switchTab (2); };
     tabMachines.onClick = [this] { switchTab (3); };
+    tabAir.onClick = [this] { switchTab (5); };
     tabHome.setClickingTogglesState (true);
     tabEntropy.setClickingTogglesState (true);
     tabMix.setClickingTogglesState (true);
     tabPrettifier.setClickingTogglesState (true);
     tabMachines.setClickingTogglesState (true);
+    tabAir.setClickingTogglesState (true);
 
     for (auto* b : { &buttonA, &buttonB, &copyAToBButton, &copyBToAButton, &resetBButton,
                      &undoButton, &redoButton, &initButton, &randomizeAllButton, &panicButton })
@@ -540,8 +543,8 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     // (or imports one if cmd/ctrl-clicked).  Drop the file in Slack/Discord/etc
     // to trade sounds.
     addAndMakeVisible (shareButton);
-    shareButton.setTooltip ("Click: export the current sound to a .mkultra file.   "
-                            "\xe2\x8c\x98/Ctrl-click: import one.");
+    shareButton.setTooltip (juce::String ("Click: export the current sound to a .mkultra file.   ")
+                            + juce::String (juce::CharPointer_UTF8 ("\xe2\x8c\x98")) + "/Ctrl-click: import one.");
     shareButton.onClick = [this]
     {
         const bool importMode = juce::ModifierKeys::getCurrentModifiers().isCommandDown();
@@ -1048,6 +1051,55 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machDuckerAmount.setTooltip ("Maximum gain reduction at full trigger (0 = no duck, 1 = full silence at peak)");
     machDuckerThreshold.setTooltip ("Trigger level below which no ducking happens (so quiet passages keep the full wet)");
 
+    // ---- AIR tab ----
+    setupSectionLabel (airHeader,       "AIR  -  HIGH-BAND TONAL TOYS", 14.0f);
+    setupSectionLabel (airSquelchTitle, "SQUELCH",   13.0f);
+    setupSectionLabel (airExciterTitle, "EXCITER",   13.0f);
+    setupSectionLabel (airShelfTitle,   "DYN SHELF", 13.0f);
+    setupSectionLabel (airPhaserTitle,  "PHASER",    13.0f);
+    setupSectionLabel (airDelayTitle,   "DELAY",     13.0f);
+    for (auto* l : { &airHeader, &airSquelchTitle, &airExciterTitle, &airShelfTitle, &airPhaserTitle, &airDelayTitle })
+        addAndMakeVisible (*l);
+
+    machToggle (airOn,        "airOn",        airOnAttach);
+    machToggle (airSquelchOn, "airSquelchOn", airSquelchOnAttach);
+    machToggle (airExciterOn, "airExciterOn", airExciterOnAttach);
+    machToggle (airShelfOn,   "airShelfOn",   airShelfOnAttach);
+    machToggle (airPhaserOn,  "airPhaserOn",  airPhaserOnAttach);
+    machToggle (airDelayOn,   "airDelayOn",   airDelayOnAttach);
+
+    airSquelchMode.addItemList ({ "Low", "Band", "High" }, 1);
+    addAndMakeVisible (airSquelchMode);
+    airSquelchModeAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "airSquelchMode", airSquelchMode);
+
+    machKnob (airCrossover,      airCrossoverL,      "Crossover", "airCrossover",      airCrossoverAttach);
+    machKnob (airMix,            airMixL,            "Mix",       "airMix",            airMixAttach);
+    machKnob (airSquelchHz,      airSquelchHzL,      "Cutoff",    "airSquelchHz",      airSquelchHzAttach);
+    machKnob (airSquelchRes,     airSquelchResL,     "Resonance", "airSquelchRes",     airSquelchResAttach);
+    machKnob (airSquelchEnv,     airSquelchEnvL,     "Env",       "airSquelchEnv",     airSquelchEnvAttach);
+    machKnob (airExciterDrive,   airExciterDriveL,   "Drive",     "airExciterDrive",   airExciterDriveAttach);
+    machKnob (airExciterMix,     airExciterMixL,     "Mix",       "airExciterMix",     airExciterMixAttach);
+    machKnob (airShelfHz,        airShelfHzL,        "Freq",      "airShelfHz",        airShelfHzAttach);
+    machKnob (airShelfAmount,    airShelfAmountL,    "Amount",    "airShelfAmount",    airShelfAmountAttach);
+    machKnob (airShelfThreshold, airShelfThresholdL, "Threshold", "airShelfThreshold", airShelfThresholdAttach);
+    machKnob (airPhaserRate,     airPhaserRateL,     "Rate",      "airPhaserRate",     airPhaserRateAttach);
+    machKnob (airPhaserDepth,    airPhaserDepthL,    "Depth",     "airPhaserDepth",    airPhaserDepthAttach);
+    machKnob (airPhaserMix,      airPhaserMixL,      "Mix",       "airPhaserMix",      airPhaserMixAttach);
+    machKnob (airDelayMs,        airDelayMsL,        "Time",      "airDelayMs",        airDelayMsAttach);
+    machKnob (airDelayFeedback,  airDelayFeedbackL,  "Feedback",  "airDelayFeedback",  airDelayFeedbackAttach);
+    machKnob (airDelayMix,       airDelayMixL,       "Mix",       "airDelayMix",       airDelayMixAttach);
+
+    airOn.setTooltip ("AIR: split at the crossover, run only the TOP band through the toys below, blend back. The low band always passes clean.");
+    airCrossover.setTooltip ("Where the top band starts. Everything below stays untouched.");
+    airMix.setTooltip ("Processed top vs dry top. 0 = bypass the toys, 1 = fully processed top.");
+    airSquelchOn.setTooltip ("Resonant filter on the top. Crank Resonance for a pitched ring at the cutoff -- the most direct way to add a tone to a note.");
+    airSquelchEnv.setTooltip ("Envelope -> cutoff (auto-wah). + opens the filter on hits, - closes it. Up to 4 octaves.");
+    airExciterOn.setTooltip ("Oversampled saturator on the top band only: adds harmonics above the crossover without touching the lows.");
+    airShelfOn.setTooltip ("A high shelf whose gain follows the top band's envelope. Negative = tame spiky highs (de-ess). Positive = lift air when there's energy.");
+    airShelfAmount.setTooltip ("-1 tames, +1 lifts, up to 12 dB above the Threshold.");
+    airPhaserOn.setTooltip ("Phaser confined to the top: moving notches without smearing the low end.");
+    airDelayOn.setTooltip ("Short feedback delay on the top only. Tune the time to the note for a comb-tone.");
+
     // ---- Universal Modulation Matrix ----
     setupSectionLabel (modMatrixTitle, "MOD MATRIX", 13.0f);
     addAndMakeVisible (modMatrixTitle);
@@ -1392,7 +1444,7 @@ void GrainFreezeEditor::addKnob (LabeledKnob& k, gf::ParamId id, const juce::Str
     addAndMakeVisible (k.label);
 
     k.lock.setComponentID ("lock"); // drawn as a padlock by the LookAndFeel
-    k.lock.setTooltip ("Lock this control — keeps it fixed when you Randomize");
+    k.lock.setTooltip (juce::String::fromUTF8 ("Lock this control \xe2\x80\x94 keeps it fixed when you Randomize"));
     k.lock.onClick = [this, &k] { proc.randomizer.setLocked (k.id, k.lock.getToggleState()); };
     addAndMakeVisible (k.lock);
 
@@ -1472,7 +1524,7 @@ void GrainFreezeEditor::launchTour()
 
 void GrainFreezeEditor::switchTab (int tabIndex)
 {
-    currentTab = juce::jlimit (0, 4, tabIndex);
+    currentTab = juce::jlimit (0, 5, tabIndex);
     updateTabVisibility();
     resized();
     repaint(); // instant switch (no cross-fade) for snappiness
@@ -1500,6 +1552,21 @@ void GrainFreezeEditor::updateTabVisibility()
     tabMix.setToggleState (mixTab, juce::dontSendNotification);
     tabPrettifier.setToggleState (prettifierTab, juce::dontSendNotification);
     tabMachines.setToggleState (machinesTab, juce::dontSendNotification);
+    const bool airTab = currentTab == 5;
+    tabAir.setToggleState (airTab, juce::dontSendNotification);
+    for (auto* l : { &airHeader, &airSquelchTitle, &airExciterTitle, &airShelfTitle, &airPhaserTitle, &airDelayTitle })
+        l->setVisible (airTab);
+    for (auto* b : { &airOn, &airSquelchOn, &airExciterOn, &airShelfOn, &airPhaserOn, &airDelayOn })
+        b->setVisible (airTab);
+    airSquelchMode.setVisible (airTab);
+    for (auto* s : { &airCrossover, &airMix, &airSquelchHz, &airSquelchRes, &airSquelchEnv,
+                     &airExciterDrive, &airExciterMix, &airShelfHz, &airShelfAmount, &airShelfThreshold,
+                     &airPhaserRate, &airPhaserDepth, &airPhaserMix, &airDelayMs, &airDelayFeedback, &airDelayMix })
+        s->setVisible (airTab);
+    for (auto* l : { &airCrossoverL, &airMixL, &airSquelchHzL, &airSquelchResL, &airSquelchEnvL,
+                     &airExciterDriveL, &airExciterMixL, &airShelfHzL, &airShelfAmountL, &airShelfThresholdL,
+                     &airPhaserRateL, &airPhaserDepthL, &airPhaserMixL, &airDelayMsL, &airDelayFeedbackL, &airDelayMixL })
+        l->setVisible (airTab);
 
     lnf.setAccentTheme ((entropyTab || machinesTab || homeTab) ? gf::BiohazardLookAndFeel::AccentTheme::entropy
                         : mixTab     ? gf::BiohazardLookAndFeel::AccentTheme::mix
@@ -1857,6 +1924,7 @@ void GrainFreezeEditor::resized()
     placeTab (tabMachines, 120);
     placeTab (tabPrettifier, 92);
     placeTab (tabMix, 102);
+    placeTab (tabAir, 70);
 
     area.removeFromTop (gap);
 
@@ -2332,6 +2400,56 @@ void GrainFreezeEditor::resized()
                 area.removeFromTop (2);
             }
         }
+    }
+    else if (currentTab == 5)   // AIR: parallel high-band tonal toys
+    {
+        airHeader.setBounds (area.removeFromTop (24).reduced (4, 0));
+        area.removeFromTop (gap);
+
+        // One generic row: [title][On][optional combo] then knobs centred in the rest.
+        auto airRow = [&] (juce::Label& title, juce::ToggleButton& on, juce::ComboBox* combo,
+                           std::initializer_list<std::pair<juce::Slider*, juce::Label*>> knobs)
+        {
+            auto block = area.removeFromTop (100);
+            auto head  = block.removeFromTop (26);
+            title.setBounds (head.removeFromLeft (140).withSizeKeepingCentre (140, 22));
+            on.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
+            if (combo != nullptr)
+            {
+                head.removeFromLeft (gap);
+                combo->setBounds (head.removeFromLeft (96).withSizeKeepingCentre (92, 26));
+            }
+            block.removeFromTop (2);
+            const int kw = 96;
+            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * (int) knobs.size()), block.getHeight());
+            for (auto& kv : knobs)
+                layoutDialCell (krow, *kv.second, *kv.first, kw);
+            area.removeFromTop (4);
+        };
+
+        // Master row: On + crossover + mix. Title reuses the header label slot above,
+        // so pass a scratch-free layout: we just place On/crossover/mix.
+        {
+            auto block = area.removeFromTop (100);
+            auto head  = block.removeFromTop (26);
+            airOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
+            block.removeFromTop (2);
+            const int kw = 96;
+            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 2), block.getHeight());
+            layoutDialCell (krow, airCrossoverL, airCrossover, kw);
+            layoutDialCell (krow, airMixL,       airMix,       kw);
+            area.removeFromTop (4);
+        }
+        airRow (airSquelchTitle, airSquelchOn, &airSquelchMode,
+                { { &airSquelchHz, &airSquelchHzL }, { &airSquelchRes, &airSquelchResL }, { &airSquelchEnv, &airSquelchEnvL } });
+        airRow (airExciterTitle, airExciterOn, nullptr,
+                { { &airExciterDrive, &airExciterDriveL }, { &airExciterMix, &airExciterMixL } });
+        airRow (airShelfTitle, airShelfOn, nullptr,
+                { { &airShelfHz, &airShelfHzL }, { &airShelfAmount, &airShelfAmountL }, { &airShelfThreshold, &airShelfThresholdL } });
+        airRow (airPhaserTitle, airPhaserOn, nullptr,
+                { { &airPhaserRate, &airPhaserRateL }, { &airPhaserDepth, &airPhaserDepthL }, { &airPhaserMix, &airPhaserMixL } });
+        airRow (airDelayTitle, airDelayOn, nullptr,
+                { { &airDelayMs, &airDelayMsL }, { &airDelayFeedback, &airDelayFeedbackL }, { &airDelayMix, &airDelayMixL } });
     }
     else if (currentTab == 4)   // HOME cockpit
     {

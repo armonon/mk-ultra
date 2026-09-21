@@ -197,11 +197,17 @@ void MixEngine::processParallel (juce::AudioBuffer<float>& output,
     const float beautyWeight = juce::jlimit (0.0f, 1.0f, params.chaosBeauty) * params.prettifierReturn;
     const float dryWeight = params.dryLevel;
 
-    // Dry is summed straight through (never pitch-shifted).
-    for (int c = 0; c < channels; ++c)
+    // Dry is summed straight through (never pitch-shifted). The processor passes
+    // `output` itself as `dry` when it decided no dry copy was needed -- which by
+    // construction means the dry weight is ~0 -- so skip the pass rather than
+    // adding a just-cleared buffer to itself (addFrom asserts on aliasing).
+    if (&dry != &output && dryWeight > 0.0f)
     {
-        const int srcDry = juce::jmin (c, dry.getNumChannels() - 1);
-        output.addFrom (c, 0, dry, srcDry, 0, samples, dryWeight);
+        for (int c = 0; c < channels; ++c)
+        {
+            const int srcDry = juce::jmin (c, dry.getNumChannels() - 1);
+            output.addFrom (c, 0, dry, srcDry, 0, samples, dryWeight);
+        }
     }
 
     // Build the wet sum (entropy + prettifier) into wetSum so Pitch Match can

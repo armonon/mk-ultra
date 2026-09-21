@@ -291,6 +291,32 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "textureGrainMix", 0.75f }, { "spread", 0.4f },
             { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.85f }, { "prettyReverbDamping", 0.7f } } },
 
+        // ---- Air ---- (the AIR page: tonal toys on the top band, lows untouched)
+        { "Air - Acid Squelch", {
+            // Resonant bandpass riding the envelope + a little exciter growl: the 303 move, on any source.
+            { "textureGrainOn", 1 }, { "grainSize", 90 }, { "density", 60 }, { "textureGrainMix", 0.4f },
+            { "airOn", 1 }, { "airCrossover", 1800.0f }, { "airMix", 0.85f },
+            { "airSquelchOn", 1 }, { "airSquelchMode", 1 }, { "airSquelchHz", 2400.0f },
+            { "airSquelchRes", 0.82f }, { "airSquelchEnv", 0.6f },
+            { "airExciterOn", 1 }, { "airExciterDrive", 0.45f }, { "airExciterMix", 0.5f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.35f } } },
+
+        { "Air - Silk Lift", {
+            // Dynamic shelf lifts air only when there's energy; gentle harmonics. Mastering-grade sheen.
+            { "textureGrainOn", 1 }, { "grainSize", 200 }, { "density", 30 }, { "textureGrainMix", 0.3f },
+            { "airOn", 1 }, { "airCrossover", 4000.0f }, { "airMix", 0.7f },
+            { "airShelfOn", 1 }, { "airShelfHz", 9000.0f }, { "airShelfAmount", 0.55f }, { "airShelfThreshold", 0.15f },
+            { "airExciterOn", 1 }, { "airExciterDrive", 0.2f }, { "airExciterMix", 0.35f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.5f } } },
+
+        { "Air - Comb Tone", {
+            // Short high-feedback delay on the top tunes a comb pitch into the note; slow phaser keeps it moving.
+            { "textureGrainOn", 1 }, { "grainSize", 120 }, { "density", 45 }, { "textureGrainMix", 0.45f },
+            { "airOn", 1 }, { "airCrossover", 2200.0f }, { "airMix", 0.8f },
+            { "airDelayOn", 1 }, { "airDelayMs", 4.5f }, { "airDelayFeedback", 0.86f }, { "airDelayMix", 0.7f },
+            { "airPhaserOn", 1 }, { "airPhaserRate", 0.12f }, { "airPhaserDepth", 0.7f }, { "airPhaserMix", 0.45f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.6f } } },
+
         { "Bass - Wobble Crush", {
             { "textureGrainOn", 1 }, { "grainSize", 60 }, { "density", 90 }, { "textureGrainMix", 0.45f },
             { "damageOn", 1 }, { "damageClip", 3 /*Fold*/ }, { "damageAmount", 0.5f }, { "damageMix", 0.85f },

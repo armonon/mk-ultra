@@ -43,6 +43,7 @@ public:
     void setType  (int t)     { type.store (t); }
     void setDrive (float d)   { drive.store (juce::jlimit (1.0f, 24.0f, d)); }   // 1..24x
     void setMix   (float m)   { mix.store   (juce::jlimit (0.0f, 1.0f, m)); }
+    int  getLatencySamples() const { return dryRingLen; }
 
     // Evaluate the full transfer function (drive + shape + level compensation)
     // for a dry input x in [-1,1]. Used by the UI to draw the curve identically

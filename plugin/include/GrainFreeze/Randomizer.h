@@ -21,6 +21,7 @@ inline const char* paramIdString (ParamId id)
         case ParamId::spread:      return "spread";
         case ParamId::position:    return "position";
         case ParamId::pitchJitter: return "pitchJitter";
+        case ParamId::grainShape:  return "grainShape";
         case ParamId::reverbMix:   return "reverbMix";
         case ParamId::output:      return "output";
         case ParamId::echoTime:        return "echoTimeMs";
@@ -52,6 +53,7 @@ inline MusicalRange musicalRange (ParamId id)
         case ParamId::spread:      return { 0.2f, 0.9f };
         case ParamId::position:    return { 0.0f, 1.0f };
         case ParamId::pitchJitter: return { 0.0f, 32.0f };     // semis
+        case ParamId::grainShape:  return { 0.15f, 0.85f };    // keep off the extreme envelopes
         case ParamId::reverbMix:   return { 0.0f, 0.6f };
         case ParamId::output:      return { 0.55f, 0.9f };
         case ParamId::echoTime:        return { 30.0f, 2400.0f }; // ms

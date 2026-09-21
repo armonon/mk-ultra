@@ -58,16 +58,34 @@ void GranularEngine::pushInput (const juce::AudioBuffer<float>& input)
 
 inline float GranularEngine::readInterpolated (int channel, double pos) const
 {
-    // Linear interpolation with wraparound into the circular buffer.
-    while (pos < 0)          pos += captureLen;
+    // 4-point cubic Hermite (Catmull-Rom) interpolation with wraparound.
+    //
+    // Linear interpolation is cheap but acts as a low-pass whose cutoff depends
+    // on the fractional phase -- so pitched-up grains lose air and pitched-down
+    // grains alias. Hermite uses the two neighbours on each side to fit a cubic
+    // through the sample points, which drops the interpolation error by roughly
+    // an order of magnitude in the top octave. This is the single biggest
+    // audible quality factor in a granular engine.
+    while (pos < 0)           pos += captureLen;
     while (pos >= captureLen) pos -= captureLen;
 
-    const int   i0 = (int) pos;
-    const int   i1 = (i0 + 1) % captureLen;
-    const float f  = (float) (pos - (double) i0);
-    const float a  = capture.getSample (channel, i0);
-    const float b  = capture.getSample (channel, i1);
-    return a + (b - a) * f;
+    const int   i1 = (int) pos;
+    const float f  = (float) (pos - (double) i1);
+
+    const int i0 = (i1 - 1 + captureLen) % captureLen;
+    const int i2 = (i1 + 1) % captureLen;
+    const int i3 = (i1 + 2) % captureLen;
+
+    const auto* d = capture.getReadPointer (channel);
+    const float y0 = d[i0], y1 = d[i1], y2 = d[i2], y3 = d[i3];
+
+    // Catmull-Rom coefficients.
+    const float c0 = y1;
+    const float c1 = 0.5f * (y2 - y0);
+    const float c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
+    const float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+
+    return ((c3 * f + c2) * f + c1) * f + c0;
 }
 
 void GranularEngine::spawnGrain()
@@ -144,7 +162,14 @@ void GranularEngine::spawnGrain()
         slot->amp *= 0.3f + 1.2f * voicePress;
 
     const float sp = spread.load();
-    slot->pan = 0.5f + (rand01() - 0.5f) * sp;
+    slot->pan = juce::jlimit (0.0f, 1.0f, 0.5f + (rand01() - 0.5f) * sp);
+    // Resolve the equal-power pan gains ONCE here instead of per sample.
+    const float panAngle = slot->pan * juce::MathConstants<float>::halfPi;
+    slot->panL = std::cos (panAngle);
+    slot->panR = std::sin (panAngle);
+    // Latch the window shape so a grain keeps a consistent envelope even if the
+    // user sweeps the Shape knob mid-grain.
+    slot->skew = grainSkew.load (std::memory_order_relaxed);
 }
 
 void GranularEngine::process (juce::AudioBuffer<float>& output)
@@ -180,8 +205,16 @@ void GranularEngine::process (juce::AudioBuffer<float>& output)
         {
             if (! g.active) continue;
 
-            // Window index from grain progress.
-            const float prog = 1.0f - ((float) g.samplesLeft / (float) g.lengthSamps);
+            // Window index from grain progress, warped by the grain's shape.
+            float prog = 1.0f - ((float) g.samplesLeft / (float) g.lengthSamps);
+            if (g.skew != 1.0f)
+            {
+                // Rational bias curve: p / (p + s(1-p)). Maps 0->0 and 1->1, and
+                // slides the window peak earlier (s<1, percussive) or later
+                // (s>1, swelling). One mul/add/div -- no pow() in the inner loop.
+                const float den = prog + g.skew * (1.0f - prog);
+                prog = den > 1.0e-6f ? prog / den : prog;
+            }
             const int   wIdx = juce::jlimit (0, kWindowPoints - 1,
                                              (int) (prog * (kWindowPoints - 1)));
             const float win  = window[(size_t) wIdx] * g.amp;
@@ -189,11 +222,9 @@ void GranularEngine::process (juce::AudioBuffer<float>& output)
             const float sL = readInterpolated (0, g.readPos) * win;
             const float sR = readInterpolated (channels > 1 ? 1 : 0, g.readPos) * win;
 
-            // Equal-power-ish pan.
-            const float pl = std::cos (g.pan * juce::MathConstants<float>::halfPi);
-            const float pr = std::sin (g.pan * juce::MathConstants<float>::halfPi);
-            left  += sL * pl;
-            right += sR * pr;
+            // Equal-power pan, resolved at spawn (see spawnGrain).
+            left  += sL * g.panL;
+            right += sR * g.panR;
 
             g.readPos += g.rate;
             if (--g.samplesLeft <= 0) g.active = false;

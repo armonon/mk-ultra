@@ -325,6 +325,7 @@ private:
     juce::TextButton tabMachines { "MACHINES" };
     juce::TextButton tabMix { "MASTER" };
     juce::TextButton tabPrettifier { "SPACE" };
+    juce::TextButton tabAir { "AIR" };          // index 5: parallel high-band tonal toys
     int currentTab = 4;   // land on HOME
 
     // ---- HOME cockpit: the macros that drive the whole chain + a stage strip. ----
@@ -524,6 +525,34 @@ private:
     juce::Slider       machDamageSplitHz, machDamageHighAmount;
     juce::Label        machDamageSplitHzL, machDamageHighAmountL;
 
+    // ---- AIR tab: parallel high-band chain. Every control is a performance
+    // control (automatable); the low band always passes untouched. ----
+    juce::Label airHeader, airSquelchTitle, airExciterTitle, airShelfTitle, airPhaserTitle, airDelayTitle;
+    juce::ToggleButton airOn { "On" }, airSquelchOn { "On" }, airExciterOn { "On" },
+                       airShelfOn { "On" }, airPhaserOn { "On" }, airDelayOn { "On" };
+    juce::ComboBox     airSquelchMode;
+    juce::Slider       airCrossover, airMix,
+                       airSquelchHz, airSquelchRes, airSquelchEnv,
+                       airExciterDrive, airExciterMix,
+                       airShelfHz, airShelfAmount, airShelfThreshold,
+                       airPhaserRate, airPhaserDepth, airPhaserMix,
+                       airDelayMs, airDelayFeedback, airDelayMix;
+    juce::Label        airCrossoverL, airMixL,
+                       airSquelchHzL, airSquelchResL, airSquelchEnvL,
+                       airExciterDriveL, airExciterMixL,
+                       airShelfHzL, airShelfAmountL, airShelfThresholdL,
+                       airPhaserRateL, airPhaserDepthL, airPhaserMixL,
+                       airDelayMsL, airDelayFeedbackL, airDelayMixL;
+    std::unique_ptr<ButtonAttachment> airOnAttach, airSquelchOnAttach, airExciterOnAttach,
+                                      airShelfOnAttach, airPhaserOnAttach, airDelayOnAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> airSquelchModeAttach;
+    std::unique_ptr<SliderAttachment> airCrossoverAttach, airMixAttach,
+                                      airSquelchHzAttach, airSquelchResAttach, airSquelchEnvAttach,
+                                      airExciterDriveAttach, airExciterMixAttach,
+                                      airShelfHzAttach, airShelfAmountAttach, airShelfThresholdAttach,
+                                      airPhaserRateAttach, airPhaserDepthAttach, airPhaserMixAttach,
+                                      airDelayMsAttach, airDelayFeedbackAttach, airDelayMixAttach;
+
     // Sidechain Ducker (self-sidechain on input env -> attenuates the wet).
     juce::ToggleButton machDuckerOn { "On" };
     juce::Slider       machDuckerAmount, machDuckerThreshold, machDuckerAttack, machDuckerRelease;
@@ -608,7 +637,7 @@ private:
     // fix and CoreGraphics renders text correctly again.
     juce::OpenGLContext openGLContext;
 
-    static constexpr int kNumKnobs = 9;
+    static constexpr int kNumKnobs = 10;
     std::array<LabeledKnob, kNumKnobs> knobs;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GrainFreezeEditor)

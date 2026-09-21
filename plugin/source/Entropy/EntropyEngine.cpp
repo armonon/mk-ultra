@@ -10,6 +10,7 @@ constexpr auto density     = "density";
 constexpr auto pitch       = "pitch";
 constexpr auto spray       = "spray";
 constexpr auto spread      = "spread";
+constexpr auto grainShape  = "grainShape";
 constexpr auto position    = "position";
 constexpr auto pitchJitter = "pitchJitter";
 constexpr auto reverbMix   = "reverbMix";
@@ -31,6 +32,7 @@ void EntropyEngine::addParameters (juce::AudioProcessorValueTreeState::Parameter
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::pitch, 1 },       "Pitch", NormalisableRange<float> (-60.0f, 60.0f, 1.0f), 0.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::spray, 1 },       "Spray", NormalisableRange<float> (0.0f, 4000.0f, 1.0f), 30.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::spread, 1 },      "Stereo Spread", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.4f));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::grainShape, 1 },  "Grain Shape",   NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::position, 1 },    "Position", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::pitchJitter, 1 }, "Pitch Jitter", NormalisableRange<float> (0.0f, 48.0f, 0.1f), 0.0f));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::reverbMix, 1 },   "Reverb Mix", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.25f));
@@ -100,6 +102,7 @@ void EntropyEngine::process (juce::AudioBuffer<float>& buffer, const Params& par
     granular.setNoteOffsetSemis (params.noteOffset);
     granular.setSprayMs (params.spray);
     granular.setSpread (params.spread);
+    granular.setGrainShape (params.grainShape);
     granular.setPosition (params.position);
     granular.setPitchJitter (params.pitchJitter);
     granular.setOutputGain (params.output);

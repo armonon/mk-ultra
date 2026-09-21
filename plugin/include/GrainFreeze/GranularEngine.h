@@ -20,6 +20,11 @@ struct Grain
     int    lengthSamps = 1;     // total grain length in output samples
     float  pan         = 0.5f;  // 0 = left, 1 = right
     float  amp         = 1.0f;  // per-grain amplitude
+    // Equal-power pan gains, resolved once at spawn. Pan is constant for a
+    // grain's whole life, so computing cos/sin per sample was pure waste.
+    float  panL        = 0.7071f;
+    float  panR        = 0.7071f;
+    float  skew        = 1.0f;  // window warp exponent, latched at spawn
 };
 
 class GranularEngine
@@ -44,6 +49,17 @@ public:
     void setDensity     (float perSec)  { density.store (perSec); }
     void setPitchSemis  (float st)      { pitchSemis.store (st); }
     void setNoteOffsetSemis (float st)  { noteOffset.store (st); }
+
+    // Grain envelope shape, 0..1. 0.5 = symmetric Hann (the classic pad sound),
+    // toward 0 = fast attack / long decay (percussive, plucky), toward 1 = slow
+    // swell / fast release (reverse-tape, breathy). Converted here on the
+    // message thread into the warp exponent the audio thread applies, so the
+    // render loop never sees a pow().
+    void setGrainShape (float shape01)
+    {
+        const float s = juce::jlimit (0.0f, 1.0f, shape01);
+        grainSkew.store (std::pow (4.0f, (s - 0.5f) * 2.0f), std::memory_order_relaxed);
+    }
 
     // Polyphonic note mode: when enabled and there are 2+ active notes, each new
     // grain randomly picks one of the held notes for its pitch offset. Set by
@@ -142,6 +158,7 @@ private:
     std::atomic<float> density     { 28.0f };
     std::atomic<float> pitchSemis  { 0.0f };
     std::atomic<float> noteOffset  { 0.0f };
+    std::atomic<float> grainSkew   { 1.0f };   // window warp exponent (1 = symmetric)
 
     // Polyphonic note pool: each new grain picks a random active offset.
     std::atomic<bool> polyOn { false };

@@ -19,6 +19,7 @@ enum class ParamId
     spread,
     position,
     pitchJitter,
+    grainShape,   // window skew: 0 percussive, 0.5 Hann, 1 swell
     reverbMix,
     output,
     // Prettifier knobs (same per-knob modulation/lock support as Entropy).

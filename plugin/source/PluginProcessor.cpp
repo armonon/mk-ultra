@@ -118,6 +118,29 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.duckThreshold, "duckThreshold");
     bind (paramPtrs.duckAttack, "duckAttack");
     bind (paramPtrs.duckRelease, "duckRelease");
+    bind (paramPtrs.airOn, "airOn");
+    bind (paramPtrs.airCrossover, "airCrossover");
+    bind (paramPtrs.airMix, "airMix");
+    bind (paramPtrs.airSquelchOn, "airSquelchOn");
+    bind (paramPtrs.airSquelchMode, "airSquelchMode");
+    bind (paramPtrs.airSquelchHz, "airSquelchHz");
+    bind (paramPtrs.airSquelchRes, "airSquelchRes");
+    bind (paramPtrs.airSquelchEnv, "airSquelchEnv");
+    bind (paramPtrs.airExciterOn, "airExciterOn");
+    bind (paramPtrs.airExciterDrive, "airExciterDrive");
+    bind (paramPtrs.airExciterMix, "airExciterMix");
+    bind (paramPtrs.airShelfOn, "airShelfOn");
+    bind (paramPtrs.airShelfHz, "airShelfHz");
+    bind (paramPtrs.airShelfAmount, "airShelfAmount");
+    bind (paramPtrs.airShelfThreshold, "airShelfThreshold");
+    bind (paramPtrs.airPhaserOn, "airPhaserOn");
+    bind (paramPtrs.airPhaserRate, "airPhaserRate");
+    bind (paramPtrs.airPhaserDepth, "airPhaserDepth");
+    bind (paramPtrs.airPhaserMix, "airPhaserMix");
+    bind (paramPtrs.airDelayOn, "airDelayOn");
+    bind (paramPtrs.airDelayMs, "airDelayMs");
+    bind (paramPtrs.airDelayFeedback, "airDelayFeedback");
+    bind (paramPtrs.airDelayMix, "airDelayMix");
     bind (paramPtrs.polyGrain, "polyGrain");
     bind (paramPtrs.mpeOn, "mpeOn");
 
@@ -472,6 +495,33 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addFloat  ("duckThreshold", "Duck Threshold",  NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.1f);
     addFloat  ("duckAttack",    "Duck Attack",     NormalisableRange<float> (0.1f, 200.0f, 0.1f, 0.3f), 8.0f);
     addFloat  ("duckRelease",   "Duck Release",    NormalisableRange<float> (10.0f, 2000.0f, 1.0f, 0.4f), 140.0f);
+
+    // AIR page: a parallel high-band chain (Squelch -> Exciter -> Dyn Shelf ->
+    // Phaser -> Delay) that adds tonal character to the top of a sound while the
+    // low band stays untouched. Everything here is a performance control.
+    addBool   ("airOn",             "Air",                false);
+    addFloat  ("airCrossover",      "Air Crossover",      NormalisableRange<float> (200.0f, 12000.0f, 1.0f, 0.35f), 2500.0f);
+    addFloat  ("airMix",            "Air Mix",            NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f);
+    addBool   ("airSquelchOn",      "Squelch",            false);
+    addChoice ("airSquelchMode",    "Squelch Mode",       StringArray { "Low", "Band", "High" }, 1);
+    addFloat  ("airSquelchHz",      "Squelch Cutoff",     NormalisableRange<float> (200.0f, 16000.0f, 1.0f, 0.35f), 4000.0f);
+    addFloat  ("airSquelchRes",     "Squelch Resonance",  NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f);
+    addFloat  ("airSquelchEnv",     "Squelch Env",        NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+    addBool   ("airExciterOn",      "Exciter",            false);
+    addFloat  ("airExciterDrive",   "Exciter Drive",      NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.3f);
+    addFloat  ("airExciterMix",     "Exciter Mix",        NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f);
+    addBool   ("airShelfOn",        "Dynamic Shelf",      false);
+    addFloat  ("airShelfHz",        "Shelf Frequency",    NormalisableRange<float> (1000.0f, 16000.0f, 1.0f, 0.4f), 8000.0f);
+    addFloat  ("airShelfAmount",    "Shelf Amount",       NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
+    addFloat  ("airShelfThreshold", "Shelf Threshold",    NormalisableRange<float> (0.0f, 0.95f, 0.001f), 0.2f);
+    addBool   ("airPhaserOn",       "Air Phaser",         false);
+    addFloat  ("airPhaserRate",     "Air Phaser Rate",    NormalisableRange<float> (0.02f, 10.0f, 0.01f, 0.4f), 0.3f);
+    addFloat  ("airPhaserDepth",    "Air Phaser Depth",   NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.6f);
+    addFloat  ("airPhaserMix",      "Air Phaser Mix",     NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f);
+    addBool   ("airDelayOn",        "Air Delay",          false);
+    addFloat  ("airDelayMs",        "Air Delay Time",     NormalisableRange<float> (1.0f, 1400.0f, 0.1f, 0.4f), 120.0f);
+    addFloat  ("airDelayFeedback",  "Air Delay Feedback", NormalisableRange<float> (0.0f, 0.95f, 0.001f), 0.35f);
+    addFloat  ("airDelayMix",       "Air Delay Mix",      NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.4f);
     addMachine ("motionMatrix", "Motion Matrix", true);
     addFloat ("analyzerScopeMix", "Analyzer / Scopes Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
     addFloat ("analyzerScopeAmount", "Analyzer / Scopes Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
@@ -496,7 +546,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
 
     addBool ("grainReverseOn", "Grain Reverse On", false);
     addFloat ("grainReverseChance", "Grain Reverse Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addChoice ("grainShape", "Grain Shape", StringArray { "Hann", "Tukey", "Gaussian", "Rect", "Ramp", "Random" }, 0);
     addFloat ("grainSkew", "Grain Skew", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
     addFloat ("grainChaos", "Grain Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat ("grainStartJitter", "Grain Start Jitter", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
@@ -722,6 +771,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     damageMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     damageMultiband.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     ducker.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
+    airEngine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     {
         juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock,
                                       (juce::uint32) juce::jmax (1, getTotalNumOutputChannels()) };
@@ -1182,6 +1232,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     entropyParams.noteOffset = ctl.midiEnabled ? noteOffset : 0.0f; // grains only follow MIDI when enabled
     entropyParams.spray = target (gf::ParamId::spray) * (1.0f + ctl.chaos * 0.6f) + ctl.texture * 300.0f + identity * 1200.0f;
     entropyParams.spread = target (gf::ParamId::spread);
+    entropyParams.grainShape = target (gf::ParamId::grainShape);
     entropyParams.position = target (gf::ParamId::position);
     entropyParams.pitchJitter = target (gf::ParamId::pitchJitter) + ctl.chaos * 2.0f + identity * 24.0f;
     entropyParams.output = target (gf::ParamId::output);
@@ -1412,6 +1463,37 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         {
             damageMachine.process (buffer, dp);
         }
+    }
+
+    // AIR: parallel high-band tonal toys (squelch / exciter / dynamic shelf /
+    // phaser / delay on the top only; low band passes clean).
+    if (isOn (p.airOn))
+    {
+        gf::AirEngine::Params ap;
+        ap.on                = true;
+        ap.crossoverHz       = loadParam (p.airCrossover, 2500.0f);
+        ap.mix               = loadParam (p.airMix, 0.5f);
+        ap.squelchOn         = isOn (p.airSquelchOn);
+        ap.squelchMode       = (int) loadParam (p.airSquelchMode, 1.0f);
+        ap.squelchHz         = loadParam (p.airSquelchHz, 4000.0f);
+        ap.squelchRes        = loadParam (p.airSquelchRes, 0.5f);
+        ap.squelchEnv        = loadParam (p.airSquelchEnv, 0.0f);
+        ap.exciterOn         = isOn (p.airExciterOn);
+        ap.exciterDrive      = loadParam (p.airExciterDrive, 0.3f);
+        ap.exciterMix        = loadParam (p.airExciterMix, 0.5f);
+        ap.dynShelfOn        = isOn (p.airShelfOn);
+        ap.dynShelfHz        = loadParam (p.airShelfHz, 8000.0f);
+        ap.dynShelfAmount    = loadParam (p.airShelfAmount, 0.0f);
+        ap.dynShelfThreshold = loadParam (p.airShelfThreshold, 0.2f);
+        ap.phaserOn          = isOn (p.airPhaserOn);
+        ap.phaserRate        = loadParam (p.airPhaserRate, 0.3f);
+        ap.phaserDepth       = loadParam (p.airPhaserDepth, 0.6f);
+        ap.phaserMix         = loadParam (p.airPhaserMix, 0.5f);
+        ap.delayOn           = isOn (p.airDelayOn);
+        ap.delayMs           = loadParam (p.airDelayMs, 120.0f);
+        ap.delayFeedback     = loadParam (p.airDelayFeedback, 0.35f);
+        ap.delayMix          = loadParam (p.airDelayMix, 0.4f);
+        airEngine.process (buffer, ap);
     }
 
     // Spectral: freeze a glassy pad. Capture a fresh spectrum for a short window

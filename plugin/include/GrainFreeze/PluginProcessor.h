@@ -15,6 +15,7 @@
 #include "GrainFreeze/SampleFreeze.h"
 #include "GrainFreeze/SpectralFreeze.h"
 #include "GrainFreeze/TransformRack.h"
+#include "GrainFreeze/AirEngine.h"
 
 #ifndef MKULTRA_ENABLE_EXPERIMENTAL_INPUT_TOOLS
 #define MKULTRA_ENABLE_EXPERIMENTAL_INPUT_TOOLS 0
@@ -65,6 +66,7 @@ public:
     gf::DamageEngine        damageMachine;
     gf::MultibandDamage     damageMultiband;
     gf::SidechainDucker     ducker;
+    gf::AirEngine           airEngine;
     gf::TimeBreakerEngine   timeBreaker;
     gf::PitchFormantMachine pitchFormantMachine;
     gf::PresetManager  presets { apvts };
@@ -249,6 +251,31 @@ private:
         std::atomic<float>* duckThreshold = nullptr;
         std::atomic<float>* duckAttack = nullptr;
         std::atomic<float>* duckRelease = nullptr;
+
+        // AIR page: parallel high-band tonal toys.
+        std::atomic<float>* airOn = nullptr;
+        std::atomic<float>* airCrossover = nullptr;
+        std::atomic<float>* airMix = nullptr;
+        std::atomic<float>* airSquelchOn = nullptr;
+        std::atomic<float>* airSquelchMode = nullptr;
+        std::atomic<float>* airSquelchHz = nullptr;
+        std::atomic<float>* airSquelchRes = nullptr;
+        std::atomic<float>* airSquelchEnv = nullptr;
+        std::atomic<float>* airExciterOn = nullptr;
+        std::atomic<float>* airExciterDrive = nullptr;
+        std::atomic<float>* airExciterMix = nullptr;
+        std::atomic<float>* airShelfOn = nullptr;
+        std::atomic<float>* airShelfHz = nullptr;
+        std::atomic<float>* airShelfAmount = nullptr;
+        std::atomic<float>* airShelfThreshold = nullptr;
+        std::atomic<float>* airPhaserOn = nullptr;
+        std::atomic<float>* airPhaserRate = nullptr;
+        std::atomic<float>* airPhaserDepth = nullptr;
+        std::atomic<float>* airPhaserMix = nullptr;
+        std::atomic<float>* airDelayOn = nullptr;
+        std::atomic<float>* airDelayMs = nullptr;
+        std::atomic<float>* airDelayFeedback = nullptr;
+        std::atomic<float>* airDelayMix = nullptr;
 
         std::atomic<float>* polyGrain = nullptr;
         std::atomic<float>* mpeOn = nullptr;

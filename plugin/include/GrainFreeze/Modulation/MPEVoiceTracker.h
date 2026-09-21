@@ -108,7 +108,7 @@ private:
     void writeVoice (size_t slot, juce::MPENote n, bool isNew)
     {
         const float semi = (float) (n.initialNote - root.load (std::memory_order_relaxed))
-                         + n.totalPitchbendInSemitones;
+                         + (float) n.totalPitchbendInSemitones;
         voices[slot].noteId.store ((int) n.noteID, std::memory_order_relaxed);
         voices[slot].semitones.store (semi, std::memory_order_relaxed);
         voices[slot].pressure .store (n.pressure.asUnsignedFloat(), std::memory_order_relaxed);
