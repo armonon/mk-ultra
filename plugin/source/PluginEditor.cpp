@@ -41,7 +41,7 @@ namespace
     constexpr float kEndAngle   = juce::MathConstants<float>::pi * 2.8f;
 
     // Shared header geometry so paint() (logo) and resized() (tabs) stay aligned.
-    constexpr int kHeaderH  = 56;
+    constexpr int kHeaderH  = 44;
     constexpr int kLogoSlot = 60;
 
     gf::BiohazardLookAndFeel* bioLnF (const juce::Component& c)
@@ -440,9 +440,9 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (freezeButton);
     freezeAttachment = std::make_unique<ButtonAttachment> (proc.apvts, "frozen", freezeButton);
 
-    for (auto* tab : { &tabHome, &tabEntropy, &tabMachines, &tabMix, &tabPrettifier, &tabAir })
+    for (auto* tab : { &tabEntropy, &tabMachines, &tabMix, &tabPrettifier, &tabAir })
         addAndMakeVisible (*tab);
-    tabHome.onClick = [this] { switchTab (4); };
+    addChildComponent (tabHome);   // retired: HOME is no longer a tab (kept only so nothing dangles)
     tabEntropy.onClick = [this] { switchTab (0); };
     tabMix.onClick = [this] { switchTab (1); };
     tabPrettifier.onClick = [this] { switchTab (2); };
@@ -454,6 +454,21 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     tabPrettifier.setClickingTogglesState (true);
     tabMachines.setClickingTogglesState (true);
     tabAir.setClickingTogglesState (true);
+
+    // Global Advanced toggle + the "..." menu that absorbs the old 3-row toolbar.
+    advancedButton.setClickingTogglesState (true);
+    advancedButton.setTooltip ("Reveal the deep controls: per-knob locks + modulation, mod matrix, ducker, routing, sends.");
+    advancedButton.onClick = [this]
+    {
+        advancedMode = advancedButton.getToggleState();
+        updateTabVisibility();
+        resized();
+        repaint();
+    };
+    addAndMakeVisible (advancedButton);
+    moreButton.setTooltip ("More: init, randomize all, A/B copy, undo/redo, browse, share, delete, load IR, freeze");
+    moreButton.onClick = [this] { showMoreMenu(); };
+    addAndMakeVisible (moreButton);
 
     for (auto* b : { &buttonA, &buttonB, &copyAToBButton, &copyBToAButton, &resetBButton,
                      &undoButton, &redoButton, &initButton, &randomizeAllButton, &panicButton })
@@ -1195,6 +1210,13 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     homeMasterLabel.setClickingTogglesState (false);
     homeTextureAttach = std::make_unique<ButtonAttachment> (proc.apvts, "textureGrainOn", homeTextureOn);
     homeSpaceAttach   = std::make_unique<ButtonAttachment> (proc.apvts, "beautySpaceOn", homeSpaceOn);
+    // These three toggles now live IN the chain strip as the stage on/off dots.
+    homeTextureOn.setButtonText ({});
+    homeSpaceOn.setButtonText ({});
+    airOn.setButtonText ({});
+    homeTextureOn.setTooltip ("Texture stage on/off");
+    homeSpaceOn.setTooltip ("Space stage on/off");
+    airOn.setTooltip ("Air stage on/off");
 
     // ---- Hover tooltips for the less-obvious controls ----
     machSpectralOn.setTooltip ("Spectral: freeze the spectrum into a sustained glassy pad");
@@ -1389,7 +1411,7 @@ void GrainFreezeEditor::timerCallback()
     }
 
     // Grain cloud viz: only refresh when HOME is showing AND audio is active.
-    if (currentTab == 4 && animating)
+    if (currentTab == -1 && animating)
         grainViz.refresh();
 
     if (animating)
@@ -1490,31 +1512,27 @@ void GrainFreezeEditor::launchTour()
     // Five stops walk through the experience: HOME tab -> macros -> Morph Pad
     // -> Browse (presets) -> MACHINES tab. Each step retargets a visible
     // component, switching tabs along the way so the target is in view.
-    switchTab (4);   // HOME
+    currentTab = -1;   // play surface
+    updateTabVisibility();
+    resized();
     std::vector<gf::TourOverlay::Step> steps;
-    steps.push_back ({ tabHome.getBounds(),
-                       "HOME is your cockpit. Most of the time you'll stay here -- pick a preset, "
-                       "turn the 7 macro knobs (Texture, Beauty, Space, Damage...), shape the sound." });
     if (! macroKnobs.empty())
-    {
-        auto first = macroKnobs.front().getBounds();
-        auto last  = macroKnobs.back().getBounds();
-        steps.push_back ({ first.getUnion (last),
-                           "These are the macros. Each one drives a curated, musical path through the "
-                           "engine. They're enough to finish a sound without ever opening another tab." });
-    }
+        steps.push_back ({ macroKnobs.front().getBounds().getUnion (macroKnobs.back().getBounds()),
+                           "Start here. These seven macros drive the whole chain -- Texture, Beauty, Space, "
+                           "Chaos, Motion, Damage, Emotion. Most sounds are finished right here." });
+    steps.push_back ({ tabEntropy.getBounds().getUnion (tabMix.getBounds()),
+                       "This is the signal chain, in order: Texture -> Machines -> Space -> Air -> Master. "
+                       "The dots switch a stage on or off. Click a name to open that stage's controls; "
+                       "click it again to close." });
     steps.push_back ({ morphPad.getBounds(),
-                       "The Morph Pad blends FOUR captured snapshots. Capture A/B/C/D with the "
-                       "buttons below, then drag the puck to crossfade between them in real time." });
-    steps.push_back ({ browseButton.getBounds().getUnion (presetBox.getBounds()),
-                       "Presets live behind Browse. Pick a vibe (Beautiful, Dream, Alien, Destroyed, "
-                       "Cinematic, Identity Loss) then nudge from there. Click Share to export the "
-                       "current sound as a .mkultra file you can send to anyone." });
-    steps.push_back ({ tabMachines.getBounds(),
-                       "MACHINES holds the deeper modules (Spectral, Pitch, Damage, Time Breaker, "
-                       "Ducker). Each one stays collapsed until you click Advanced -- depth on demand, "
-                       "not in your face." });
-
+                       "The Morph Pad blends FOUR captured snapshots. Capture A/B/C/D with the buttons "
+                       "below, then drag the puck to move between them in real time." });
+    steps.push_back ({ presetBox.getBounds().getUnion (saveButton.getBounds()),
+                       "Presets live here. Pick a vibe and nudge from there. Type a name and Save to keep "
+                       "your own; the ... menu has Share, Import, Browse and more." });
+    steps.push_back ({ advancedButton.getBounds(),
+                       "Advanced reveals the deep layer everywhere: per-knob locks and modulation, the "
+                       "mod matrix, the ducker, sends and routing. Off by default so the page stays calm." });
     tourOverlay.setSteps (std::move (steps));
     tourOverlay.setBounds (getLocalBounds());
     tourOverlay.toFront (false);
@@ -1524,10 +1542,58 @@ void GrainFreezeEditor::launchTour()
 
 void GrainFreezeEditor::switchTab (int tabIndex)
 {
-    currentTab = juce::jlimit (0, 5, tabIndex);
+    // Clicking the open drawer's tile closes it (back to the play surface).
+    currentTab = (tabIndex == currentTab) ? -1 : juce::jlimit (-1, 5, tabIndex);
     updateTabVisibility();
     resized();
     repaint(); // instant switch (no cross-fade) for snappiness
+}
+
+void GrainFreezeEditor::showMoreMenu()
+{
+    juce::PopupMenu m;
+    m.addItem (1,  "Init patch");
+    m.addItem (2,  "Randomize All");
+    m.addSeparator();
+    m.addItem (3,  "Copy A " + juce::String (juce::CharPointer_UTF8 ("\xe2\x86\x92")) + " B");
+    m.addItem (4,  "Copy B " + juce::String (juce::CharPointer_UTF8 ("\xe2\x86\x92")) + " A");
+    m.addItem (5,  "Reset B");
+    m.addSeparator();
+    m.addItem (6,  "Undo");
+    m.addItem (7,  "Redo");
+    m.addSeparator();
+    m.addItem (8,  "Browse presets...");
+    m.addItem (9,  "Share preset (.mkultra)...");
+    m.addItem (10, "Delete preset");
+    m.addItem (11, "Load convolution IR...");
+    m.addSeparator();
+    m.addItem (12, "Freeze grains", true, freezeButton.getToggleState());
+
+    juce::Component::SafePointer<GrainFreezeEditor> safe (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&moreButton),
+                     [safe] (int r)
+    {
+        if (safe == nullptr) return;
+        auto& s = *safe;
+        juce::Button* b = nullptr;
+        switch (r)
+        {
+            case 1:  b = &s.initButton;            break;
+            case 2:  b = &s.randomizeAllButton;    break;
+            case 3:  b = &s.copyAToBButton;        break;
+            case 4:  b = &s.copyBToAButton;        break;
+            case 5:  b = &s.resetBButton;          break;
+            case 6:  b = &s.undoButton;            break;
+            case 7:  b = &s.redoButton;            break;
+            case 8:  b = &s.browseButton;          break;
+            case 9:  b = &s.shareButton;           break;
+            case 10: b = &s.deletePresetButton;    break;
+            case 11: b = &s.convolutionLoadButton; break;
+            case 12: b = &s.freezeButton;          break;
+            default: return;
+        }
+        b->triggerClick();
+    });
 }
 
 void GrainFreezeEditor::layoutDialCell (juce::Rectangle<int>& row, juce::Label& label,
@@ -1544,10 +1610,11 @@ void GrainFreezeEditor::updateTabVisibility()
     const bool mixTab = currentTab == 1;
     const bool prettifierTab = currentTab == 2;
     const bool machinesTab = currentTab == 3;
-    const bool homeTab = currentTab == 4;
+    const bool playSurface = currentTab == -1;
+    const bool homeTab = false;   // retired: macros are always visible, play surface replaces the rest
     constexpr bool inputToolsVisible = kMkUltraExperimentalInputTools;
 
-    tabHome.setToggleState (homeTab, juce::dontSendNotification);
+    tabHome.setVisible (false);
     tabEntropy.setToggleState (entropyTab, juce::dontSendNotification);
     tabMix.setToggleState (mixTab, juce::dontSendNotification);
     tabPrettifier.setToggleState (prettifierTab, juce::dontSendNotification);
@@ -1556,8 +1623,9 @@ void GrainFreezeEditor::updateTabVisibility()
     tabAir.setToggleState (airTab, juce::dontSendNotification);
     for (auto* l : { &airHeader, &airSquelchTitle, &airExciterTitle, &airShelfTitle, &airPhaserTitle, &airDelayTitle })
         l->setVisible (airTab);
-    for (auto* b : { &airOn, &airSquelchOn, &airExciterOn, &airShelfOn, &airPhaserOn, &airDelayOn })
+    for (auto* b : { &airSquelchOn, &airExciterOn, &airShelfOn, &airPhaserOn, &airDelayOn })
         b->setVisible (airTab);
+    airOn.setVisible (true);   // lives in the chain strip
     airSquelchMode.setVisible (airTab);
     for (auto* s : { &airCrossover, &airMix, &airSquelchHz, &airSquelchRes, &airSquelchEnv,
                      &airExciterDrive, &airExciterMix, &airShelfHz, &airShelfAmount, &airShelfThreshold,
@@ -1568,23 +1636,28 @@ void GrainFreezeEditor::updateTabVisibility()
                      &airPhaserRateL, &airPhaserDepthL, &airPhaserMixL, &airDelayMsL, &airDelayFeedbackL, &airDelayMixL })
         l->setVisible (airTab);
 
-    lnf.setAccentTheme ((entropyTab || machinesTab || homeTab) ? gf::BiohazardLookAndFeel::AccentTheme::entropy
-                        : mixTab     ? gf::BiohazardLookAndFeel::AccentTheme::mix
-                                     : gf::BiohazardLookAndFeel::AccentTheme::prettifier);
+    lnf.setAccentTheme (gf::BiohazardLookAndFeel::AccentTheme::entropy);   // one accent, everywhere
     sendLookAndFeelChange();
 
-    // HOME cockpit controls.
-    homeTitle.setVisible (homeTab);
-    homeFlowLabel.setVisible (homeTab);
-    for (auto& s : macroKnobs)  s.setVisible (homeTab);
-    for (auto& l : macroLabels) l.setVisible (homeTab);
-    morphPad.setVisible (homeTab);
-    morphPadLabel.setVisible (homeTab);
-    grainViz.setVisible (homeTab);
+    // Always-on layer: macros + chain strip. Play surface only when no drawer is open.
+    homeTitle.setVisible (false);
+    homeFlowLabel.setVisible (false);
+    homeMachinesLabel.setVisible (false);
+    homeMasterLabel.setVisible (false);
+    for (auto& s : macroKnobs)  s.setVisible (true);
+    for (auto& l : macroLabels) l.setVisible (true);
+    homeTextureOn.setVisible (true);
+    homeSpaceOn.setVisible (true);
+    morphPad.setVisible (playSurface);
+    morphPadLabel.setVisible (playSurface);
+    grainViz.setVisible (playSurface);
     for (auto* b : { &morphCapA, &morphCapB, &morphCapC, &morphCapD })
-        b->setVisible (homeTab);
-    for (auto* b : { &homeTextureOn, &homeMachinesLabel, &homeSpaceOn, &homeMasterLabel })
-        b->setVisible (homeTab);
+        b->setVisible (playSurface);
+
+    // Old 3-row toolbar: these now live in the "..." menu (or the Texture drawer).
+    for (auto* b : { &copyAToBButton, &copyBToAButton, &resetBButton, &undoButton, &redoButton,
+                     &initButton, &randomizeAllButton, &browseButton, &shareButton, &deletePresetButton })
+        b->setVisible (false);
 
     freezeButton.setVisible (entropyTab);
     for (auto& k : knobs)
@@ -1610,7 +1683,7 @@ void GrainFreezeEditor::updateTabVisibility()
     if (meter != nullptr) meter->setVisible (entropyTab);
     if (modScope != nullptr) modScope->setVisible (entropyTab);
     // The Mix tab swaps the bottom output scope for the master spectrum analyzer.
-    if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab && ! machinesTab && ! homeTab);
+    if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab && ! machinesTab);
     if (spectrumDisplay != nullptr) spectrumDisplay->setVisible (mixTab);
     // Legacy spectral freeze retired from the UI — the Spectral machine (Machines
     // tab) is the single home for spectral now.
@@ -1635,9 +1708,10 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto& l : eqLabels) l.setVisible (mixTab);
     for (auto* c : { &eqLowKnob, &eqMidKnob, &eqHighKnob, &eqLoFiKnob })
         c->setVisible (mixTab);
-    for (auto* c : { &pluginOnButton, &entropyOnButton, &limiterOnButton, &mixEqOnButton,
+    for (auto* c : { &pluginOnButton, &limiterOnButton, &mixEqOnButton,
                      &pitchMatchOnButton, &tempoLockOnButton })
         c->setVisible (mixTab);
+    entropyOnButton.setVisible (false);   // chain strip owns stage on/off now
 
     sampleHeader.setVisible (mixTab && inputToolsVisible);
     sampleModeButton.setVisible (mixTab && inputToolsVisible);
@@ -1658,7 +1732,7 @@ void GrainFreezeEditor::updateTabVisibility()
         l->setVisible (mixTab);
 
     prettifierHeader.setVisible (prettifierTab);
-    prettifierOnButton.setVisible (prettifierTab || mixTab);
+    prettifierOnButton.setVisible (false);   // chain strip owns stage on/off now
     for (auto& k : prettyKnobs)
     {
         k.slider.setVisible (prettifierTab);
@@ -1751,7 +1825,7 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     const float pulse = 0.12f;
     const float boot = 1.0f;   // no boot fade now; logo halo still scales by this
     const auto bounds = getLocalBounds().toFloat();
-    const int tab = currentTab;
+    const int tab = 0;   // one visual theme for the whole page (was per-tab tints)
 
     auto drawBgImage = [&g, &bounds] (const juce::Image& img, float opacity)
     {
@@ -1908,85 +1982,66 @@ void GrainFreezeEditor::resized()
     tourOverlay.toFront (false);
     auto area = getLocalBounds().reduced (pad);
 
-    // Header band: brand logo (painted in paint()) on the left, tabs aligned
-    // beside it on the same row.
+    // ---- Zone 1: header. Logo slot (painted) + ONE control row. ----
     auto header = area.removeFromTop (kHeaderH);
-    header.removeFromLeft (kLogoSlot + 16);   // reserve room for the painted logo
-    constexpr int tabH = 32;
-    auto placeTab = [&] (juce::TextButton& b, int w)
-    {
-        b.setBounds (header.removeFromLeft (w).withSizeKeepingCentre (w, tabH));
-        header.removeFromLeft (gap);
-    };
-    // Visual order follows the signal chain: Home, Texture, Machines, Space, Master.
-    placeTab (tabHome, 78);
-    placeTab (tabEntropy, 104);
-    placeTab (tabMachines, 120);
-    placeTab (tabPrettifier, 92);
-    placeTab (tabMix, 102);
-    placeTab (tabAir, 70);
-
-    area.removeFromTop (gap);
-
-    // Utility row, grouped: [A/B compare] | [tools] ........ [Freeze] [Panic].
-    // The left cluster starts at the same x as Randomize below, so the two rows
-    // line up. Freeze (Entropy-only) sits on the right next to Panic.
-    auto util = area.removeFromTop (36);
-
-    // A/B compare cluster — left edge aligned with the Randomize button.
-    buttonA.setBounds (util.removeFromLeft (32).reduced (2, 4));
-    util.removeFromLeft (4);
-    buttonB.setBounds (util.removeFromLeft (32).reduced (2, 4));
-    util.removeFromLeft (gap);
-    copyAToBButton.setBounds (util.removeFromLeft (66).reduced (2, 4));
-    util.removeFromLeft (5);
-    copyBToAButton.setBounds (util.removeFromLeft (66).reduced (2, 4));
-    util.removeFromLeft (5);
-    resetBButton.setBounds (util.removeFromLeft (74).reduced (2, 4));
-    util.removeFromLeft (gap * 2);
-
-    // Tools cluster: undo / redo / init.
-    undoButton.setBounds (util.removeFromLeft (34).reduced (2, 4));
-    util.removeFromLeft (4);
-    redoButton.setBounds (util.removeFromLeft (34).reduced (2, 4));
-    util.removeFromLeft (5);
-    initButton.setBounds (util.removeFromLeft (56).reduced (2, 4));
-    util.removeFromLeft (gap);
-    randomizeAllButton.setBounds (util.removeFromLeft (120).reduced (2, 4));
-
-    // Right side: Panic, Freeze, and the update pill (only takes space when visible).
-    panicButton.setBounds (util.removeFromRight (104).reduced (2, 4));
-    util.removeFromRight (gap);
-    tourButton.setBounds (util.removeFromRight (28).reduced (2, 4));
-    util.removeFromRight (gap);
-    freezeButton.setBounds (util.removeFromRight (104).reduced (2, 4));
+    header.removeFromLeft (kLogoSlot + 16);
+    auto hrow = header.withSizeKeepingCentre (header.getWidth(), 30);
+    prevButton.setBounds (hrow.removeFromLeft (30));   hrow.removeFromLeft (2);
+    nextButton.setBounds (hrow.removeFromLeft (30));   hrow.removeFromLeft (gap);
+    presetBox.setBounds  (hrow.removeFromLeft (220));  hrow.removeFromLeft (gap);
+    // Right cluster, outermost first.
+    panicButton.setBounds    (hrow.removeFromRight (64));  hrow.removeFromRight (6);
+    tourButton.setBounds     (hrow.removeFromRight (28));  hrow.removeFromRight (6);
+    moreButton.setBounds     (hrow.removeFromRight (34));  hrow.removeFromRight (gap);
+    advancedButton.setBounds (hrow.removeFromRight (88));  hrow.removeFromRight (gap);
+    buttonB.setBounds        (hrow.removeFromRight (30));  hrow.removeFromRight (4);
+    buttonA.setBounds        (hrow.removeFromRight (30));  hrow.removeFromRight (gap);
+    randomizeButton.setBounds (hrow.removeFromRight (96)); hrow.removeFromRight (gap);
     if (updateButton.isVisible())
     {
-        util.removeFromRight (gap);
-        updateButton.setBounds (util.removeFromRight (120).reduced (2, 4));
+        updateButton.setBounds (hrow.removeFromRight (110));
+        hrow.removeFromRight (gap);
     }
-
+    saveButton.setBounds (hrow.removeFromRight (64));      hrow.removeFromRight (6);
+    presetName.setBounds (hrow);                           // whatever width is left
     area.removeFromTop (gap);
 
-    // Row 2: preset bar.
-    auto bar = area.removeFromTop (36);
-    randomizeButton.setBounds (bar.removeFromLeft (120).reduced (2, 4));
-    bar.removeFromLeft (gap);
-    prevButton.setBounds  (bar.removeFromLeft (36).reduced (2, 4));
-    nextButton.setBounds  (bar.removeFromLeft (36).reduced (2, 4));
-    bar.removeFromLeft (gap);
-    presetBox.setBounds   (bar.removeFromLeft (200).reduced (2, 4));
-    bar.removeFromLeft (gap);
-    browseButton.setBounds (bar.removeFromLeft (84).reduced (2, 4));
-    bar.removeFromLeft (gap);
-    saveButton.setBounds   (bar.removeFromRight (78).reduced (2, 4));
-    bar.removeFromRight (4);
-    deletePresetButton.setBounds (bar.removeFromRight (32).reduced (2, 4));
-    bar.removeFromRight (gap);
-    shareButton.setBounds  (bar.removeFromRight (72).reduced (2, 4));
-    presetName.setBounds   (bar.reduced (2, 4));
+    // ---- Zone 2: macros. Always visible. ----
+    {
+        auto macroRow = area.removeFromTop (104);
+        const int mW = 100;
+        macroRow = macroRow.withSizeKeepingCentre (juce::jmin (macroRow.getWidth(), mW * kNumMacros), macroRow.getHeight());
+        for (int i = 0; i < kNumMacros; ++i)
+            layoutDialCell (macroRow, macroLabels[(size_t) i], macroKnobs[(size_t) i], mW);
+    }
+    area.removeFromTop (gap);
 
-    area.removeFromTop (gap + 4);
+    // ---- Zone 3: signal-chain strip. Always visible. Click a tile to open its drawer. ----
+    {
+        struct Tile { juce::Button* on; juce::TextButton* name; int w; };
+        const Tile tiles[] = {
+            { &homeTextureOn, &tabEntropy,    124 },
+            { nullptr,        &tabMachines,   124 },
+            { &homeSpaceOn,   &tabPrettifier, 108 },
+            { &airOn,         &tabAir,         88 },
+            { nullptr,        &tabMix,        108 },
+        };
+        int total = 0;
+        for (auto& t : tiles) total += t.w + (t.on != nullptr ? 30 : 0);
+        total += 4 * 16;
+        auto chain = area.removeFromTop (40);
+        auto row = chain.withSizeKeepingCentre (juce::jmin (chain.getWidth(), total), 32);
+        for (auto& t : tiles)
+        {
+            if (t.on != nullptr)
+                t.on->setBounds (row.removeFromLeft (30).withSizeKeepingCentre (26, 26));
+            t.name->setBounds (row.removeFromLeft (t.w));
+            row.removeFromLeft (16);
+        }
+    }
+    area.removeFromTop (gap + 2);
+
+    // ---- Zone 4: content. Play surface when no drawer is open, else the drawer. ----
 
     if (inputToolsVisible)
     {
@@ -2042,6 +2097,8 @@ void GrainFreezeEditor::resized()
 
     if (currentTab == 0)
     {
+        freezeButton.setBounds (area.removeFromTop (30).removeFromRight (104).reduced (2, 2));
+        area.removeFromTop (4);
         const float wmSize = (float) juce::jmin (area.getWidth(), area.getHeight()) * 1.05f;
         auto wmBounds = juce::Rectangle<float> (wmSize, wmSize).withCentre (area.toFloat().getCentre());
         watermark = gf::makeBiohazardPath (wmBounds);
@@ -2431,9 +2488,7 @@ void GrainFreezeEditor::resized()
         // so pass a scratch-free layout: we just place On/crossover/mix.
         {
             auto block = area.removeFromTop (100);
-            auto head  = block.removeFromTop (26);
-            airOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
-            block.removeFromTop (2);
+            block.removeFromTop (28);
             const int kw = 96;
             auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 2), block.getHeight());
             layoutDialCell (krow, airCrossoverL, airCrossover, kw);
@@ -2451,40 +2506,17 @@ void GrainFreezeEditor::resized()
         airRow (airDelayTitle, airDelayOn, nullptr,
                 { { &airDelayMs, &airDelayMsL }, { &airDelayFeedback, &airDelayFeedbackL }, { &airDelayMix, &airDelayMixL } });
     }
-    else if (currentTab == 4)   // HOME cockpit
+    else if (currentTab == -1)   // play surface: morph pad + grain cloud, larger
     {
-        homeTitle.setBounds (area.removeFromTop (30).reduced (4, 0));
-        area.removeFromTop (gap);
-
-        // Signal-flow strip: Texture -> Machines -> Space -> Master.
-        homeFlowLabel.setBounds (area.removeFromTop (18).reduced (4, 0));
-        auto flow = area.removeFromTop (40);
-        const int stageW = 150;
-        auto centred = flow.withSizeKeepingCentre (juce::jmin (flow.getWidth(), stageW * 4 + 90), flow.getHeight());
-        auto stageCell = [&] (juce::Button& b) { b.setBounds (centred.removeFromLeft (stageW).withSizeKeepingCentre (stageW - 8, 30)); };
-        stageCell (homeTextureOn);     centred.removeFromLeft (30);
-        stageCell (homeMachinesLabel); centred.removeFromLeft (30);
-        stageCell (homeSpaceOn);       centred.removeFromLeft (30);
-        stageCell (homeMasterLabel);
-
-        area.removeFromTop (gap * 2);
-        // The macros that drive the whole chain.
-        auto macroRow = area.removeFromTop (juce::jmin (150, area.getHeight() - 20));
-        const int mW = juce::jmax (96, macroRow.getWidth() / kNumMacros);
-        macroRow = macroRow.withSizeKeepingCentre (juce::jmin (macroRow.getWidth(), mW * kNumMacros), macroRow.getHeight());
-        for (int i = 0; i < kNumMacros; ++i)
-            layoutDialCell (macroRow, macroLabels[(size_t) i], macroKnobs[(size_t) i], mW);
-
-        // Morph pad below the macros: the square pad + a row of corner-capture buttons.
-        area.removeFromTop (gap * 2);
         morphPadLabel.setBounds (area.removeFromTop (18).withSizeKeepingCentre (200, 18));
-        area.removeFromTop (4);
-        auto padBlock = area.removeFromTop (juce::jmin (190, juce::jmax (120, area.getHeight())));
-        auto pad = padBlock.withSizeKeepingCentre (200, juce::jmax (90, padBlock.getHeight() - 34));
-        pad.setY (padBlock.getY());
+        area.removeFromTop (6);
+        const int padSize = juce::jlimit (160, 300, area.getHeight() - 40);
+        auto block = area.removeFromTop (padSize + 34);
+        block = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), padSize * 2 + 24), block.getHeight());
+        auto pad = block.removeFromLeft (padSize).withHeight (padSize);
         morphPad.setBounds (pad);
-        // Grain cloud strip beside the morph pad: same height, narrower.
-        grainViz.setBounds (pad.getRight() + 24, pad.getY(), 220, pad.getHeight());
+        block.removeFromLeft (24);
+        grainViz.setBounds (block.removeFromLeft (padSize).withHeight (padSize));
         auto capRow = juce::Rectangle<int> (pad.getX(), pad.getBottom() + 6, pad.getWidth(), 24);
         const int cw = (capRow.getWidth() - 18) / 4;
         morphCapA.setBounds (capRow.removeFromLeft (cw)); capRow.removeFromLeft (6);

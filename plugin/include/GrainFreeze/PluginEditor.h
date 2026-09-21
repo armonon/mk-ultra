@@ -326,7 +326,14 @@ private:
     juce::TextButton tabMix { "MASTER" };
     juce::TextButton tabPrettifier { "SPACE" };
     juce::TextButton tabAir { "AIR" };          // index 5: parallel high-band tonal toys
-    int currentTab = 4;   // land on HOME
+    // One-page model: the tab buttons are now the signal-chain tiles. currentTab
+    // is the OPEN DRAWER (-1 = none: the play surface shows). Macros + chain are
+    // always visible above whatever the content zone holds.
+    int currentTab = -1;
+    bool advancedMode = false;                   // global: reveal locks/gears/rings/matrix/etc.
+    juce::TextButton advancedButton { "Advanced" };
+    juce::TextButton moreButton { juce::String (juce::CharPointer_UTF8 ("\xe2\x8b\xaf")) };   // "..." menu
+    void showMoreMenu();
 
     // ---- HOME cockpit: the macros that drive the whole chain + a stage strip. ----
     // 7 sound macros; the Morph X/Y axes live in the MorphPad, not the macro row.
