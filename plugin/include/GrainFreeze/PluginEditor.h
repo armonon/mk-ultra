@@ -331,6 +331,17 @@ private:
     // always visible above whatever the content zone holds.
     int currentTab = -1;
     bool advancedMode = false;                   // global: reveal locks/gears/rings/matrix/etc.
+    // Drawers live inside a scrolling viewport so nothing clips at small sizes or
+    // with Advanced on. Play-surface / header / macro / chain components stay on
+    // the editor itself.
+    juce::Viewport  drawerView;
+    juce::Component drawerContent;
+    // Everything is laid out at the fixed design size inside `root`, which is
+    // scaled by an AffineTransform to the editor's real size. That's what makes
+    // "resizable with a fixed aspect ratio" actually scale the page instead of
+    // clipping it.
+    juce::Component root;
+    static constexpr int kDesignW = 1020, kDesignH = 1040;
     juce::TextButton advancedButton { "Advanced" };
     juce::TextButton moreButton { "..." };       // the overflow menu (the ellipsis glyph is missing from the UI font)
     void showMoreMenu();

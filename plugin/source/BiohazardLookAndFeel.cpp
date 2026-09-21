@@ -434,6 +434,26 @@ void BiohazardLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button
     if (b.getComponentID() == "settings")
         return; // the gear is drawn as a bare icon (no box), matching the padlock
 
+    // Signal-chain tiles: no box when idle (the connecting line behind them
+    // gives the row its structure); a soft panel on hover; the open drawer's
+    // tile gets a panel + an accent underline bar.
+    if (b.getComponentID() == "chain")
+    {
+        auto tb = b.getLocalBounds().toFloat();
+        const bool open = b.getToggleState();
+        if (open || highlighted)
+        {
+            g.setColour (open ? metal.brighter (0.12f) : metal.withAlpha (0.7f));
+            g.fillRoundedRectangle (tb.reduced (1.5f), 6.0f);
+        }
+        if (open)
+        {
+            g.setColour (accent());
+            g.fillRoundedRectangle (tb.getX() + 10.0f, tb.getBottom() - 3.5f, tb.getWidth() - 20.0f, 3.0f, 1.5f);
+        }
+        return;
+    }
+
     auto bounds = b.getLocalBounds().toFloat().reduced (1.5f);
     const float radius = 6.0f;  // crisp, consistent corners
     const bool toggled = b.getToggleState();
@@ -496,6 +516,8 @@ void BiohazardLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& 
     const bool on = b.getToggleState();
     juce::Colour col = on ? bg.darker (0.35f)                       // dark text on accent fill
                           : textCol.withAlpha (b.isEnabled() ? (highlighted ? 1.0f : 0.88f) : 0.45f);
+    if (b.getComponentID() == "chain")                              // tiles: accent text when open, never dark-on-accent
+        col = on ? accent() : textCol.withAlpha (highlighted ? 1.0f : 0.80f);
     g.setColour (col);
 
     g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (8, 0),

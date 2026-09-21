@@ -447,7 +447,12 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     freezeAttachment = std::make_unique<ButtonAttachment> (proc.apvts, "frozen", freezeButton);
 
     for (auto* tab : { &tabEntropy, &tabMachines, &tabMix, &tabPrettifier, &tabAir })
+    {
+        tab->setComponentID ("chain");   // drawn as signal-chain tiles, not boxed buttons
         addAndMakeVisible (*tab);
+    }
+    tabMachines.setTooltip ("Machines: Spectral, Pitch/Formant, Damage, Time Breaker. Always in the chain; switch each machine inside.");
+    tabMix.setTooltip ("Master: bus EQ, width, glue, ceiling, output, pitch lock. Always in the chain.");
     addChildComponent (tabHome);   // retired: HOME is no longer a tab (kept only so nothing dangles)
     tabEntropy.onClick = [this] { switchTab (0); };
     tabMix.onClick = [this] { switchTab (1); };
@@ -1261,13 +1266,14 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     knobs[2].slider.setTooltip ("Pitches the grains. Master shift = Pitch/Formant machine; scale snap = Pitch Lock (Master)");
 
     refreshPresetList();
+
     // Resizable editor: keep the 1020x860 design ratio so the layout never
     // distorts, but let the user scale 70% .. 140% to fit their monitor / DAW
     // window. The last size is persisted across sessions via APVTS state.
     setResizable (true, true);
     if (auto* c = getConstrainer())
     {
-        c->setFixedAspectRatio (1020.0 / 1040.0);
+        c->setFixedAspectRatio ((double) kDesignW / (double) kDesignH);
         c->setSizeLimits (714, 728, 1428, 1456);
     }
     const int savedW = (int) proc.apvts.state.getProperty ("editorWidth",  1020);
@@ -1342,6 +1348,56 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
    #endif
 
     startTimerHz (30); // light: only updates rings/meter when something is moving
+
+    // ---- Drawer viewport: everything that isn't header / macros / chain / play
+    // surface / overlay / scope is reparented into drawerContent so the open
+    // drawer can scroll. Done once, generically, so no addAndMakeVisible call
+    // above had to change. Visibility flags survive reparenting.
+    {
+        std::vector<juce::Component*> stay {
+            &prevButton, &nextButton, &presetBox, &presetName, &saveButton, &randomizeButton,
+            &buttonA, &buttonB, &advancedButton, &moreButton, &tourButton, &panicButton, &updateButton,
+            &tabEntropy, &tabMachines, &tabPrettifier, &tabAir, &tabMix,
+            &homeTextureOn, &homeSpaceOn, &airOn,
+            &morphPad, &morphPadLabel, &grainViz, &morphCapA, &morphCapB, &morphCapC, &morphCapD,
+            &fadeOverlay, &tourOverlay, &drawerView };
+        for (auto& k : macroKnobs)  stay.push_back (&k);
+        for (auto& l : macroLabels) stay.push_back (&l);
+        if (waveformDisplay != nullptr) stay.push_back (waveformDisplay.get());
+        if (spectrumDisplay != nullptr) stay.push_back (spectrumDisplay.get());
+        if (keyboard != nullptr)        stay.push_back (keyboard.get());
+
+        addAndMakeVisible (drawerView);
+        drawerView.setViewedComponent (&drawerContent, false);
+        drawerView.setScrollBarsShown (true, false);
+        drawerView.setScrollBarThickness (8);
+
+        juce::Array<juce::Component*> kids;
+        for (int i = 0; i < getNumChildComponents(); ++i) kids.add (getChildComponent (i));
+        for (auto* c : kids)
+            if (std::find (stay.begin(), stay.end(), c) == stay.end())
+                drawerContent.addChildComponent (*c);   // moves it; keeps its visible flag
+        fadeOverlay.toFront (false);
+        tourOverlay.toFront (false);
+    }
+
+    // ---- Scale root: move every child (including the drawer viewport and the
+    // overlays) into `root`, which is laid out at kDesignW x kDesignH and scaled
+    // to the editor. Children keep their visibility and z-order.
+    {
+        juce::Array<juce::Component*> kids;
+        for (int i = 0; i < getNumChildComponents(); ++i) kids.add (getChildComponent (i));
+        addAndMakeVisible (root);
+        for (auto* c : kids)
+            if (c != &root)
+                root.addChildComponent (*c);
+        fadeOverlay.toFront (false);
+        tourOverlay.toFront (false);
+    }
+    // Everything is parented now; lay out once more so the drawer content size
+    // and the scale transform reflect the final tree.
+    resized();
+
 }
 
 GrainFreezeEditor::~GrainFreezeEditor()
@@ -1545,7 +1601,7 @@ void GrainFreezeEditor::launchTour()
                        "Advanced reveals the deep layer everywhere: per-knob locks and modulation, the "
                        "mod matrix, the ducker, sends and routing. Off by default so the page stays calm." });
     tourOverlay.setSteps (std::move (steps));
-    tourOverlay.setBounds (getLocalBounds());
+    tourOverlay.setBounds (root.getLocalBounds());
     tourOverlay.toFront (false);
     tourOverlay.setVisible (true);
     tourOverlay.grabKeyboardFocus();
@@ -1851,7 +1907,9 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     // flicker, no drifting bloom, no spores. paint() only runs on real repaints.
     const float pulse = 0.12f;
     const float boot = 1.0f;   // no boot fade now; logo halo still scales by this
-    const auto bounds = getLocalBounds().toFloat();
+    // Paint in the same logical space the children are laid out in.
+    g.addTransform (juce::AffineTransform::scale ((float) getWidth() / (float) kDesignW));
+    const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) kDesignW, (float) kDesignH);
     const int tab = 0;   // one visual theme for the whole page (was per-tab tints)
 
     auto drawBgImage = [&g, &bounds] (const juce::Image& img, float opacity)
@@ -1933,8 +1991,10 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
                                                                                    : logoImage;
         if (brandLogo.isValid())
         {
-            auto logoBox = getLocalBounds().reduced (20).removeFromTop (kHeaderH)
-                               .removeFromLeft (kLogoSlot).toFloat().reduced (2.0f);
+            // Emblem sits centred on the header row and may overhang it a little.
+            const auto band = juce::Rectangle<int> (0, 0, kDesignW, kDesignH).reduced (20).removeFromTop (kHeaderH);
+            auto logoBox = juce::Rectangle<float> (56.0f, 56.0f).withCentre ({ (float) band.getX() + kLogoSlot * 0.5f,
+                                                                               (float) band.getCentreY() });
 
             // Soft halo behind the emblem: Entropy = large breathing green, Mix =
             // large breathing orange (both clearly lit), other tabs keep accent.
@@ -1942,7 +2002,7 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
             const juce::Colour glowCol = entropyTab ? LF::toxic : mixTab ? orange : acc;
             const float breathe   = 1.0f + 0.05f * std::sin (animPhase * 1.7f);
             const float haloScale = tinted ? 0.42f * breathe : 0.35f;
-            const float haloAlpha = (entropyTab ? 0.16f : mixTab ? 0.18f : 0.18f) + glowLevel * 0.05f;
+            const float haloAlpha = (entropyTab ? 0.34f : mixTab ? 0.18f : 0.18f) + glowLevel * 0.05f;
             const auto halo = logoBox.expanded (logoBox.getWidth() * haloScale);
 
             // On the busy/light Mix backdrop, seat the emblem on a soft dark disc so
@@ -1975,6 +2035,27 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
         }
     }
 
+    // Signal-chain strip: a connecting line behind the tiles, and a hollow ring
+    // in the on/off slot of the two stages that have no switch (Machines,
+    // Master) so the row keeps its rhythm.
+    {
+        const auto first = tabEntropy.getBounds(), last = tabMix.getBounds();
+        if (! first.isEmpty() && ! last.isEmpty())
+        {
+            const float y = (float) first.getCentreY();
+            g.setColour (LF::textCol.withAlpha (0.14f));
+            g.drawLine ((float) homeTextureOn.getX(), y, (float) last.getRight(), y, 2.0f);
+            auto ring = [&] (const juce::Rectangle<int>& tile)
+            {
+                const float cx = (float) tile.getX() - 17.0f;
+                g.setColour (LF::textCol.withAlpha (0.35f));
+                g.drawEllipse (cx - 5.0f, y - 5.0f, 10.0f, 10.0f, 1.5f);
+            };
+            ring (tabMachines.getBounds());
+            ring (tabMix.getBounds());
+        }
+    }
+
     // Soft vignette for focus (gentle, modern).
     {
         const float vigAlpha = tab == 2 ? 0.16f : 0.26f;
@@ -2004,10 +2085,15 @@ void GrainFreezeEditor::resized()
     proc.apvts.state.setProperty ("editorWidth",  getWidth(),  nullptr);
     proc.apvts.state.setProperty ("editorHeight", getHeight(), nullptr);
 
-    fadeOverlay.setBounds (getLocalBounds());
-    tourOverlay.setBounds (getLocalBounds());
+    // Lay out at the design size; scale the root to fit.
+    const float uiScale = (float) getWidth() / (float) kDesignW;
+    root.setTransform (juce::AffineTransform::scale (uiScale));
+    root.setBounds (0, 0, kDesignW, kDesignH);
+    const auto design = juce::Rectangle<int> (0, 0, kDesignW, kDesignH);
+    fadeOverlay.setBounds (design);
+    tourOverlay.setBounds (design);
     tourOverlay.toFront (false);
-    auto area = getLocalBounds().reduced (pad);
+    auto area = design.reduced (pad);
 
     // ---- Zone 1: header. Logo slot (painted) + ONE control row. ----
     auto header = area.removeFromTop (kHeaderH);
@@ -2103,6 +2189,20 @@ void GrainFreezeEditor::resized()
     // directly under the knob grid, so they're carved inside the branch.
     const bool showGlobalMod = (currentTab == 0 && advancedMode);
     juce::Rectangle<int> specRow, bottom;
+    watermark.clear();
+
+    // Drawers lay out into drawerContent (origin 0,0, effectively unbounded
+    // height); the play surface lays out straight into the editor.
+    const auto contentZone = area;
+    constexpr int kBigH = 4000;
+    if (currentTab == -1)
+        drawerView.setVisible (false);
+    else
+    {
+        drawerView.setVisible (true);
+        drawerView.setBounds (contentZone);
+        area = juce::Rectangle<int> (0, 0, contentZone.getWidth() - drawerView.getScrollBarThickness() - 2, kBigH);
+    }
 
     // One row grammar for every stage: [title][on][extra slot][knob][knob]...
     // The extra slot is always reserved (combo / second toggle / nothing) so the
@@ -2149,8 +2249,8 @@ void GrainFreezeEditor::resized()
     {
         freezeButton.setBounds (area.removeFromTop (30).removeFromRight (104).reduced (2, 2));
         area.removeFromTop (4);
-        const float wmSize = (float) juce::jmin (area.getWidth(), area.getHeight()) * 1.05f;
-        auto wmBounds = juce::Rectangle<float> (wmSize, wmSize).withCentre (area.toFloat().getCentre());
+        const float wmSize = (float) juce::jmin (contentZone.getWidth(), contentZone.getHeight()) * 1.05f;
+        auto wmBounds = juce::Rectangle<float> (wmSize, wmSize).withCentre (contentZone.toFloat().getCentre());
         watermark = gf::makeBiohazardPath (wmBounds);
 
         auto grid = area.removeFromTop (juce::jmin (area.getHeight(), 2 * (kRowH + 24)));
@@ -2287,9 +2387,11 @@ void GrainFreezeEditor::resized()
 
         area.removeFromTop (gap + 4);
 
-        // Routing + Pitch Lock band reserved along the bottom.
-        auto routeRow = area.removeFromBottom (46);
-        area.removeFromBottom (gap);
+        // Body: [left loops (Advanced) | right master knobs], bounded height, then
+        // the Routing + Pitch Lock band under it.
+        auto body = area.removeFromTop (advancedMode ? 250 : 230);
+        auto routeRow = area.removeFromTop (46);
+        area.removeFromTop (gap);
         if (advancedMode)
         {
             routingLabel.setBounds (routeRow.removeFromLeft (66).withSizeKeepingCentre (66, 26));
@@ -2317,10 +2419,10 @@ void GrainFreezeEditor::resized()
         pitchLockFormantButton.setBounds (routeRow.removeFromLeft (104).withSizeKeepingCentre (100, 28));
 
         // Split the body: LEFT loops (Advanced only) | RIGHT master.
-        auto leftCol = advancedMode ? area.removeFromLeft (juce::jmax (300, area.getWidth() * 42 / 100))
+        auto leftCol = advancedMode ? body.removeFromLeft (juce::jmax (300, body.getWidth() * 42 / 100))
                                     : juce::Rectangle<int>();
-        if (advancedMode) area.removeFromLeft (gap * 2);
-        auto rightCol = area;
+        if (advancedMode) body.removeFromLeft (gap * 2);
+        auto rightCol = body;
 
         // ---- LEFT: one send/return loop per engine, headed by its on/off ----
         auto loopPanel = [&] (juce::Rectangle<int> r, juce::ToggleButton& onBtn,
@@ -2540,4 +2642,11 @@ void GrainFreezeEditor::resized()
         if (modScope != nullptr) modScope->setBounds (scopeArea);
     }
 
+
+    if (currentTab != -1)
+    {
+        const int used = kBigH - area.getHeight() + 10;
+        drawerContent.setSize (contentZone.getWidth() - drawerView.getScrollBarThickness() - 2,
+                               juce::jmax (used, contentZone.getHeight()));
+    }
 }
