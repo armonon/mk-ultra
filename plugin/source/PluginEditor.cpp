@@ -42,6 +42,12 @@ namespace
 
     // Shared header geometry so paint() (logo) and resized() (tabs) stay aligned.
     constexpr int kHeaderH  = 44;
+    // One knob scale for the whole page. Macros are the hero (larger); every
+    // drawer knob is kKnob inside a kCell-wide cell; stage rows share one
+    // grammar so knobs line up at the same x on every row.
+    constexpr int kMacroCell = 124, kMacroKnob = 84;
+    constexpr int kCell = 96,  kKnob = 62,  kRowH = 86;
+    constexpr int kStageTitleW = 150, kStageOnW = 56, kStageExtraW = 150;
     constexpr int kLogoSlot = 60;
 
     gf::BiohazardLookAndFeel* bioLnF (const juce::Component& c)
@@ -882,7 +888,9 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     prettyOutputAttach = std::make_unique<SliderAttachment> (proc.apvts, "prettifierOutTrim", prettyOutputKnob);
 
     // Prettifier "DNA" character bank + per-module on/off toggles.
-    setupSectionLabel (dnaHeader, "DNA", 13.0f);
+    setupSectionLabel (dnaHeader, "MODULES", 13.0f);
+    setupSectionLabel (colorHeader, "COLOR", 13.0f);
+    addAndMakeVisible (colorHeader);
     {
         static const char* dnaIds[kNumDna] = { "dnaCharacter", "dnaAge", "dnaWarmth", "dnaWidth", "dnaRandomness",
                                                "dnaAnalog", "dnaDigital", "dnaSmoothness", "dnaMotion", "dnaShine" };
@@ -1217,6 +1225,9 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     homeTextureOn.setTooltip ("Texture stage on/off");
     homeSpaceOn.setTooltip ("Space stage on/off");
     airOn.setTooltip ("Air stage on/off");
+    for (auto* b : { &machSpectralOn, &machPitchOn, &machDamageOn, &machTimeOn, &machDuckerOn,
+                     &airSquelchOn, &airExciterOn, &airShelfOn, &airPhaserOn, &airDelayOn })
+        b->setButtonText ({});   // dot-only: the row title names the stage
 
     // ---- Hover tooltips for the less-obvious controls ----
     machSpectralOn.setTooltip ("Spectral: freeze the spectrum into a sustained glassy pad");
@@ -1597,11 +1608,17 @@ void GrainFreezeEditor::showMoreMenu()
 }
 
 void GrainFreezeEditor::layoutDialCell (juce::Rectangle<int>& row, juce::Label& label,
-                                        juce::Slider& slider, int width)
+                                        juce::Slider& slider, int width, int knobD)
 {
-    auto cell = row.removeFromLeft (width).reduced (8, 6);
-    label.setBounds (cell.removeFromTop (20));
-    slider.setBounds (cell);
+    auto cell = row.removeFromLeft (width).reduced (6, 4);
+    label.setBounds (cell.removeFromTop (18));
+    if (knobD > 0)
+    {
+        const int d = juce::jmin (knobD, cell.getWidth(), cell.getHeight());
+        slider.setBounds (cell.withSizeKeepingCentre (d, d));
+    }
+    else
+        slider.setBounds (cell);
 }
 
 void GrainFreezeEditor::updateTabVisibility()
@@ -1621,8 +1638,10 @@ void GrainFreezeEditor::updateTabVisibility()
     tabMachines.setToggleState (machinesTab, juce::dontSendNotification);
     const bool airTab = currentTab == 5;
     tabAir.setToggleState (airTab, juce::dontSendNotification);
-    for (auto* l : { &airHeader, &airSquelchTitle, &airExciterTitle, &airShelfTitle, &airPhaserTitle, &airDelayTitle })
+    for (auto* l : { &airSquelchTitle, &airExciterTitle, &airShelfTitle, &airPhaserTitle, &airDelayTitle })
         l->setVisible (airTab);
+    airHeader.setText ("CROSSOVER", juce::dontSendNotification);   // reused as the first AIR row's title
+    airHeader.setVisible (airTab);
     for (auto* b : { &airSquelchOn, &airExciterOn, &airShelfOn, &airPhaserOn, &airDelayOn })
         b->setVisible (airTab);
     airOn.setVisible (true);   // lives in the chain strip
@@ -1702,7 +1721,6 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto* c : { &dryLevel, &entropySend, &entropyReturn, &prettifierSend, &prettifierReturn, &mixOutput, &chaosBeauty, &mixWidth, &mixGlue, &mixCeiling })
         c->setVisible (mixTab);
     routingMode.setVisible (mixTab && adv);
-    mixHeader.setVisible (mixTab);
     routingLabel.setVisible (mixTab && adv);
     for (auto& l : mixLabels) l.setVisible (mixTab);
     for (int i = 1; i <= 4; ++i) mixLabels[(size_t) i].setVisible (mixTab && adv);   // send/return labels
@@ -1735,7 +1753,6 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto* l : { &pitchLockModeLabel, &pitchLockKeyLabel, &pitchLockScaleLabel, &pitchLockAmountLabel })
         l->setVisible (mixTab);
 
-    prettifierHeader.setVisible (prettifierTab);
     prettifierOnButton.setVisible (false);   // chain strip owns stage on/off now
     for (auto& k : prettyKnobs)
     {
@@ -1749,6 +1766,10 @@ void GrainFreezeEditor::updateTabVisibility()
     prettyOutputLabel.setVisible (prettifierTab);
 
     dnaHeader.setVisible (prettifierTab);
+    colorHeader.setVisible (prettifierTab);
+    prettifierHeader.setVisible (false);   // the chain tile is the drawer title now
+    machinesHeader.setVisible (false);
+    mixHeader.setVisible (false);
     for (auto& s : dnaKnobs)  s.setVisible (prettifierTab);
     for (auto& l : dnaLabels) l.setVisible (prettifierTab);
     for (auto* b : { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton, &phaserOnButton,
@@ -1762,7 +1783,6 @@ void GrainFreezeEditor::updateTabVisibility()
     // params appear only when the per-machine "Advanced" toggle is on.
     const bool damageMore = adv;   // global Advanced replaces the per-machine expanders
     const bool timeMore   = adv;
-    machinesHeader.setVisible (machinesTab);
     for (auto* l : { &machSpectralTitle, &machPitchTitle, &machDamageTitle, &machTimeTitle })
         l->setVisible (machinesTab);
     for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn, &machTimeSync })
@@ -2015,11 +2035,10 @@ void GrainFreezeEditor::resized()
 
     // ---- Zone 2: macros. Always visible. ----
     {
-        auto macroRow = area.removeFromTop (104);
-        const int mW = 100;
-        macroRow = macroRow.withSizeKeepingCentre (juce::jmin (macroRow.getWidth(), mW * kNumMacros), macroRow.getHeight());
+        auto macroRow = area.removeFromTop (kMacroCell);
+        macroRow = macroRow.withSizeKeepingCentre (juce::jmin (macroRow.getWidth(), kMacroCell * kNumMacros), macroRow.getHeight());
         for (int i = 0; i < kNumMacros; ++i)
-            layoutDialCell (macroRow, macroLabels[(size_t) i], macroKnobs[(size_t) i], mW);
+            layoutDialCell (macroRow, macroLabels[(size_t) i], macroKnobs[(size_t) i], kMacroCell, kMacroKnob);
     }
     area.removeFromTop (gap);
 
@@ -2086,6 +2105,30 @@ void GrainFreezeEditor::resized()
     auto specRow = area.removeFromBottom (showGlobalMod ? 74 : 0);
     if (showGlobalMod) area.removeFromBottom (gap);
 
+    // One row grammar for every stage: [title][on][extra slot][knob][knob]...
+    // The extra slot is always reserved (combo / second toggle / nothing) so the
+    // knob column starts at the same x on every row of every drawer.
+    auto stageRow = [&] (int height, juce::Label* title, juce::Button* on,
+                         std::initializer_list<std::pair<juce::Component*, int>> extras,
+                         std::initializer_list<std::pair<juce::Slider*, juce::Label*>> knobs)
+    {
+        auto row = area.removeFromTop (height);
+        auto t = row.removeFromLeft (kStageTitleW);
+        if (title != nullptr) title->setBounds (t.withSizeKeepingCentre (kStageTitleW, 22));
+        auto o = row.removeFromLeft (kStageOnW);
+        if (on != nullptr) on->setBounds (o.withSizeKeepingCentre (kStageOnW - 4, 24));
+        auto x = row.removeFromLeft (kStageExtraW);
+        for (auto& ex : extras)
+        {
+            auto c = x.removeFromLeft (ex.second);
+            ex.first->setBounds (c.withSizeKeepingCentre (ex.second - 6, 26));
+        }
+        row.removeFromLeft (8);
+        for (auto& kv : knobs)
+            layoutDialCell (row, *kv.second, *kv.first, kCell, kKnob);
+        area.removeFromTop (6);
+    };
+
     // Shared knob-grid layout used by both Entropy and Prettifier so the two
     // sections share the same look and spacing.
     auto layoutKnobGrid = [] (juce::Rectangle<int> gridArea, int cols, int rows,
@@ -2111,7 +2154,8 @@ void GrainFreezeEditor::resized()
         auto wmBounds = juce::Rectangle<float> (wmSize, wmSize).withCentre (area.toFloat().getCentre());
         watermark = gf::makeBiohazardPath (wmBounds);
 
-        layoutKnobGrid (area, 5, 2, kNumKnobs, [this] (int idx, juce::Rectangle<int> cell)
+        auto grid = area.removeFromTop (juce::jmin (area.getHeight(), 2 * (kRowH + 12)));
+        layoutKnobGrid (grid, 5, 2, kNumKnobs, [this] (int idx, juce::Rectangle<int> cell)
         {
             auto top = cell.removeFromTop (20);
             if (advancedMode)
@@ -2120,22 +2164,21 @@ void GrainFreezeEditor::resized()
                 knobs[(size_t) idx].lock.setBounds (top.removeFromRight (28));
             }
             knobs[(size_t) idx].label.setBounds (top);
-            knobs[(size_t) idx].slider.setBounds (cell);
+            const int d = juce::jmin (kKnob + 10, cell.getWidth(), cell.getHeight());
+            auto k = cell.withSizeKeepingCentre (d, d);
+            knobs[(size_t) idx].slider.setBounds (k);
             if (knobs[(size_t) idx].ring != nullptr)
-                knobs[(size_t) idx].ring->setBounds (cell.withTrimmedBottom (20));
+                knobs[(size_t) idx].ring->setBounds (k);
         });
     }
     else if (currentTab == 2)
     {
-        prettifierHeader.setBounds (area.removeFromTop (24).reduced (4, 0));
-        prettifierOnButton.setBounds (area.removeFromTop (34).removeFromLeft (150).reduced (2, 4));
-        area.removeFromTop (gap);
-
-        // Reserve the DNA panel (module toggles + 10 character knobs) at the bottom.
-        auto dnaSection = area.removeFromBottom (132);
+        // Modules (toggles) + Color (10 character knobs) reserved at the bottom.
+        auto dnaSection = area.removeFromBottom (168);
         area.removeFromBottom (gap);
 
-        layoutKnobGrid (area, 5, 2, kNumPrettyKnobs, [this] (int idx, juce::Rectangle<int> cell)
+        auto grid = area.removeFromTop (juce::jmin (area.getHeight(), 2 * (kRowH + 12)));
+        layoutKnobGrid (grid, 5, 2, kNumPrettyKnobs, [this] (int idx, juce::Rectangle<int> cell)
         {
             auto top = cell.removeFromTop (20);
             if (advancedMode)
@@ -2144,20 +2187,25 @@ void GrainFreezeEditor::resized()
                 prettyKnobs[(size_t) idx].lock.setBounds (top.removeFromRight (28));
             }
             prettyKnobs[(size_t) idx].label.setBounds (top);
-            prettyKnobs[(size_t) idx].slider.setBounds (cell);
+            const int d = juce::jmin (kKnob + 10, cell.getWidth(), cell.getHeight());
+            auto k = cell.withSizeKeepingCentre (d, d);
+            prettyKnobs[(size_t) idx].slider.setBounds (k);
             if (prettyKnobs[(size_t) idx].ring != nullptr)
-                prettyKnobs[(size_t) idx].ring->setBounds (cell.withTrimmedBottom (20));
+                prettyKnobs[(size_t) idx].ring->setBounds (k);
         });
 
-        // Prettifier output knob fills the empty bottom-right cell of the 5x2 grid.
-        const int pCellW = area.getWidth() / 5;
-        const int pCellH = area.getHeight() / 2;
-        auto outCell = juce::Rectangle<int> (area.getX() + 4 * pCellW, area.getY() + pCellH,
-                                             pCellW, pCellH).reduced (10, 8);
-        prettyOutputLabel.setBounds (outCell.removeFromTop (20));
-        prettyOutputKnob.setBounds (outCell);
+        // Output knob fills the empty bottom-right cell of the 5x2 grid, same scale.
+        {
+            const int pCellW = grid.getWidth() / 5;
+            const int pCellH = grid.getHeight() / 2;
+            auto outCell = juce::Rectangle<int> (grid.getX() + 4 * pCellW, grid.getY() + pCellH,
+                                                 pCellW, pCellH).reduced (10, 8);
+            prettyOutputLabel.setBounds (outCell.removeFromTop (20));
+            const int d = juce::jmin (kKnob + 10, outCell.getWidth(), outCell.getHeight());
+            prettyOutputKnob.setBounds (outCell.withSizeKeepingCentre (d, d));
+        }
 
-        // DNA panel: a row of module on/off pills, then a row of 10 character knobs.
+        // MODULES: on/off pills. COLOR: the ten character knobs.
         dnaHeader.setBounds (dnaSection.removeFromTop (16).reduced (4, 0));
         juce::ToggleButton* mods[10] = { &echoOnButton, &reverbOnButton, &chorusOnButton, &crushOnButton,
                                          &phaserOnButton, &flangerOnButton, &dreamOnButton, &angelOnButton,
@@ -2180,7 +2228,9 @@ void GrainFreezeEditor::resized()
         modRow3.removeFromLeft (8);
         convolutionIRLabel.setBounds (modRow3.removeFromLeft (juce::jmin (320, modRow3.getWidth())));
 
-        dnaSection.removeFromTop (4);
+        dnaSection.removeFromTop (6);
+        colorHeader.setBounds (dnaSection.removeFromTop (16).reduced (4, 0));
+        dnaSection.removeFromTop (2);
         const int dnaW = dnaSection.getWidth() / kNumDna;
         for (int i = 0; i < kNumDna; ++i)
         {
@@ -2203,7 +2253,7 @@ void GrainFreezeEditor::resized()
         topToggles.removeFromLeft (gap);
         pitchMatchOnButton.setBounds (topToggles.removeFromLeft (118).reduced (2, 4));
         topToggles.removeFromLeft (gap);
-        tempoLockOnButton.setBounds (topToggles.removeFromLeft (118).reduced (2, 4));
+        tempoLockOnButton.setBounds (topToggles.removeFromLeft (134).reduced (2, 4));
 
         if (inputToolsVisible)
         {
@@ -2276,8 +2326,14 @@ void GrainFreezeEditor::resized()
             onBtn.setBounds (r.removeFromTop (30).withTrimmedLeft (6).withWidth (180));
             r.removeFromTop (2);
             const int half = r.getWidth() / 2;
-            { auto c = r.removeFromLeft (half).reduced (10, 6); sendL.setBounds (c.removeFromTop (16)); send.setBounds (c); }
-            { auto c = r.reduced (10, 6);                        retL.setBounds (c.removeFromTop (16)); ret.setBounds (c); }
+            auto place = [] (juce::Rectangle<int> c, juce::Label& l, juce::Slider& s)
+            {
+                l.setBounds (c.removeFromTop (16));
+                const int d = juce::jmin (kKnob + 8, c.getWidth(), c.getHeight());
+                s.setBounds (c.withSizeKeepingCentre (d, d));
+            };
+            place (r.removeFromLeft (half).reduced (10, 6), sendL, send);
+            place (r.reduced (10, 6), retL, ret);
         };
         if (advancedMode)
         {
@@ -2288,252 +2344,128 @@ void GrainFreezeEditor::resized()
                        prettifierSend, mixLabels[3], prettifierReturn, mixLabels[4]);
         }
 
-        // ---- RIGHT: master knobs (2x3) then EQ ----
-        mixHeader.setBounds (rightCol.removeFromTop (22).reduced (4, 0));
-        rightCol.removeFromTop (2);
-        auto masterArea = rightCol.removeFromTop (rightCol.getHeight() * 58 / 100);
+        // ---- RIGHT: the six master knobs on one row, then the four EQ knobs ----
         std::pair<juce::Slider*, juce::Label*> mk[] = {
             { &dryLevel, &mixLabels[0] }, { &mixWidth, &mixLabels[7] },  { &mixGlue, &mixLabels[8] },
             { &mixCeiling, &mixLabels[9] }, { &mixOutput, &mixLabels[5] }, { &chaosBeauty, &mixLabels[6] } };
-        const int mkW = masterArea.getWidth() / 3;
-        auto mrow1 = masterArea.removeFromTop (masterArea.getHeight() / 2);
-        for (int i = 0; i < 3; ++i) layoutDialCell (mrow1, *mk[i].second, *mk[i].first, mkW);
-        auto mrow2 = masterArea;
-        for (int i = 3; i < 6; ++i) layoutDialCell (mrow2, *mk[i].second, *mk[i].first, mkW);
-
+        {
+            auto r = rightCol.removeFromTop (kRowH + 8);
+            const int cw = juce::jmin (kCell + 24, r.getWidth() / 6);
+            r = r.withSizeKeepingCentre (cw * 6, r.getHeight());
+            for (auto& kv : mk) layoutDialCell (r, *kv.second, *kv.first, cw, kKnob + 8);
+        }
         rightCol.removeFromTop (gap);
-        eqHeader.setBounds (rightCol.removeFromTop (20).reduced (4, 0));
-        rightCol.removeFromTop (2);
-        const int eqW = rightCol.getWidth() / 4;
-        juce::Slider* eqSliders[] = { &eqLowKnob, &eqMidKnob, &eqHighKnob, &eqLoFiKnob };
-        for (size_t i = 0; i < eqLabels.size(); ++i)
-            layoutDialCell (rightCol, eqLabels[i], *eqSliders[i], eqW);
+        eqHeader.setBounds (rightCol.removeFromTop (18).reduced (4, 0));
+        {
+            auto r = rightCol.removeFromTop (kRowH);
+            const int cw = juce::jmin (kCell + 24, r.getWidth() / 4);
+            r = r.withSizeKeepingCentre (cw * 4, r.getHeight());
+            juce::Slider* eqSliders[] = { &eqLowKnob, &eqMidKnob, &eqHighKnob, &eqLoFiKnob };
+            for (size_t i = 0; i < eqLabels.size(); ++i)
+                layoutDialCell (r, eqLabels[i], *eqSliders[i], cw, kKnob);
+        }
     }
-    else if (currentTab == 3)
+    else if (currentTab == 3)   // MACHINES
     {
-        machinesHeader.setBounds (area.removeFromTop (24).reduced (4, 0));
-        area.removeFromTop (gap);
-
-        // One stacked block per machine: [title + On (+extra toggle)] over a knob row.
-        auto machineRow = [&] (juce::Label& title, juce::ToggleButton& on, juce::ToggleButton* extra,
-                               std::initializer_list<std::pair<juce::Slider*, juce::Label*>> knobs)
+        const bool adv = advancedMode;
+        stageRow (kRowH, &machSpectralTitle, &machSpectralOn, {},
+                  { { &machSpectralMix, &machSpectralMixL }, { &machSpectralAmount, &machSpectralAmountL } });
+        stageRow (kRowH, &machPitchTitle, &machPitchOn, { { &machPitchFormant, 100 } },
+                  { { &machPitchMix, &machPitchMixL }, { &machPitchShift, &machPitchShiftL } });
+        if (! adv)
+            stageRow (kRowH, &machDamageTitle, &machDamageOn, { { &machDamageClip, 116 } },
+                      { { &machDamageAmount, &machDamageAmountL }, { &machDamageMix, &machDamageMixL } });
+        else
         {
-            auto block = area.removeFromTop (116);
-            auto head  = block.removeFromTop (26);
-            title.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
-            on.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
-            if (extra != nullptr)
-            {
-                head.removeFromLeft (gap);
-                extra->setBounds (head.removeFromLeft (100).withSizeKeepingCentre (96, 24));
-            }
-            block.removeFromTop (4);
-            const int kw = 96;
-            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * (int) knobs.size()),
-                                                     block.getHeight());
-            for (auto& kv : knobs)
-                layoutDialCell (krow, *kv.second, *kv.first, kw);
-            area.removeFromTop (gap);
-        };
-
-        machineRow (machSpectralTitle, machSpectralOn, nullptr,
-                    { { &machSpectralMix, &machSpectralMixL }, { &machSpectralAmount, &machSpectralAmountL } });
-        machineRow (machPitchTitle, machPitchOn, &machPitchFormant,
-                    { { &machPitchMix, &machPitchMixL }, { &machPitchShift, &machPitchShiftL } });
-        // Damage: Clip type + Advanced toggle in the header. Collapsed shows just
-        // Drive + Mix; expanded reveals the full lo-fi knob row.
-        {
-            const bool more = advancedMode;
-            // The Damage block grows when Advanced is on (to accommodate the
-            // multiband strip beneath the main knob row).
-            auto block = area.removeFromTop (more ? 152 : 116);
-            auto head  = block.removeFromTop (26);
-            machDamageTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
-            machDamageOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
-            head.removeFromLeft (gap);
-            machDamageClip.setBounds (head.removeFromLeft (110).withSizeKeepingCentre (106, 26));
-            machDamageMore.setBounds (head.removeFromRight (96).withSizeKeepingCentre (92, 24));
-            block.removeFromTop (4);
-            const int kw = 96;
-            std::vector<std::pair<juce::Slider*, juce::Label*>> dk { { &machDamageAmount, &machDamageAmountL } };
-            if (more)
-            {
-                dk.push_back ({ &machDamageBits,    &machDamageBitsL });
-                dk.push_back ({ &machDamageRate,    &machDamageRateL });
-                dk.push_back ({ &machDamageJitter,  &machDamageJitterL });
-                dk.push_back ({ &machDamageNoise,   &machDamageNoiseL });
-                dk.push_back ({ &machDamageDropout, &machDamageDropoutL });
-                dk.push_back ({ &machDamageTone,    &machDamageToneL });
-            }
-            dk.push_back ({ &machDamageMix, &machDamageMixL });
-            auto knobRow = block.removeFromTop (more ? 82 : block.getHeight());
-            auto krow = knobRow.withSizeKeepingCentre (juce::jmin (knobRow.getWidth(), kw * (int) dk.size()), knobRow.getHeight());
-            for (auto& kv : dk)
-                layoutDialCell (krow, *kv.second, *kv.first, kw);
-
-            // Multiband strip: [Multiband toggle] [Split knob] [High Drive knob]
-            if (more)
-            {
-                auto mbRow = block;
-                machDamageSplit.setBounds (mbRow.removeFromLeft (108).withSizeKeepingCentre (104, 26));
-                mbRow.removeFromLeft (gap);
-                auto splitCell = mbRow.removeFromLeft (78);
-                machDamageSplitHzL.setBounds (splitCell.removeFromTop (14));
-                machDamageSplitHz.setBounds (splitCell.reduced (2, 0));
-                mbRow.removeFromLeft (gap);
-                auto highCell = mbRow.removeFromLeft (96);
-                machDamageHighAmountL.setBounds (highCell.removeFromTop (14));
-                machDamageHighAmount.setBounds (highCell.reduced (2, 0));
-            }
-            area.removeFromTop (gap);
+            stageRow (kRowH, &machDamageTitle, &machDamageOn, { { &machDamageClip, 116 } },
+                      { { &machDamageAmount, &machDamageAmountL }, { &machDamageMix, &machDamageMixL },
+                        { &machDamageBits, &machDamageBitsL },     { &machDamageRate, &machDamageRateL },
+                        { &machDamageJitter, &machDamageJitterL }, { &machDamageNoise, &machDamageNoiseL } });
+            stageRow (kRowH, nullptr, nullptr, { { &machDamageSplit, 120 } },
+                      { { &machDamageDropout, &machDamageDropoutL }, { &machDamageTone, &machDamageToneL },
+                        { &machDamageSplitHz, &machDamageSplitHzL }, { &machDamageHighAmount, &machDamageHighAmountL } });
         }
-
-        // Time Breaker: Sync + Division + Advanced in the header. Collapsed shows
-        // just Chance + Mix; expanded reveals the stutter knobs and routing slots.
+        if (! adv)
+            stageRow (kRowH, &machTimeTitle, &machTimeOn, { { &machTimeSync, 66 }, { &machTimeDivision, 84 } },
+                      { { &machTimeChance, &machTimeChanceL }, { &machTimeMix, &machTimeMixL } });
+        else
         {
-            const bool more = advancedMode;
-            auto block = area.removeFromTop (more ? 172 : 116);
-            auto head  = block.removeFromTop (26);
-            machTimeTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
-            machTimeOn.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
-            head.removeFromLeft (gap);
-            machTimeSync.setBounds (head.removeFromLeft (92).withSizeKeepingCentre (88, 24));
-            head.removeFromLeft (gap);
-            machTimeDivision.setBounds (head.removeFromLeft (88).withSizeKeepingCentre (84, 26));
-            machTimeMore.setBounds (head.removeFromRight (96).withSizeKeepingCentre (92, 24));
-
-            auto knobRow = block.removeFromTop (96);
-            knobRow.removeFromTop (4);
-            const int kw = 96;
-            std::vector<std::pair<juce::Slider*, juce::Label*>> tk;
-            if (more)
-                tk = { { &machTimeMix, &machTimeMixL },   { &machTimeRate, &machTimeRateL },
-                       { &machTimeSize, &machTimeSizeL }, { &machTimeChance, &machTimeChanceL },
-                       { &machTimeReverse, &machTimeReverseL } };
-            else
-                tk = { { &machTimeChance, &machTimeChanceL }, { &machTimeMix, &machTimeMixL } };
-            auto krow = knobRow.withSizeKeepingCentre (juce::jmin (knobRow.getWidth(), kw * (int) tk.size()), knobRow.getHeight());
-            for (auto& kv : tk)
-                layoutDialCell (krow, *kv.second, *kv.first, kw);
-
-            if (more)
+            stageRow (kRowH, &machTimeTitle, &machTimeOn, { { &machTimeSync, 66 }, { &machTimeDivision, 84 } },
+                      { { &machTimeChance, &machTimeChanceL }, { &machTimeMix, &machTimeMixL },
+                        { &machTimeRate, &machTimeRateL },     { &machTimeSize, &machTimeSizeL },
+                        { &machTimeReverse, &machTimeReverseL } });
+            // Routing slots share the row grammar: title column, then the two
+            // [target][depth] pairs start where the knobs do.
+            auto rr = area.removeFromTop (38);
+            machTimeRouteL.setBounds (rr.removeFromLeft (kStageTitleW).withSizeKeepingCentre (kStageTitleW, 22));
+            rr.removeFromLeft (kStageOnW + kStageExtraW + 8);
+            auto slot = [&] (juce::ComboBox& cb, juce::Slider& dk, juce::Label& dl)
             {
-                // Routing slots: [Routes to]  [target 1][depth]   [target 2][depth]
-                auto routeRow2 = block;
-                machTimeRouteL.setBounds (routeRow2.removeFromLeft (88).withSizeKeepingCentre (84, 22));
-                auto slot = [&] (juce::ComboBox& cb, juce::Slider& dk, juce::Label& dl)
-                {
-                    routeRow2.removeFromLeft (gap);
-                    cb.setBounds (routeRow2.removeFromLeft (132).withSizeKeepingCentre (128, 28));
-                    routeRow2.removeFromLeft (gap);
-                    auto c = routeRow2.removeFromLeft (64);
-                    dl.setBounds (c.removeFromTop (14));
-                    dk.setBounds (c.reduced (2, 0));
-                };
-                slot (machTimeRoute1Target, machTimeRoute1Depth, machTimeRoute1DepthL);
-                routeRow2.removeFromLeft (gap * 2);
-                slot (machTimeRoute2Target, machTimeRoute2Depth, machTimeRoute2DepthL);
-            }
-            area.removeFromTop (gap);
+                cb.setBounds (rr.removeFromLeft (150).withSizeKeepingCentre (144, 28));
+                auto c = rr.removeFromLeft (kCell);
+                dl.setBounds (c.removeFromTop (14));
+                const int d = juce::jmin (kKnob - 16, c.getHeight());
+                dk.setBounds (c.withSizeKeepingCentre (d, d));
+                rr.removeFromLeft (gap);
+            };
+            slot (machTimeRoute1Target, machTimeRoute1Depth, machTimeRoute1DepthL);
+            slot (machTimeRoute2Target, machTimeRoute2Depth, machTimeRoute2DepthL);
+            area.removeFromTop (6);
         }
-
-        // Sidechain Ducker: a single compact row -- title + On + 4 knobs inline.
-        if (advancedMode)
+        if (adv)
         {
-            auto block = area.removeFromTop (76);
-            machDuckerTitle.setBounds (block.removeFromLeft (96).withSizeKeepingCentre (96, 22));
-            block.removeFromLeft (gap);
-            machDuckerOn.setBounds (block.removeFromLeft (76).withSizeKeepingCentre (74, 24));
-            block.removeFromLeft (gap);
-            const int kw = 78;
-            std::pair<juce::Slider*, juce::Label*> dk[] = {
-                { &machDuckerAmount,    &machDuckerAmountL },
-                { &machDuckerThreshold, &machDuckerThresholdL },
-                { &machDuckerAttack,    &machDuckerAttackL },
-                { &machDuckerRelease,   &machDuckerReleaseL } };
-            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 4), block.getHeight());
-            for (auto& kv : dk)
-                layoutDialCell (krow, *kv.second, *kv.first, kw);
-            area.removeFromTop (gap);
-        }
+            stageRow (kRowH, &machDuckerTitle, &machDuckerOn, {},
+                      { { &machDuckerAmount, &machDuckerAmountL }, { &machDuckerThreshold, &machDuckerThresholdL },
+                        { &machDuckerAttack, &machDuckerAttackL }, { &machDuckerRelease, &machDuckerReleaseL } });
 
-        // Universal Modulation Matrix: 4 rows of [Source -> Target  Depth].
-        if (advancedMode)
-        {
+            // Mod matrix: title column holds the title + poly/MPE; rows start at the knob x.
             auto head = area.removeFromTop (22);
-            modMatrixTitle.setBounds (head.removeFromLeft (140).withSizeKeepingCentre (140, 20));
-            head.removeFromLeft (gap);
-            polyGrainButton.setBounds (head.removeFromLeft (124).withSizeKeepingCentre (122, 22));
-            head.removeFromLeft (gap);
-            mpeOnButton.setBounds (head.removeFromLeft (60).withSizeKeepingCentre (58, 22));
+            modMatrixTitle.setBounds (head.removeFromLeft (kStageTitleW).withSizeKeepingCentre (kStageTitleW, 20));
+            head.removeFromLeft (kStageOnW);
+            polyGrainButton.setBounds (head.removeFromLeft (128).withSizeKeepingCentre (124, 22));
+            mpeOnButton.setBounds (head.removeFromLeft (84).withSizeKeepingCentre (80, 22));
             area.removeFromTop (4);
-            for (int i = 0; i < 4; ++i)
+            // Two slots per row -> the four slots take two rows instead of four.
+            for (int r = 0; r < 2; ++r)
             {
                 auto row = area.removeFromTop (24);
-                modMatrixSource[(size_t) i].setBounds (row.removeFromLeft (160).reduced (2, 1));
-                modMatrixArrow [(size_t) i].setBounds (row.removeFromLeft (24));
-                modMatrixTarget[(size_t) i].setBounds (row.removeFromLeft (160).reduced (2, 1));
-                row.removeFromLeft (gap);
-                modMatrixActivity[(size_t) i].setBounds (row.removeFromLeft (12).withSizeKeepingCentre (10, 10));
-                row.removeFromLeft (4);
-                modMatrixDepth [(size_t) i].setBounds (row.removeFromLeft (juce::jmin (244, row.getWidth())).reduced (2, 4));
+                row.removeFromLeft (kStageTitleW + kStageOnW - 40);
+                for (int k = 0; k < 2; ++k)
+                {
+                    const size_t i = (size_t) (r * 2 + k);
+                    modMatrixSource[i].setBounds (row.removeFromLeft (128).reduced (2, 1));
+                    modMatrixArrow [i].setBounds (row.removeFromLeft (18));
+                    modMatrixTarget[i].setBounds (row.removeFromLeft (128).reduced (2, 1));
+                    row.removeFromLeft (6);
+                    modMatrixActivity[i].setBounds (row.removeFromLeft (12).withSizeKeepingCentre (10, 10));
+                    row.removeFromLeft (2);
+                    modMatrixDepth [i].setBounds (row.removeFromLeft (96).reduced (2, 4));
+                    row.removeFromLeft (18);
+                }
                 area.removeFromTop (2);
             }
         }
     }
-    else if (currentTab == 5)   // AIR: parallel high-band tonal toys
+    else if (currentTab == 5)   // AIR
     {
-        airHeader.setBounds (area.removeFromTop (24).reduced (4, 0));
-        area.removeFromTop (gap);
-
-        // One generic row: [title][On][optional combo] then knobs centred in the rest.
-        auto airRow = [&] (juce::Label& title, juce::ToggleButton& on, juce::ComboBox* combo,
-                           std::initializer_list<std::pair<juce::Slider*, juce::Label*>> knobs)
-        {
-            auto block = area.removeFromTop (100);
-            auto head  = block.removeFromTop (26);
-            title.setBounds (head.removeFromLeft (140).withSizeKeepingCentre (140, 22));
-            on.setBounds (head.removeFromLeft (70).withSizeKeepingCentre (66, 24));
-            if (combo != nullptr)
-            {
-                head.removeFromLeft (gap);
-                combo->setBounds (head.removeFromLeft (96).withSizeKeepingCentre (92, 26));
-            }
-            block.removeFromTop (2);
-            const int kw = 96;
-            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * (int) knobs.size()), block.getHeight());
-            for (auto& kv : knobs)
-                layoutDialCell (krow, *kv.second, *kv.first, kw);
-            area.removeFromTop (4);
-        };
-
-        // Master row: On + crossover + mix. Title reuses the header label slot above,
-        // so pass a scratch-free layout: we just place On/crossover/mix.
-        {
-            auto block = area.removeFromTop (100);
-            block.removeFromTop (28);
-            const int kw = 96;
-            auto krow = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), kw * 2), block.getHeight());
-            layoutDialCell (krow, airCrossoverL, airCrossover, kw);
-            layoutDialCell (krow, airMixL,       airMix,       kw);
-            area.removeFromTop (4);
-        }
-        airRow (airSquelchTitle, airSquelchOn, &airSquelchMode,
-                { { &airSquelchHz, &airSquelchHzL }, { &airSquelchRes, &airSquelchResL }, { &airSquelchEnv, &airSquelchEnvL } });
-        airRow (airExciterTitle, airExciterOn, nullptr,
-                { { &airExciterDrive, &airExciterDriveL }, { &airExciterMix, &airExciterMixL } });
-        airRow (airShelfTitle, airShelfOn, nullptr,
-                { { &airShelfHz, &airShelfHzL }, { &airShelfAmount, &airShelfAmountL }, { &airShelfThreshold, &airShelfThresholdL } });
-        airRow (airPhaserTitle, airPhaserOn, nullptr,
-                { { &airPhaserRate, &airPhaserRateL }, { &airPhaserDepth, &airPhaserDepthL }, { &airPhaserMix, &airPhaserMixL } });
-        airRow (airDelayTitle, airDelayOn, nullptr,
-                { { &airDelayMs, &airDelayMsL }, { &airDelayFeedback, &airDelayFeedbackL }, { &airDelayMix, &airDelayMixL } });
+        stageRow (kRowH, &airHeader, nullptr, {},
+                  { { &airCrossover, &airCrossoverL }, { &airMix, &airMixL } });
+        stageRow (kRowH, &airSquelchTitle, &airSquelchOn, { { &airSquelchMode, 100 } },
+                  { { &airSquelchHz, &airSquelchHzL }, { &airSquelchRes, &airSquelchResL }, { &airSquelchEnv, &airSquelchEnvL } });
+        stageRow (kRowH, &airExciterTitle, &airExciterOn, {},
+                  { { &airExciterDrive, &airExciterDriveL }, { &airExciterMix, &airExciterMixL } });
+        stageRow (kRowH, &airShelfTitle, &airShelfOn, {},
+                  { { &airShelfHz, &airShelfHzL }, { &airShelfAmount, &airShelfAmountL }, { &airShelfThreshold, &airShelfThresholdL } });
+        stageRow (kRowH, &airPhaserTitle, &airPhaserOn, {},
+                  { { &airPhaserRate, &airPhaserRateL }, { &airPhaserDepth, &airPhaserDepthL }, { &airPhaserMix, &airPhaserMixL } });
+        stageRow (kRowH, &airDelayTitle, &airDelayOn, {},
+                  { { &airDelayMs, &airDelayMsL }, { &airDelayFeedback, &airDelayFeedbackL }, { &airDelayMix, &airDelayMixL } });
     }
     else if (currentTab == -1)   // play surface: morph pad + grain cloud, larger
     {
         morphPadLabel.setBounds (area.removeFromTop (18).withSizeKeepingCentre (200, 18));
         area.removeFromTop (6);
-        const int padSize = juce::jlimit (160, 300, area.getHeight() - 40);
+        const int padSize = juce::jlimit (160, 380, area.getHeight() - 60);
         auto block = area.removeFromTop (padSize + 34);
         block = block.withSizeKeepingCentre (juce::jmin (block.getWidth(), padSize * 2 + 24), block.getHeight());
         auto pad = block.removeFromLeft (padSize).withHeight (padSize);

@@ -476,7 +476,8 @@ private:
 
     // Prettifier "DNA" character bank + per-module on/off toggles. These were
     // built into the DSP from the start but had no UI until now.
-    juce::Label dnaHeader;
+    juce::Label dnaHeader;      // "MODULES"
+    juce::Label colorHeader;    // "COLOR" -- the ten character knobs
     static constexpr int kNumDna = 10;
     std::array<juce::Slider, kNumDna> dnaKnobs;
     std::array<juce::Label,  kNumDna> dnaLabels;
@@ -631,7 +632,8 @@ private:
     juce::Label routingLabel;
     std::array<juce::Label, 10> mixLabels;
 
-    void layoutDialCell (juce::Rectangle<int>& row, juce::Label& label, juce::Slider& slider, int width);
+    // knobD > 0 pins the rotary to a fixed diameter inside the cell (one knob scale everywhere).
+    void layoutDialCell (juce::Rectangle<int>& row, juce::Label& label, juce::Slider& slider, int width, int knobD = 0);
     void switchTab (int tabIndex);
 
     std::unique_ptr<juce::MidiKeyboardComponent> keyboard;
