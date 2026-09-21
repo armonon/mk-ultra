@@ -1660,18 +1660,19 @@ void GrainFreezeEditor::updateTabVisibility()
         b->setVisible (false);
 
     freezeButton.setVisible (entropyTab);
+    const bool adv = advancedMode;
     for (auto& k : knobs)
     {
         k.slider.setVisible (entropyTab);
         k.label.setVisible (entropyTab);
-        k.lock.setVisible (entropyTab);
-        k.modButton.setVisible (entropyTab);
-        if (k.ring != nullptr) k.ring->setVisible (entropyTab);
+        k.lock.setVisible (entropyTab && adv);
+        k.modButton.setVisible (entropyTab && adv);
+        if (k.ring != nullptr) k.ring->setVisible (entropyTab && adv);
     }
-    globalModOnButton.setVisible (entropyTab);
-    globalRate.setVisible (entropyTab);
-    globalShape.setVisible (entropyTab);
-    lfoSyncBox.setVisible (entropyTab);
+    globalModOnButton.setVisible (entropyTab && adv);
+    globalRate.setVisible (entropyTab && adv);
+    globalShape.setVisible (entropyTab && adv);
+    lfoSyncBox.setVisible (entropyTab && adv);
     satOnButton.setVisible (entropyTab);
     satType.setVisible (entropyTab);
     satDrive.setVisible (entropyTab);
@@ -1681,7 +1682,7 @@ void GrainFreezeEditor::updateTabVisibility()
     satMixLabel.setVisible (entropyTab);
     if (satCurve != nullptr) satCurve->setVisible (entropyTab);
     if (meter != nullptr) meter->setVisible (entropyTab);
-    if (modScope != nullptr) modScope->setVisible (entropyTab);
+    if (modScope != nullptr) modScope->setVisible (entropyTab && adv);
     // The Mix tab swaps the bottom output scope for the master spectrum analyzer.
     if (waveformDisplay != nullptr) waveformDisplay->setVisible (! mixTab && ! machinesTab);
     if (spectrumDisplay != nullptr) spectrumDisplay->setVisible (mixTab);
@@ -1700,10 +1701,13 @@ void GrainFreezeEditor::updateTabVisibility()
 
     for (auto* c : { &dryLevel, &entropySend, &entropyReturn, &prettifierSend, &prettifierReturn, &mixOutput, &chaosBeauty, &mixWidth, &mixGlue, &mixCeiling })
         c->setVisible (mixTab);
-    routingMode.setVisible (mixTab);
+    routingMode.setVisible (mixTab && adv);
     mixHeader.setVisible (mixTab);
-    routingLabel.setVisible (mixTab);
+    routingLabel.setVisible (mixTab && adv);
     for (auto& l : mixLabels) l.setVisible (mixTab);
+    for (int i = 1; i <= 4; ++i) mixLabels[(size_t) i].setVisible (mixTab && adv);   // send/return labels
+    for (auto* c : { &entropySend, &entropyReturn, &prettifierSend, &prettifierReturn })
+        c->setVisible (mixTab && adv);
     eqHeader.setVisible (mixTab);
     for (auto& l : eqLabels) l.setVisible (mixTab);
     for (auto* c : { &eqLowKnob, &eqMidKnob, &eqHighKnob, &eqLoFiKnob })
@@ -1737,9 +1741,9 @@ void GrainFreezeEditor::updateTabVisibility()
     {
         k.slider.setVisible (prettifierTab);
         k.label.setVisible (prettifierTab);
-        k.lock.setVisible (prettifierTab);
-        k.modButton.setVisible (prettifierTab);
-        if (k.ring != nullptr) k.ring->setVisible (prettifierTab);
+        k.lock.setVisible (prettifierTab && adv);
+        k.modButton.setVisible (prettifierTab && adv);
+        if (k.ring != nullptr) k.ring->setVisible (prettifierTab && adv);
     }
     prettyOutputKnob.setVisible (prettifierTab);
     prettyOutputLabel.setVisible (prettifierTab);
@@ -1756,27 +1760,30 @@ void GrainFreezeEditor::updateTabVisibility()
 
     // MACHINES tab. Damage and Time Breaker collapse to essentials; their deep
     // params appear only when the per-machine "Advanced" toggle is on.
-    const bool damageMore = machDamageMore.getToggleState();
-    const bool timeMore   = machTimeMore.getToggleState();
+    const bool damageMore = adv;   // global Advanced replaces the per-machine expanders
+    const bool timeMore   = adv;
     machinesHeader.setVisible (machinesTab);
-    for (auto* l : { &machSpectralTitle, &machPitchTitle, &machDamageTitle, &machTimeTitle, &machDuckerTitle })
+    for (auto* l : { &machSpectralTitle, &machPitchTitle, &machDamageTitle, &machTimeTitle })
         l->setVisible (machinesTab);
-    for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn, &machTimeSync, &machDuckerOn })
+    for (auto* b : { &machSpectralOn, &machPitchOn, &machPitchFormant, &machDamageOn, &machTimeOn, &machTimeSync })
         b->setVisible (machinesTab);
+    // Ducker + mod matrix + poly/MPE: deep layer.
+    machDuckerTitle.setVisible (machinesTab && adv);
+    machDuckerOn.setVisible (machinesTab && adv);
     for (auto* s : { &machDuckerAmount, &machDuckerThreshold, &machDuckerAttack, &machDuckerRelease })
-        s->setVisible (machinesTab);
+        s->setVisible (machinesTab && adv);
     for (auto* l : { &machDuckerAmountL, &machDuckerThresholdL, &machDuckerAttackL, &machDuckerReleaseL })
-        l->setVisible (machinesTab);
-
-    modMatrixTitle.setVisible (machinesTab);
-    for (auto& c : modMatrixSource) c.setVisible (machinesTab);
-    for (auto& c : modMatrixTarget) c.setVisible (machinesTab);
-    for (auto& s : modMatrixDepth)  s.setVisible (machinesTab);
-    for (auto& l : modMatrixArrow)  l.setVisible (machinesTab);
-    polyGrainButton.setVisible (machinesTab);
-    mpeOnButton.setVisible (machinesTab);
+        l->setVisible (machinesTab && adv);
+    modMatrixTitle.setVisible (machinesTab && adv);
+    for (auto& c : modMatrixSource)   c.setVisible (machinesTab && adv);
+    for (auto& c : modMatrixTarget)   c.setVisible (machinesTab && adv);
+    for (auto& s : modMatrixDepth)    s.setVisible (machinesTab && adv);
+    for (auto& l : modMatrixArrow)    l.setVisible (machinesTab && adv);
+    for (auto& a : modMatrixActivity) a.setVisible (machinesTab && adv);
+    polyGrainButton.setVisible (machinesTab && adv);
+    mpeOnButton.setVisible (machinesTab && adv);
     for (auto* b : { &machDamageMore, &machTimeMore })
-        b->setVisible (machinesTab);
+        b->setVisible (false);
     // Always-visible essentials (Spectral + Pitch are already minimal).
     for (auto* s : { &machSpectralMix, &machSpectralAmount, &machPitchMix, &machPitchShift,
                      &machDamageAmount, &machDamageMix, &machTimeChance, &machTimeMix })
@@ -2075,8 +2082,9 @@ void GrainFreezeEditor::resized()
     // Entropy-only support rows (saturation / spectral) carved from the bottom.
     auto bottom = area.removeFromBottom (currentTab == 0 ? 122 : 0);
     if (currentTab == 0) area.removeFromBottom (gap);
-    auto specRow = area.removeFromBottom (currentTab == 0 ? 74 : 0);
-    if (currentTab == 0) area.removeFromBottom (gap);
+    const bool showGlobalMod = (currentTab == 0 && advancedMode);
+    auto specRow = area.removeFromBottom (showGlobalMod ? 74 : 0);
+    if (showGlobalMod) area.removeFromBottom (gap);
 
     // Shared knob-grid layout used by both Entropy and Prettifier so the two
     // sections share the same look and spacing.
@@ -2106,8 +2114,11 @@ void GrainFreezeEditor::resized()
         layoutKnobGrid (area, 5, 2, kNumKnobs, [this] (int idx, juce::Rectangle<int> cell)
         {
             auto top = cell.removeFromTop (20);
-            knobs[(size_t) idx].modButton.setBounds (top.removeFromRight (26).reduced (1, 0));
-            knobs[(size_t) idx].lock.setBounds (top.removeFromRight (28));
+            if (advancedMode)
+            {
+                knobs[(size_t) idx].modButton.setBounds (top.removeFromRight (26).reduced (1, 0));
+                knobs[(size_t) idx].lock.setBounds (top.removeFromRight (28));
+            }
             knobs[(size_t) idx].label.setBounds (top);
             knobs[(size_t) idx].slider.setBounds (cell);
             if (knobs[(size_t) idx].ring != nullptr)
@@ -2127,8 +2138,11 @@ void GrainFreezeEditor::resized()
         layoutKnobGrid (area, 5, 2, kNumPrettyKnobs, [this] (int idx, juce::Rectangle<int> cell)
         {
             auto top = cell.removeFromTop (20);
-            prettyKnobs[(size_t) idx].modButton.setBounds (top.removeFromRight (26).reduced (1, 0));
-            prettyKnobs[(size_t) idx].lock.setBounds (top.removeFromRight (28));
+            if (advancedMode)
+            {
+                prettyKnobs[(size_t) idx].modButton.setBounds (top.removeFromRight (26).reduced (1, 0));
+                prettyKnobs[(size_t) idx].lock.setBounds (top.removeFromRight (28));
+            }
             prettyKnobs[(size_t) idx].label.setBounds (top);
             prettyKnobs[(size_t) idx].slider.setBounds (cell);
             if (prettyKnobs[(size_t) idx].ring != nullptr)
@@ -2222,9 +2236,12 @@ void GrainFreezeEditor::resized()
         // Routing + Pitch Lock band reserved along the bottom.
         auto routeRow = area.removeFromBottom (46);
         area.removeFromBottom (gap);
-        routingLabel.setBounds (routeRow.removeFromLeft (66).withSizeKeepingCentre (66, 26));
-        routingMode.setBounds (routeRow.removeFromLeft (168).withSizeKeepingCentre (164, 28));
-        routeRow.removeFromLeft (gap * 2);
+        if (advancedMode)
+        {
+            routingLabel.setBounds (routeRow.removeFromLeft (66).withSizeKeepingCentre (66, 26));
+            routingMode.setBounds (routeRow.removeFromLeft (168).withSizeKeepingCentre (164, 28));
+            routeRow.removeFromLeft (gap * 2);
+        }
         pitchLockButton.setBounds (routeRow.removeFromLeft (116).withSizeKeepingCentre (112, 28));
         routeRow.removeFromLeft (gap);
         auto plCombo = [&] (juce::Label& l, juce::ComboBox& b, int w)
@@ -2245,9 +2262,10 @@ void GrainFreezeEditor::resized()
         routeRow.removeFromLeft (gap);
         pitchLockFormantButton.setBounds (routeRow.removeFromLeft (104).withSizeKeepingCentre (100, 28));
 
-        // Split the body: LEFT loops | RIGHT master.
-        auto leftCol = area.removeFromLeft (juce::jmax (300, area.getWidth() * 42 / 100));
-        area.removeFromLeft (gap * 2);
+        // Split the body: LEFT loops (Advanced only) | RIGHT master.
+        auto leftCol = advancedMode ? area.removeFromLeft (juce::jmax (300, area.getWidth() * 42 / 100))
+                                    : juce::Rectangle<int>();
+        if (advancedMode) area.removeFromLeft (gap * 2);
         auto rightCol = area;
 
         // ---- LEFT: one send/return loop per engine, headed by its on/off ----
@@ -2261,11 +2279,14 @@ void GrainFreezeEditor::resized()
             { auto c = r.removeFromLeft (half).reduced (10, 6); sendL.setBounds (c.removeFromTop (16)); send.setBounds (c); }
             { auto c = r.reduced (10, 6);                        retL.setBounds (c.removeFromTop (16)); ret.setBounds (c); }
         };
-        const int loopH = leftCol.getHeight() / 2;
-        loopPanel (leftCol.removeFromTop (loopH).reduced (2), entropyOnButton,
-                   entropySend, mixLabels[1], entropyReturn, mixLabels[2]);
-        loopPanel (leftCol.reduced (2), prettifierOnButton,
-                   prettifierSend, mixLabels[3], prettifierReturn, mixLabels[4]);
+        if (advancedMode)
+        {
+            const int loopH = leftCol.getHeight() / 2;
+            loopPanel (leftCol.removeFromTop (loopH).reduced (2), entropyOnButton,
+                       entropySend, mixLabels[1], entropyReturn, mixLabels[2]);
+            loopPanel (leftCol.reduced (2), prettifierOnButton,
+                       prettifierSend, mixLabels[3], prettifierReturn, mixLabels[4]);
+        }
 
         // ---- RIGHT: master knobs (2x3) then EQ ----
         mixHeader.setBounds (rightCol.removeFromTop (22).reduced (4, 0));
@@ -2322,7 +2343,7 @@ void GrainFreezeEditor::resized()
         // Damage: Clip type + Advanced toggle in the header. Collapsed shows just
         // Drive + Mix; expanded reveals the full lo-fi knob row.
         {
-            const bool more = machDamageMore.getToggleState();
+            const bool more = advancedMode;
             // The Damage block grows when Advanced is on (to accommodate the
             // multiband strip beneath the main knob row).
             auto block = area.removeFromTop (more ? 152 : 116);
@@ -2370,7 +2391,7 @@ void GrainFreezeEditor::resized()
         // Time Breaker: Sync + Division + Advanced in the header. Collapsed shows
         // just Chance + Mix; expanded reveals the stutter knobs and routing slots.
         {
-            const bool more = machTimeMore.getToggleState();
+            const bool more = advancedMode;
             auto block = area.removeFromTop (more ? 172 : 116);
             auto head  = block.removeFromTop (26);
             machTimeTitle.setBounds (head.removeFromLeft (180).withSizeKeepingCentre (180, 22));
@@ -2417,6 +2438,7 @@ void GrainFreezeEditor::resized()
         }
 
         // Sidechain Ducker: a single compact row -- title + On + 4 knobs inline.
+        if (advancedMode)
         {
             auto block = area.removeFromTop (76);
             machDuckerTitle.setBounds (block.removeFromLeft (96).withSizeKeepingCentre (96, 22));
@@ -2436,6 +2458,7 @@ void GrainFreezeEditor::resized()
         }
 
         // Universal Modulation Matrix: 4 rows of [Source -> Target  Depth].
+        if (advancedMode)
         {
             auto head = area.removeFromTop (22);
             modMatrixTitle.setBounds (head.removeFromLeft (140).withSizeKeepingCentre (140, 20));
