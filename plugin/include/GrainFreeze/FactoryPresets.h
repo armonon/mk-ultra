@@ -23,7 +23,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "textureGrainOn", 1 }, { "beautySpaceOn", 1 }, { "grainSize", 240 }, { "density", 40 },
             { "pitch", 0 }, { "spray", 120 }, { "echoOn", 1 }, { "echoTimeMs", 320 },
             { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.7f }, { "beautySpaceMix", 0.85f },
-            { "textureGrainMix", 0.85f } } },
+            { "textureGrainMix", 0.85f }, { "mixOutput", 1.40f } } },
 
         // ---- Beautiful ----
         { "Beautiful - Angel Dust", {
@@ -33,11 +33,11 @@ inline const std::vector<FactoryPreset>& factoryPresets()
         { "Beautiful - Glass Cathedral", {
             { "textureGrainOn", 1 }, { "grainSize", 900 }, { "density", 22 }, { "pitch", 7 },
             { "spectralOn", 1 }, { "spectralMix", 0.6f }, { "spectralAmount", 0.8f },
-            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.95f } } },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.95f }, { "mixOutput", 1.47f } } },
         { "Beautiful - Warm Bloom", {
             { "textureGrainOn", 1 }, { "grainSize", 320 }, { "density", 55 }, { "beautySpaceOn", 1 },
             { "beautyOn", 1 }, { "beautyAmount", 0.6f }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.6f },
-            { "damageOn", 1 }, { "damageClip", 1 }, { "damageAmount", 0.15f }, { "damageMix", 0.3f } } },
+            { "damageOn", 1 }, { "damageClip", 1 }, { "damageAmount", 0.15f }, { "damageMix", 0.3f }, { "mixOutput", 0.69f } } },
 
         // ---- Dream ----
         { "Dream - Floating", {
@@ -51,13 +51,13 @@ inline const std::vector<FactoryPreset>& factoryPresets()
         { "Dream - Halcyon", {
             { "textureGrainOn", 1 }, { "grainSize", 700 }, { "density", 28 }, { "pitch", 7 },
             { "spectralOn", 1 }, { "spectralMix", 0.4f }, { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 },
-            { "prettyReverbSize", 0.75f } } },
+            { "prettyReverbSize", 0.75f }, { "mixOutput", 0.72f } } },
 
         // ---- Alien ----
         { "Alien - Transmission", {
             { "textureGrainOn", 1 }, { "grainSize", 80 }, { "density", 120 }, { "pitchJitter", 24 },
             { "spray", 200 }, { "pitchFormantOn", 1 }, { "pitchFormantMix", 0.6f }, { "pitch", -7 },
-            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.5f } } },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.5f }, { "mixOutput", 1.56f } } },
         { "Alien - Hive Mind", {
             { "textureGrainOn", 1 }, { "grainSize", 40 }, { "density", 200 }, { "pitchJitter", 36 },
             { "spray", 600 }, { "spectralOn", 1 }, { "spectralMix", 0.45f }, { "identityLossOn", 1 },
@@ -65,22 +65,22 @@ inline const std::vector<FactoryPreset>& factoryPresets()
         { "Alien - Probe", {
             { "textureGrainOn", 1 }, { "grainSize", 120 }, { "density", 90 }, { "pitchFormantOn", 1 },
             { "pitchFormantMix", 0.8f }, { "pitch", 19 }, { "timeBreakerOn", 1 }, { "timeBreakerMix", 0.5f },
-            { "timeBreakerSync", 1 }, { "timeBreakerDivision", 5 }, { "stutterChance", 0.5f } } },
+            { "timeBreakerSync", 1 }, { "timeBreakerDivision", 5 }, { "stutterChance", 0.5f }, { "mixOutput", 2.00f } } },
 
         // ---- Destroyed ----
         { "Destroyed - Meltdown", {
             { "textureGrainOn", 1 }, { "grainSize", 120 }, { "density", 70 }, { "damageOn", 1 },
             { "damageClip", 2 }, { "damageAmount", 0.8f }, { "damageBits", 4 }, { "damageDropout", 0.3f },
-            { "damageMix", 0.9f }, { "beautySpaceOn", 0 } } },
+            { "damageMix", 0.9f }, { "beautySpaceOn", 0 }, { "mixOutput", 0.64f } } },
         { "Destroyed - Static Crush", {
             { "textureGrainOn", 1 }, { "grainSize", 200 }, { "density", 50 }, { "damageOn", 1 },
             { "damageClip", 0 }, { "damageAmount", 0.6f }, { "damageBits", 2 }, { "damageRate", 16 },
-            { "damageNoise", 0.4f }, { "damageMix", 1.0f }, { "beautySpaceOn", 0 } } },
+            { "damageNoise", 0.4f }, { "damageMix", 1.0f }, { "beautySpaceOn", 0 }, { "mixOutput", 1.73f } } },
         { "Destroyed - Shrapnel", {
             { "textureGrainOn", 1 }, { "grainSize", 90 }, { "density", 100 }, { "damageOn", 1 },
             { "damageClip", 3 }, { "damageAmount", 0.7f }, { "damageBits", 6 }, { "timeBreakerOn", 1 },
             { "timeBreakerMix", 0.7f }, { "timeBreakerSync", 1 }, { "timeBreakerDivision", 6 },
-            { "stutterChance", 0.7f }, { "reverseChance", 0.4f } } },
+            { "stutterChance", 0.7f }, { "reverseChance", 0.4f }, { "mixOutput", 1.36f } } },
 
         // ---- Cinematic ----
         { "Cinematic - Rise", {
@@ -95,7 +95,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
         { "Cinematic - Impact Tail", {
             { "textureGrainOn", 1 }, { "grainSize", 1000 }, { "density", 20 }, { "spectralOn", 1 },
             { "spectralMix", 0.7f }, { "spectralAmount", 0.9f }, { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 },
-            { "prettyReverbSize", 1.0f } } },
+            { "prettyReverbSize", 1.0f }, { "mixOutput", 2.00f } } },
 
         // ---- Identity Loss ----
         { "Identity Loss - Dissolve", {
@@ -108,7 +108,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
         { "Identity Loss - Phantom", {
             { "textureGrainOn", 1 }, { "identityLossOn", 1 }, { "identityLoss", 0.5f }, { "pitch", 7 },
             { "pitchFormantOn", 1 }, { "pitchFormantMix", 0.4f }, { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 },
-            { "prettyReverbSize", 0.8f } } },
+            { "prettyReverbSize", 0.8f }, { "mixOutput", 1.66f } } },
 
         // ---- Drums ---- (tuned for transient/percussive material: short grains,
         // ducker keeps the original punch, multiband damage targets hihats not kick)
@@ -126,7 +126,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "damageOn", 1 }, { "damageClip", 3 /*Fold*/ }, { "damageAmount", 0.25f }, { "damageMix", 0.9f },
             { "damageSplitOn", 1 }, { "damageSplitHz", 1200.0f }, { "damageHighAmount", 0.9f },
             { "duckOn", 1 }, { "duckAmount", 0.45f }, { "duckRelease", 90.0f },
-            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.3f } } },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.3f }, { "mixOutput", 0.50f } } },
 
         { "Drums - Stutter Fill", {
             // Time Breaker on 1/16 stutter for fills; mostly dry with rhythmic glitches.
@@ -135,7 +135,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "stutterChance", 0.6f }, { "stutterSize", 0.5f }, { "reverseChance", 0.2f }, { "timeBreakerMix", 0.75f },
             { "duckOn", 1 }, { "duckAmount", 0.4f }, { "duckAttack", 3.0f }, { "duckRelease", 60.0f },
             { "beautySpaceOn", 1 }, { "echoOn", 1 }, { "echoMix", 0.15f }, { "echoFeedback", 0.25f },
-            { "beautySpaceMix", 0.55f } } },
+            { "beautySpaceMix", 0.55f }, { "mixOutput", 2.00f } } },
 
         { "Drums - Lo-Fi Dusty", {
             // Heavy bit-crush + SR reduction + dropouts for a dusty boombap / sampler vibe.
@@ -174,21 +174,21 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "textureGrainOn", 1 }, { "grainSize", 90 }, { "density", 70 }, { "spray", 80 },
             { "textureGrainMix", 0.5f }, { "spread", 0.85f },
             { "beautySpaceOn", 1 }, { "chorusOn", 1 }, { "chorusDepth", 0.55f }, { "chorusMix", 0.35f },
-            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.4f }, { "prettyReverbMix", 0.18f } } },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.4f }, { "prettyReverbMix", 0.18f }, { "mixOutput", 1.35f } } },
 
         { "Synth - Pluck Cloud", {
             { "textureGrainOn", 1 }, { "grainSize", 70 }, { "density", 90 }, { "spray", 50 },
             { "textureGrainMix", 0.55f },
             { "duckOn", 1 }, { "duckAmount", 0.4f }, { "duckRelease", 120.0f },
             { "beautySpaceOn", 1 }, { "echoOn", 1 }, { "echoMix", 0.22f }, { "echoFeedback", 0.4f },
-            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.55f } } },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.55f }, { "mixOutput", 1.33f } } },
 
         { "Synth - Detuned Choir", {
             { "textureGrainOn", 1 }, { "grainSize", 240 }, { "density", 50 }, { "pitchJitter", 0.4f },
             { "textureGrainMix", 0.65f },
             { "beautySpaceOn", 1 }, { "chorusOn", 1 }, { "chorusDepth", 0.7f }, { "chorusMix", 0.4f },
             { "harmonyOn", 1 }, { "harmonyMix", 0.25f },
-            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.75f } } },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.75f }, { "mixOutput", 1.29f } } },
 
         { "Synth - Movement Loop", {
             // Tempo-synced density rides the 1/8 grid, perfect under arps.
@@ -209,7 +209,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "duckOn", 1 }, { "duckAmount", 0.55f }, { "duckRelease", 200.0f },
             { "beautySpaceOn", 1 }, { "angelOn", 1 }, { "angelMix", 0.4f },
             { "harmonyOn", 1 }, { "harmonyMix", 0.3f },
-            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.8f }, { "prettyReverbMix", 0.35f } } },
+            { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.8f }, { "prettyReverbMix", 0.35f }, { "mixOutput", 0.77f } } },
 
         { "Vocal - Whisper Cloud", {
             { "textureGrainOn", 1 }, { "grainSize", 110 }, { "density", 90 }, { "spray", 120 },
@@ -221,7 +221,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "textureGrainOn", 1 }, { "grainSize", 120 }, { "density", 60 },
             { "textureGrainMix", 0.4f },
             { "pitchFormantOn", 1 }, { "pitchFormantMix", 0.5f }, { "pitch", -5 }, { "pitchLockFormant", 1 },
-            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.55f } } },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.55f }, { "mixOutput", 1.82f } } },
 
         { "Vocal - Reverse Halo", {
             { "textureGrainOn", 1 }, { "grainSize", 280 }, { "density", 40 },
@@ -252,7 +252,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "textureGrainOn", 1 }, { "grainSize", 150 }, { "density", 50 }, { "textureGrainMix", 0.6f },
             { "damageOn", 1 }, { "damageClip", 1 /*Tape*/ }, { "damageAmount", 0.4f }, { "damageMix", 0.85f },
             { "damageBits", 11.0f }, { "damageNoise", 0.18f }, { "damageDropout", 0.1f }, { "damageTone", 0.5f },
-            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.6f } } },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.6f }, { "mixOutput", 0.65f } } },
 
         { "Field - Glacier Drift", {
             { "textureGrainOn", 1 }, { "grainSize", 600 }, { "density", 15 }, { "spray", 400 },
@@ -277,14 +277,14 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "textureGrainMix", 0.4f }, { "spread", 0.2f },
             { "damageOn", 1 }, { "damageClip", 1 /*Tape*/ }, { "damageAmount", 0.3f }, { "damageMix", 0.7f },
             { "damageSplitOn", 1 }, { "damageSplitHz", 600.0f }, { "damageHighAmount", 0.6f },
-            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.3f } } },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.3f }, { "mixOutput", 0.78f } } },
 
         { "Bass - Reese Texture", {
             { "textureGrainOn", 1 }, { "grainSize", 100 }, { "density", 80 }, { "pitchJitter", 0.5f },
             { "textureGrainMix", 0.55f }, { "spread", 0.75f },
             { "damageOn", 1 }, { "damageClip", 0 /*Tube*/ }, { "damageAmount", 0.4f }, { "damageMix", 0.75f },
             { "damageSplitOn", 1 }, { "damageSplitHz", 800.0f }, { "damageHighAmount", 0.75f },
-            { "beautySpaceOn", 1 }, { "chorusOn", 1 }, { "chorusMix", 0.2f } } },
+            { "beautySpaceOn", 1 }, { "chorusOn", 1 }, { "chorusMix", 0.2f }, { "mixOutput", 0.74f } } },
 
         { "Bass - Granular Drone", {
             { "textureGrainOn", 1 }, { "grainSize", 480 }, { "density", 20 }, { "pitch", -7 },
@@ -299,7 +299,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "airSquelchOn", 1 }, { "airSquelchMode", 1 }, { "airSquelchHz", 2400.0f },
             { "airSquelchRes", 0.82f }, { "airSquelchEnv", 0.6f },
             { "airExciterOn", 1 }, { "airExciterDrive", 0.45f }, { "airExciterMix", 0.5f },
-            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.35f } } },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.35f }, { "mixOutput", 1.29f } } },
 
         { "Air - Silk Lift", {
             // Dynamic shelf lifts air only when there's energy; gentle harmonics. Mastering-grade sheen.
@@ -307,7 +307,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "airOn", 1 }, { "airCrossover", 4000.0f }, { "airMix", 0.7f },
             { "airShelfOn", 1 }, { "airShelfHz", 9000.0f }, { "airShelfAmount", 0.55f }, { "airShelfThreshold", 0.15f },
             { "airExciterOn", 1 }, { "airExciterDrive", 0.2f }, { "airExciterMix", 0.35f },
-            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.5f } } },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.5f }, { "mixOutput", 1.27f } } },
 
         { "Air - Comb Tone", {
             // Short high-feedback delay on the top tunes a comb pitch into the note; slow phaser keeps it moving.
@@ -321,7 +321,7 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "textureGrainOn", 1 }, { "grainSize", 60 }, { "density", 90 }, { "textureGrainMix", 0.45f },
             { "damageOn", 1 }, { "damageClip", 3 /*Fold*/ }, { "damageAmount", 0.5f }, { "damageMix", 0.85f },
             { "damageBits", 6.0f }, { "damageMix", 0.85f },
-            { "duckOn", 1 }, { "duckAmount", 0.5f }, { "duckRelease", 100.0f } } },
+            { "duckOn", 1 }, { "duckAmount", 0.5f }, { "duckRelease", 100.0f }, { "mixOutput", 0.50f } } },
     };
     return presets;
 }

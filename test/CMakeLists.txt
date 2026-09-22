@@ -13,6 +13,16 @@ add_executable(GrainFreezeTests
     source/DuckerTests.cpp
     source/MPEVoiceTrackerTests.cpp
     source/AirEngineTests.cpp
+    source/BenchmarkTests.cpp
+    source/PresetAuditTests.cpp
+    # The full processor (+ editor it references) so tests can load presets,
+    # round-trip state and benchmark the real signal chain.
+    ${CMAKE_SOURCE_DIR}/plugin/source/PluginProcessor.cpp
+    ${CMAKE_SOURCE_DIR}/plugin/source/PluginEditor.cpp
+    ${CMAKE_SOURCE_DIR}/plugin/source/BiohazardLookAndFeel.cpp
+    ${CMAKE_SOURCE_DIR}/plugin/source/ModPanel.cpp
+    ${CMAKE_SOURCE_DIR}/plugin/source/PresetManager.cpp
+    ${CMAKE_SOURCE_DIR}/plugin/source/Presets/SnapshotManager.cpp
     ${CMAKE_SOURCE_DIR}/plugin/source/GranularEngine.cpp
     ${CMAKE_SOURCE_DIR}/plugin/source/Entropy/EntropyEngine.cpp
     ${CMAKE_SOURCE_DIR}/plugin/source/Mix/MixEngine.cpp
@@ -29,6 +39,9 @@ target_include_directories(GrainFreezeTests
 target_link_libraries(GrainFreezeTests
     PRIVATE
         Catch2::Catch2WithMain
+        EntropyAssets
+        juce::juce_audio_utils
+        juce::juce_opengl
         juce::juce_audio_basics
         juce::juce_audio_processors
         juce::juce_gui_basics
@@ -43,6 +56,7 @@ target_compile_definitions(GrainFreezeTests
         JUCE_STANDALONE_APPLICATION=1
         JUCE_USE_CURL=0
         JUCE_WEB_BROWSER=0
+        JucePlugin_VersionString="${PROJECT_VERSION}"
 )
 
 include(CTest)
