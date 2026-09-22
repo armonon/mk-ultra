@@ -27,7 +27,12 @@ TEST_CASE ("State round-trips every parameter, morph slots and IR path", "[state
     fx::setParam (a, "grainSize", 900.0f);  a.storeSlotB();
     fx::setParam (a, "density",   150.0f);  a.storeSlotC();
     fx::setParam (a, "pitch",     -12.0f);  a.storeSlotD();
-    a.loadConvolutionIR (juce::File ("/nonexistent/but/remembered/hall.wav"));   // path is remembered even if missing
+    // Path is remembered even if the file is missing. Built through juce::File
+    // so the expected string matches whatever the platform canonicalises to
+    // (Windows turns "/x/y" into "D:\x\y").
+    const juce::File irFile (juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                 .getChildFile ("nonexistent-but-remembered-hall.wav"));
+    a.loadConvolutionIR (irFile);
 
     juce::MemoryBlock blob;
     a.getStateInformation (blob);
@@ -62,5 +67,5 @@ TEST_CASE ("State round-trips every parameter, morph slots and IR path", "[state
         REQUIRE (sa.isValid()); REQUIRE (sb.isValid());
         CHECK (sa.isEquivalentTo (sb));
     }
-    CHECK (b.getConvolutionIRPath() == "/nonexistent/but/remembered/hall.wav");
+    CHECK (b.getConvolutionIRPath() == irFile.getFullPathName());
 }
