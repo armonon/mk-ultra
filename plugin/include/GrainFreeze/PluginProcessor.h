@@ -41,7 +41,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "MK-ULTRA"; }
-    bool acceptsMidi() const override  { return kMkUltraExperimentalInputTools; }
+    bool acceptsMidi() const override  { return true; }   // MIDI drives grain pitch, Poly Grains and MPE
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 4.0; }
@@ -138,8 +138,24 @@ public:
     {
         prettifierEngine.loadConvolutionIR (irFile);
         convolutionIRPath = irFile.getFullPathName();
+        // A loaded file means the "Custom" source is now what's playing.
+        if (auto* p = apvts.getParameter ("convolutionIR"))
+            p->setValueNotifyingHost (0.0f);
     }
+    void applyConvolutionSelection();
     juce::String getConvolutionIRPath() const { return convolutionIRPath; }
+
+    // Test hook: deterministic grain spawning so audits are reproducible.
+    void setDeterministicSeed (unsigned s) { entropyEngine.setSeed (s); }
+    // Morph-corner snapshot by name (AB_SLOT_A .. AB_SLOT_D); invalid tree if unknown.
+    juce::ValueTree getSlotTree (const juce::String& name) const
+    {
+        if (name == "AB_SLOT_A") return slotA;
+        if (name == "AB_SLOT_B") return slotB;
+        if (name == "AB_SLOT_C") return slotC;
+        if (name == "AB_SLOT_D") return slotD;
+        return {};
+    }
 
     // Grain cloud visualization (editor-side).
     int copyGrainSnapshot (gf::GranularEngine::GrainSnapshot* out, int maxOut) const
@@ -253,6 +269,7 @@ private:
         std::atomic<float>* duckRelease = nullptr;
 
         // AIR page: parallel high-band tonal toys.
+        std::atomic<float>* convolutionIR = nullptr;
         std::atomic<float>* airOn = nullptr;
         std::atomic<float>* airCrossover = nullptr;
         std::atomic<float>* airMix = nullptr;
@@ -430,6 +447,7 @@ private:
     gf::MidiNoteController midiCtrl;
     gf::MPEVoiceTracker    mpeTracker;
     bool mpeWasOn = false;
+    std::atomic<bool> irReloadRequested { false };
 
     // Lightweight always-on envelope follower on the input. Independent of the
     // Ducker so the Mod Matrix can route it as a source even when the Ducker

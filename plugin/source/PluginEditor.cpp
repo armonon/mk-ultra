@@ -944,6 +944,10 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             });
     };
     addAndMakeVisible (convolutionLoadButton);
+    convolutionIRBox.addItemList ({ "Custom", "Hall", "Plate", "Room", "Cavern", "Spring" }, 1);
+    convolutionIRBox.setTooltip ("Which space Convolve uses: five built-in synthesised spaces, or Custom for a file you loaded.");
+    addAndMakeVisible (convolutionIRBox);
+    convolutionIRAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "convolutionIR", convolutionIRBox);
     {
         const juce::File savedIR (proc.getConvolutionIRPath());
         if (savedIR.getFullPathName().isEmpty())
@@ -1731,7 +1735,8 @@ void GrainFreezeEditor::updateTabVisibility()
 
     // Old 3-row toolbar: these now live in the "..." menu (or the Texture drawer).
     for (auto* b : { &copyAToBButton, &copyBToAButton, &resetBButton, &undoButton, &redoButton,
-                     &initButton, &randomizeAllButton, &browseButton, &shareButton, &deletePresetButton })
+                     &initButton, &randomizeAllButton, &browseButton, &shareButton, &deletePresetButton,
+                     &buttonA, &buttonB })   // A/B recall == the morph pad's A/B corners; one system, not two
         b->setVisible (false);
 
     freezeButton.setVisible (entropyTab);
@@ -1768,11 +1773,15 @@ void GrainFreezeEditor::updateTabVisibility()
     specMix.setVisible (false);
     specShimmer.setVisible (false);
 
-    midiEnableButton.setVisible (entropyTab && inputToolsVisible);
+    // MIDI on-ramp: always on the Texture drawer (it used to hide behind the
+    // experimental-input-tools flag, which also made acceptsMidi() false).
+    midiEnableButton.setVisible (entropyTab);
     for (auto* c : { &midiRootSlider, &midiGlideSlider, &midiVelAmpSlider })
-        c->setVisible (entropyTab && inputToolsVisible);
+        c->setVisible (entropyTab);
     for (auto* l : { &midiRootLabel, &midiGlideLabel, &midiVelAmpLabel })
-        l->setVisible (entropyTab && inputToolsVisible);
+        l->setVisible (entropyTab);
+    polyGrainButton.setVisible (entropyTab);
+    mpeOnButton.setVisible (entropyTab);
 
     for (auto* c : { &dryLevel, &entropySend, &entropyReturn, &prettifierSend, &prettifierReturn, &mixOutput, &chaosBeauty, &mixWidth, &mixGlue, &mixCeiling })
         c->setVisible (mixTab);
@@ -1832,6 +1841,7 @@ void GrainFreezeEditor::updateTabVisibility()
                      &flangerOnButton, &dreamOnButton, &angelOnButton, &harmonyOnButton, &convolutionOnButton })
         b->setVisible (prettifierTab);
     convolutionLoadButton.setVisible (prettifierTab);
+    convolutionIRBox.setVisible (prettifierTab);
     convolutionIRLabel.setVisible (prettifierTab);
     echoSyncBox.setVisible (prettifierTab);
 
@@ -1856,8 +1866,6 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto& s : modMatrixDepth)    s.setVisible (machinesTab && adv);
     for (auto& l : modMatrixArrow)    l.setVisible (machinesTab && adv);
     for (auto& a : modMatrixActivity) a.setVisible (machinesTab && adv);
-    polyGrainButton.setVisible (machinesTab && adv);
-    mpeOnButton.setVisible (machinesTab && adv);
     for (auto* b : { &machDamageMore, &machTimeMore })
         b->setVisible (false);
     // Always-visible essentials (Spectral + Pitch are already minimal).
@@ -2107,8 +2115,6 @@ void GrainFreezeEditor::resized()
     tourButton.setBounds     (hrow.removeFromRight (28));  hrow.removeFromRight (6);
     moreButton.setBounds     (hrow.removeFromRight (34));  hrow.removeFromRight (gap);
     advancedButton.setBounds (hrow.removeFromRight (88));  hrow.removeFromRight (gap);
-    buttonB.setBounds        (hrow.removeFromRight (30));  hrow.removeFromRight (4);
-    buttonA.setBounds        (hrow.removeFromRight (30));  hrow.removeFromRight (gap);
     randomizeButton.setBounds (hrow.removeFromRight (96)); hrow.removeFromRight (gap);
     if (updateButton.isVisible())
     {
@@ -2271,6 +2277,25 @@ void GrainFreezeEditor::resized()
         });
         area.removeFromTop (gap);
         bottom = area.removeFromTop (122);
+        // MIDI row: [MIDI on][Root][Glide][Vel->Amp]   [Poly Grains][MPE]
+        {
+            area.removeFromTop (4);
+            auto mrow = area.removeFromTop (56);
+            midiEnableButton.setBounds (mrow.removeFromLeft (84).withSizeKeepingCentre (80, 26));
+            auto cell = [&] (juce::Slider& sl, juce::Label& lb)
+            {
+                auto c = mrow.removeFromLeft (84);
+                lb.setBounds (c.removeFromTop (14));
+                const int d = juce::jmin (36, c.getHeight());
+                sl.setBounds (c.withSizeKeepingCentre (d, d));
+            };
+            cell (midiRootSlider, midiRootLabel);
+            cell (midiGlideSlider, midiGlideLabel);
+            cell (midiVelAmpSlider, midiVelAmpLabel);
+            mrow.removeFromLeft (gap * 2);
+            polyGrainButton.setBounds (mrow.removeFromLeft (124).withSizeKeepingCentre (120, 26));
+            mpeOnButton.setBounds (mrow.removeFromLeft (80).withSizeKeepingCentre (76, 26));
+        }
         if (showGlobalMod)
         {
             area.removeFromTop (gap);
@@ -2328,6 +2353,8 @@ void GrainFreezeEditor::resized()
             mods[i]->setBounds (modRow2.removeFromLeft (w2).reduced (3, 1));
         // Row 3: Load IR button + the loaded IR name (only meaningful when Convolve is on).
         auto modRow3 = dnaSection.removeFromTop (22);
+        convolutionIRBox.setBounds (modRow3.removeFromLeft (110).reduced (3, 0));
+        modRow3.removeFromLeft (6);
         convolutionLoadButton.setBounds (modRow3.removeFromLeft (90).reduced (3, 1));
         modRow3.removeFromLeft (8);
         convolutionIRLabel.setBounds (modRow3.removeFromLeft (juce::jmin (320, modRow3.getWidth())));
@@ -2527,9 +2554,6 @@ void GrainFreezeEditor::resized()
             // Mod matrix: title column holds the title + poly/MPE; rows start at the knob x.
             auto head = area.removeFromTop (22);
             modMatrixTitle.setBounds (head.removeFromLeft (kStageTitleW).withSizeKeepingCentre (kStageTitleW, 20));
-            head.removeFromLeft (kStageOnW);
-            polyGrainButton.setBounds (head.removeFromLeft (128).withSizeKeepingCentre (124, 22));
-            mpeOnButton.setBounds (head.removeFromLeft (84).withSizeKeepingCentre (80, 22));
             area.removeFromTop (4);
             // Two slots per row -> the four slots take two rows instead of four.
             for (int r = 0; r < 2; ++r)

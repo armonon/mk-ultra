@@ -38,6 +38,7 @@ GrainFreezeProcessor::GrainFreezeProcessor()
     apvts.addParameterListener ("pitchFormantOn", this);
     apvts.addParameterListener ("macroMorph", this);
     apvts.addParameterListener ("macroMorphY", this);
+    apvts.addParameterListener ("convolutionIR", this);
     // First-insert "signature" sound. If the host restores saved state,
     // setStateInformation runs after construction and overrides this.
     presets.loadDefaultPatch();
@@ -118,6 +119,7 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.duckThreshold, "duckThreshold");
     bind (paramPtrs.duckAttack, "duckAttack");
     bind (paramPtrs.duckRelease, "duckRelease");
+    bind (paramPtrs.convolutionIR, "convolutionIR");
     bind (paramPtrs.airOn, "airOn");
     bind (paramPtrs.airCrossover, "airCrossover");
     bind (paramPtrs.airMix, "airMix");
@@ -301,6 +303,14 @@ void GrainFreezeProcessor::parameterChanged (const juce::String& id, float value
         return;
     }
 
+    if (id == "convolutionIR")
+    {
+        // Synthesising / loading an IR allocates -- do it on the message thread.
+        irReloadRequested.store (true, std::memory_order_relaxed);
+        triggerAsyncUpdate();
+        return;
+    }
+
     juce::ignoreUnused (value);
     if (id == "pitchLockFormant" || id == "pitchFormantOn")
     {
@@ -319,6 +329,20 @@ void GrainFreezeProcessor::handleAsyncUpdate()
 
     if (morphRequested.exchange (false))
         applyMorph();
+
+    if (irReloadRequested.exchange (false))
+        applyConvolutionSelection();
+}
+
+// Loads whatever the convolutionIR choice says: a built-in synthesised space,
+// or the user's file when "Custom" is selected and a file is remembered.
+void GrainFreezeProcessor::applyConvolutionSelection()
+{
+    const int sel = (int) loadParam (paramPtrs.convolutionIR, 1.0f);
+    if (sel >= 1)
+        prettifierEngine.loadBuiltInIR (sel);
+    else if (juce::File f (convolutionIRPath); f.existsAsFile())
+        prettifierEngine.loadConvolutionIR (f);
 }
 
 void GrainFreezeProcessor::applyMorph ()
@@ -499,6 +523,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     // AIR page: a parallel high-band chain (Squelch -> Exciter -> Dyn Shelf ->
     // Phaser -> Delay) that adds tonal character to the top of a sound while the
     // low band stays untouched. Everything here is a performance control.
+    // Convolution Space source: five synthesised spaces ship built in, so the
+    // module makes sound the moment it's enabled; "Custom" is a user-loaded file.
+    addChoice ("convolutionIR", "Convolution IR", StringArray { "Custom", "Hall", "Plate", "Room", "Cavern", "Spring" }, 1);
     addBool   ("airOn",             "Air",                false);
     addFloat  ("airCrossover",      "Air Crossover",      NormalisableRange<float> (200.0f, 12000.0f, 1.0f, 0.35f), 2500.0f);
     addFloat  ("airMix",            "Air Mix",            NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f);
@@ -772,6 +799,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     damageMultiband.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     ducker.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
     airEngine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
+    applyConvolutionSelection();   // (re)synthesise the built-in IR at this sample rate
     {
         juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock,
                                       (juce::uint32) juce::jmax (1, getTotalNumOutputChannels()) };
@@ -1436,10 +1464,15 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     // Damage: full destruction stage (drive -> SR reduction -> bit crush -> noise
     // -> dropouts -> tone), each stage driven by its own parameter.
-    if (ctl.damageOn)
+    // The Damage macro engages the Damage machine even when the stage is
+    // switched off, and adds to its drive when it's on. Without this the macro
+    // only nudged the saturator/crusher and plateaued after 20% of its travel.
+    const float macroDamage = loadParam (p.macroDamage, 0.0f);
+    if (ctl.damageOn || macroDamage > 0.02f)
     {
         gf::DamageParams dp;
-        dp.amount  = loadParam (p.damageAmount, 0.5f);
+        dp.amount  = ctl.damageOn ? juce::jlimit (0.0f, 1.0f, loadParam (p.damageAmount, 0.5f) + macroDamage * 0.6f)
+                                  : macroDamage;
         dp.clip    = (int) loadParam (p.damageClip, 0.0f);
         dp.bits    = loadParam (p.damageBits, 16.0f);
         dp.rate    = loadParam (p.damageRate, 1.0f);
@@ -1447,7 +1480,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         dp.noise   = loadParam (p.damageNoise, 0.0f);
         dp.dropout = loadParam (p.damageDropout, 0.0f);
         dp.tone    = loadParam (p.damageTone, 1.0f);
-        dp.mix     = loadParam (p.damageMix, 1.0f);
+        dp.mix     = ctl.damageOn ? loadParam (p.damageMix, 1.0f) : juce::jmin (1.0f, macroDamage * 1.25f);   // ramps in from zero
         if (isOn (p.damageSplitOn))
         {
             // Multiband: the existing damageAmount drives the LOW band; the new
@@ -1635,10 +1668,18 @@ void GrainFreezeProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.removeChild (slotB, nullptr);
         state.removeChild (slotC, nullptr);
         state.removeChild (slotD, nullptr);
-        state.appendChild (slotA.createCopy(), nullptr);
-        state.appendChild (slotB.createCopy(), nullptr);
-        state.appendChild (slotC.createCopy(), nullptr);
-        state.appendChild (slotD.createCopy(), nullptr);
+        // The slots are copies of the PARAMS tree, so their type is "PARAMS" --
+        // wrap each in a named node or setStateInformation can't find them.
+        auto wrap = [] (const char* name, const juce::ValueTree& t)
+        {
+            juce::ValueTree w (name);
+            w.appendChild (t.createCopy(), nullptr);
+            return w;
+        };
+        state.appendChild (wrap ("AB_SLOT_A", slotA), nullptr);
+        state.appendChild (wrap ("AB_SLOT_B", slotB), nullptr);
+        state.appendChild (wrap ("AB_SLOT_C", slotC), nullptr);
+        state.appendChild (wrap ("AB_SLOT_D", slotD), nullptr);
         state.setProperty ("convolutionIRPath", convolutionIRPath, nullptr);
         juce::MemoryOutputStream stream (destData, false);
         state.writeToStream (stream);
@@ -1650,24 +1691,29 @@ void GrainFreezeProcessor::setStateInformation (const void* data, int sizeInByte
     auto tree = juce::ValueTree::readFromData (data, (size_t) sizeInBytes);
     if (tree.isValid())
     {
-        if (auto a = tree.getChildWithName ("AB_SLOT_A"); a.isValid()) slotA = a;
-        if (auto b = tree.getChildWithName ("AB_SLOT_B"); b.isValid()) slotB = b;
-        if (auto c = tree.getChildWithName ("AB_SLOT_C"); c.isValid()) slotC = c;
-        if (auto d = tree.getChildWithName ("AB_SLOT_D"); d.isValid()) slotD = d;
-        tree.removeChild (tree.getChildWithName ("AB_SLOT_A"), nullptr);
-        tree.removeChild (tree.getChildWithName ("AB_SLOT_B"), nullptr);
-        tree.removeChild (tree.getChildWithName ("AB_SLOT_C"), nullptr);
-        tree.removeChild (tree.getChildWithName ("AB_SLOT_D"), nullptr);
-        const auto savedIR = tree.getProperty ("convolutionIRPath").toString();
-        if (savedIR.isNotEmpty())
+        auto unwrap = [&tree] (const char* name, juce::ValueTree& into)
         {
-            const juce::File f (savedIR);
-            if (f.existsAsFile())
-                loadConvolutionIR (f);
-            else
-                convolutionIRPath = savedIR;   // remember the name so the editor can flag "IR not found"
-        }
+            auto w = tree.getChildWithName (name);
+            if (w.isValid())
+            {
+                if (w.getNumChildren() > 0) into = w.getChild (0).createCopy();
+                tree.removeChild (w, nullptr);
+            }
+        };
+        unwrap ("AB_SLOT_A", slotA);
+        unwrap ("AB_SLOT_B", slotB);
+        unwrap ("AB_SLOT_C", slotC);
+        unwrap ("AB_SLOT_D", slotD);
+        // Older saves appended the slots as bare, unnamed PARAMS children (so
+        // they were never restored and accumulated four copies per save). Scrub
+        // any that are still riding along so the state stops growing.
+        for (int i = tree.getNumChildren(); --i >= 0;)
+            if (tree.getChild (i).hasType ("PARAMS"))
+                tree.removeChild (i, nullptr);
+        convolutionIRPath = tree.getProperty ("convolutionIRPath").toString();   // may be a missing file; editor flags it
         apvts.replaceState (tree);
+        irReloadRequested.store (true, std::memory_order_relaxed);
+        triggerAsyncUpdate();
     }
 }
 

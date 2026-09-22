@@ -65,6 +65,9 @@ public:
     // grain randomly picks one of the held notes for its pitch offset. Set by
     // the processor each block; lock-free copy into an atomic-ish snapshot.
     void setPolyOn (bool b) { polyOn.store (b, std::memory_order_relaxed); }
+
+    // Test hook: make grain spawning reproducible. Not used by the plugin itself.
+    void setSeed (unsigned s) { rng.seed (s); }
     void setActiveNotes (const float* notes, int n)
     {
         const int clamped = juce::jlimit (0, (int) activeNotes.size(), n);

@@ -503,6 +503,8 @@ private:
     std::array<std::unique_ptr<ButtonAttachment>, 10> moduleAttach;
 
     juce::TextButton convolutionLoadButton { "Load IR" };
+    juce::ComboBox   convolutionIRBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> convolutionIRAttach;
     juce::Label      convolutionIRLabel;
     std::unique_ptr<juce::FileChooser> convolutionFileChooser;
 

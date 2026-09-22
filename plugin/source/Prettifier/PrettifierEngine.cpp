@@ -1,4 +1,5 @@
 #include "GrainFreeze/Prettifier/PrettifierEngine.h"
+#include <random>
 
 #include <algorithm>
 #include <cmath>
@@ -78,6 +79,64 @@ void PrettifierEngine::addParameters (juce::AudioProcessorValueTreeState::Parame
         layout.add (std::make_unique<AudioParameterFloat> (juce::ParameterID { mixId, 1 }, juce::String (machineNames[i]) + " Mix",
                                                            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     }
+}
+
+void PrettifierEngine::loadBuiltInIR (int type)
+{
+    struct Spec { float seconds, preDelayMs, lpStartHz, lpEndHz; int earlyTaps; bool spring; };
+    const Spec specs[] = {
+        { 0.0f,  0.0f,     0.0f,    0.0f, 0, false },  // 0: custom (no-op here)
+        { 2.8f, 18.0f, 9000.0f, 2200.0f, 6, false },  // 1: Hall
+        { 1.7f,  0.0f, 12000.0f, 4500.0f, 0, false },  // 2: Plate
+        { 0.55f, 4.0f, 8000.0f, 3000.0f, 8, false },  // 3: Room
+        { 6.0f, 60.0f, 5000.0f, 1200.0f, 4, false },  // 4: Cavern
+        { 1.3f,  6.0f, 4200.0f, 2600.0f, 0, true  },  // 5: Spring
+    };
+    if (type < 1 || type > 5) return;
+    const Spec& s = specs[type];
+    const double rate = sr > 0.0 ? sr : 48000.0;
+    const int pre = (int) (s.preDelayMs * 0.001 * rate);
+    const int len = pre + (int) (s.seconds * rate);
+    juce::AudioBuffer<float> ir (2, len);
+    ir.clear();
+
+    std::mt19937 rng (1000u + (unsigned) type);
+    std::uniform_real_distribution<float> uni (-1.0f, 1.0f);
+    const float tau = s.seconds / 6.9f;                       // -60 dB at `seconds`
+    for (int c = 0; c < 2; ++c)
+    {
+        auto* d = ir.getWritePointer (c);
+        float lp = 0.0f;
+        for (int i = pre; i < len; ++i)
+        {
+            const float t = (float) (i - pre) / (float) rate;
+            const float env = std::exp (-t / tau);
+            // One-pole low-pass whose cutoff slides from lpStart to lpEnd over the
+            // decay -- air absorption makes real tails darken as they fade.
+            const float frac = juce::jlimit (0.0f, 1.0f, t / s.seconds);
+            const float cutoff = s.lpStartHz + (s.lpEndHz - s.lpStartHz) * frac;
+            const float a = std::exp (-2.0f * juce::MathConstants<float>::pi * cutoff / (float) rate);
+            lp = a * lp + (1.0f - a) * uni (rng);
+            d[i] = lp * env;
+        }
+        // Early reflections: a few discrete taps in the first 40 ms, decorrelated per channel.
+        for (int k = 0; k < s.earlyTaps; ++k)
+        {
+            const int at = pre + (int) ((4.0 + 36.0 * (k + 0.5 + 0.3 * c) / s.earlyTaps) * 0.001 * rate);
+            if (at < len) d[at] += (c == 0 ? 0.45f : -0.45f) * (1.0f - 0.08f * k);
+        }
+        // Spring: a decaying flutter comb (~33 ms period) is what makes it "boing".
+        if (s.spring)
+        {
+            const int period = (int) (0.033 * rate);
+            for (int i = pre + period; i < len; ++i)
+                d[i] += 0.55f * d[i - period];
+        }
+    }
+    convolution.loadImpulseResponse (std::move (ir), rate,
+                                     juce::dsp::Convolution::Stereo::yes,
+                                     juce::dsp::Convolution::Trim::no,
+                                     juce::dsp::Convolution::Normalise::yes);
 }
 
 void PrettifierEngine::prepare (double sampleRate, int samplesPerBlock, int numChannels)

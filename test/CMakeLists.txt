@@ -15,6 +15,8 @@ add_executable(GrainFreezeTests
     source/AirEngineTests.cpp
     source/BenchmarkTests.cpp
     source/PresetAuditTests.cpp
+    source/MacroSweepTests.cpp
+    source/StateTests.cpp
     # The full processor (+ editor it references) so tests can load presets,
     # round-trip state and benchmark the real signal chain.
     ${CMAKE_SOURCE_DIR}/plugin/source/PluginProcessor.cpp

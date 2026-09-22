@@ -53,6 +53,7 @@ public:
     void setPolyOn      (bool b)                       { granular.setPolyOn (b); }
     void setActiveNotes (const float* notes, int n)    { granular.setActiveNotes (notes, n); }
     void setMpeOn       (bool b)                       { granular.setMpeOn (b); }
+    void setSeed        (unsigned s)                   { granular.setSeed (s); }
     void setActiveVoices (const gf::GranularEngine::VoicePush* v, int n) { granular.setActiveVoices (v, n); }
     int  copyGrainSnapshot (gf::GranularEngine::GrainSnapshot* out, int maxOut) const
     { return granular.copyGrainSnapshot (out, maxOut); }

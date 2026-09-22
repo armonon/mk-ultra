@@ -131,6 +131,12 @@ private:
     juce::AudioBuffer<float>  convolutionWet;
 
 public:
+    // Built-in impulse responses, synthesised on demand (no assets): decaying
+    // noise with a darkening tail, early reflections where the space calls for
+    // them, and a flutter comb for the spring. Index matches the convolutionIR
+    // choice param: 1 Hall, 2 Plate, 3 Room, 4 Cavern, 5 Spring.
+    void loadBuiltInIR (int type);
+
     // Convolution Space IR management (called from the editor / file chooser).
     void loadConvolutionIR (const juce::File& irFile)
     {
