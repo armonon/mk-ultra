@@ -2,6 +2,7 @@
 // Shared helpers for tests that instantiate the full GrainFreezeProcessor.
 #include <juce_events/juce_events.h>
 #include "GrainFreeze/PluginProcessor.h"
+#include <memory>
 #include <cmath>
 #include <random>
 

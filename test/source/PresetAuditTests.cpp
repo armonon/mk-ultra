@@ -20,7 +20,8 @@ namespace
 TEST_CASE ("Every factory-preset parameter ID exists", "[presets]")
 {
     juce::ScopedJuceInitialiser_GUI juceInit;   // per-test JUCE lifetime: torn down before exit()
-    GrainFreezeProcessor proc;
+    auto procOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& proc = *procOwner;
     for (auto& fp : gf::factoryPresets())
         for (auto& pp : fp.params)
         {
@@ -44,7 +45,8 @@ TEST_CASE ("Every factory preset loads, makes sound, and changes the signal", "[
 
     for (auto& fp : gf::factoryPresets())
     {
-        GrainFreezeProcessor proc;
+        auto procOwner = std::make_unique<GrainFreezeProcessor>();
+        auto& proc = *procOwner;
         INFO ("preset: " << fp.name);
         REQUIRE (proc.presets.loadPreset (fp.name));
         proc.prepareToPlay (kSr, kBlock);

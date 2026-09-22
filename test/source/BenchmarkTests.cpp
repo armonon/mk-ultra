@@ -64,7 +64,8 @@ namespace
 TEST_CASE ("Benchmark: default preset keeps up with real time", "[bench]")
 {
     juce::ScopedJuceInitialiser_GUI juceInit;   // per-test JUCE lifetime: torn down before exit()
-    GrainFreezeProcessor proc;
+    auto procOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& proc = *procOwner;
     proc.presets.loadDefaultPatch();
     const auto r = runScenario (proc, 40, 400);
     report ("default preset", r);
@@ -74,7 +75,8 @@ TEST_CASE ("Benchmark: default preset keeps up with real time", "[bench]")
 TEST_CASE ("Benchmark: every stage on", "[bench]")
 {
     juce::ScopedJuceInitialiser_GUI juceInit;   // per-test JUCE lifetime: torn down before exit()
-    GrainFreezeProcessor proc;
+    auto procOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& proc = *procOwner;
     proc.presets.loadDefaultPatch();
     everythingOn (proc);
     const auto r = runScenario (proc, 40, 400);
@@ -85,7 +87,8 @@ TEST_CASE ("Benchmark: every stage on", "[bench]")
 TEST_CASE ("Benchmark: worst case -- every stage on, max grain density", "[bench]")
 {
     juce::ScopedJuceInitialiser_GUI juceInit;   // per-test JUCE lifetime: torn down before exit()
-    GrainFreezeProcessor proc;
+    auto procOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& proc = *procOwner;
     proc.presets.loadDefaultPatch();
     everythingOn (proc);
     fx::setParam (proc, "density",   180.0f);

@@ -7,7 +7,8 @@
 TEST_CASE ("State round-trips every parameter, morph slots and IR path", "[state]")
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
-    GrainFreezeProcessor a;
+    auto aOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& a = *aOwner;
     a.presets.loadPreset ("Air - Acid Squelch");
     // Poke a spread of "unusual" values across subsystems added at different times.
     fx::setParam (a, "grainShape",      0.83f);
@@ -32,7 +33,8 @@ TEST_CASE ("State round-trips every parameter, morph slots and IR path", "[state
     a.getStateInformation (blob);
     REQUIRE (blob.getSize() > 0);
 
-    GrainFreezeProcessor b;
+    auto bOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& b = *bOwner;
     b.setStateInformation (blob.getData(), (int) blob.getSize());
 
     // Every parameter, by ID, normalised value.

@@ -19,7 +19,8 @@ namespace
 
     juce::AudioBuffer<float> render (const juce::String& macroId, float value, const juce::AudioBuffer<float>& input)
     {
-        GrainFreezeProcessor proc;
+        auto procOwner = std::make_unique<GrainFreezeProcessor>();
+        auto& proc = *procOwner;
         proc.presets.loadDefaultPatch();
         proc.setDeterministicSeed (1234u);
         fx::setParam (proc, macroId, value);
