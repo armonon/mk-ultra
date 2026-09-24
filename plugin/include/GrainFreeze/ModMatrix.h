@@ -32,10 +32,27 @@ enum class ParamId
     beautyAmount,
     polishWidth,
     bitCrush,
+    // ---- Mod-matrix targets added later. Appended after bitCrush on purpose:
+    // the randomizer's span and every saved "<id>_lfoRate"-style parameter name
+    // key off these positions, so existing sessions keep loading unchanged.
+    damageAmount,
+    damageBits,
+    airExciterDrive,
+    airMix,
+    airSquelchHz,
+    airDelayMix,
+    dryWet,
+    mixWidth,
+    stutterChance,
     numParams
 };
 
 inline constexpr int kNumModParams = (int) ParamId::numParams;
+
+// The randomizer only rolls the original "knob" parameters (grainSize..bitCrush);
+// the mod-matrix targets after them are routing destinations, not dice fodder --
+// rolling dryWet or mixWidth would quietly undo the patch it just made.
+inline constexpr int kNumRandomizableParams = (int) ParamId::bitCrush + 1;
 
 // One modulator per parameter: an LFO (rate, depth, shape) plus a sample-and-hold
 // "wobble" (rate, depth), plus a routable amount from the single global source.

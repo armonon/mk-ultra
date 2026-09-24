@@ -6,6 +6,7 @@
 #include "GrainFreeze/Entropy/EntropyEngine.h"
 #include "GrainFreeze/Mix/MixEngine.h"
 #include "GrainFreeze/Modulation/MidiNoteController.h"
+#include "GrainFreeze/Modulation/ModSources.h"
 #include "GrainFreeze/ModMatrix.h"
 #include "GrainFreeze/Prettifier/PrettifierEngine.h"
 #include "GrainFreeze/Presets/SnapshotManager.h"
@@ -93,6 +94,15 @@ public:
     {
         return channel == 0 ? outLevelL.load (std::memory_order_relaxed)
                             : outLevelR.load (std::memory_order_relaxed);
+    }
+
+    // Live value of a Mod Matrix slot's SOURCE (-1..1), captured on the audio
+    // thread. The editor's activity LEDs read this instead of re-deriving every
+    // source themselves -- one source of truth for what a slot is doing.
+    float getModSlotSourceValue (int slot) const
+    {
+        return (slot >= 0 && slot < 4) ? modSlotSourceValue[(size_t) slot].load (std::memory_order_relaxed)
+                                       : 0.0f;
     }
 
     // Live value of the global modulation source (-1..1), for the mod visualizer.
@@ -298,6 +308,18 @@ private:
         std::atomic<float>* polyGrain = nullptr;
         std::atomic<float>* mpeOn = nullptr;
 
+        // Mod Matrix source controls: LFO 2, the step sequencer, the random S&H
+        // rate and the assignable MIDI CC number.
+        std::atomic<float>* lfo2Rate = nullptr;
+        std::atomic<float>* lfo2Shape = nullptr;
+        std::atomic<float>* lfo2Sync = nullptr;
+        std::atomic<float>* stepSeqDivision = nullptr;
+        std::atomic<float>* stepSeqLength = nullptr;
+        std::atomic<float>* stepSeqSmooth = nullptr;
+        std::array<std::atomic<float>*, (size_t) gf::ModSources::kMaxSteps> stepSeqSteps {};
+        std::atomic<float>* modRandomRate = nullptr;
+        std::atomic<float>* modCcNumber = nullptr;
+
         // Universal modulation matrix slots (4 of each).
         std::array<std::atomic<float>*, 4> modSlotSource { nullptr, nullptr, nullptr, nullptr };
         std::array<std::atomic<float>*, 4> modSlotTarget { nullptr, nullptr, nullptr, nullptr };
@@ -452,6 +474,14 @@ private:
 
     gf::MidiNoteController midiCtrl;
     gf::MPEVoiceTracker    mpeTracker;
+    // Mod Matrix generators (LFO 2 / step sequencer / random S&H), advanced once
+    // per block, plus the MIDI state the matrix can route as a source. These are
+    // tracked whether or not the MIDI grain controls are enabled, so "Velocity"
+    // or "Mod Wheel" can modulate a knob without turning the keyboard on.
+    gf::ModSources         modSources;
+    std::atomic<float>     lastNoteVelocity { 0.0f };
+    std::atomic<float>     lastNotePitch { 0.0f };       // (note - 60) / 48, -1..1
+    std::array<std::atomic<float>, 128> midiCcValues {};
     bool mpeWasOn = false;
     std::atomic<bool> irReloadRequested { false };
 
@@ -462,6 +492,8 @@ private:
     std::atomic<float> inputEnvelopeValue { 0.0f };
 public:
     float getInputEnvelope() const { return inputEnvelopeValue.load (std::memory_order_relaxed); }
+    // Live step-sequencer position, so the editor can light the playing step.
+    int getModStepIndex() const { return modSources.currentStep(); }
 private:
     gf::SampleFreezeEngine sampleEngine;
     std::atomic<bool> sampleFreezeRequested { false };
@@ -488,6 +520,7 @@ private:
     std::atomic<float> outLevelL { 0.0f };
     std::atomic<float> outLevelR { 0.0f };
     std::atomic<float> globalModValue { 0.0f };
+    std::array<std::atomic<float>, 4> modSlotSourceValue {};
     std::array<std::atomic<float>, 256> waveformHistory {};
     std::atomic<int> waveformHead { 0 };
     std::array<std::atomic<float>, 256> modScopeHistory {};

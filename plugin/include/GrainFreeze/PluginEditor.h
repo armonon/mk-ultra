@@ -589,6 +589,21 @@ private:
     std::array<juce::Slider,  4> modMatrixDepth;
     std::array<juce::Label,   4> modMatrixArrow;   // "->" between source and target
 
+    // ---- MOD SOURCES: the controls behind the matrix's own generators. LFO 2,
+    // the tempo-synced step sequencer (16 steps, length + glide) and the random
+    // sample & hold, plus the assignable CC number for the "MIDI CC" source.
+    juce::Label     modSourcesTitle, stepSeqTitle;
+    juce::Slider    lfo2Rate, modRandomRate, modCcNumber, stepSeqLength, stepSeqSmooth;
+    juce::Label     lfo2RateL, modRandomRateL, modCcNumberL, stepSeqLengthL, stepSeqSmoothL;
+    juce::ComboBox  lfo2Shape, lfo2Sync, stepSeqDivision;
+    std::array<juce::Slider, 16> stepSeqSteps;
+    std::unique_ptr<SliderAttachment> lfo2RateAttach, modRandomRateAttach, modCcNumberAttach,
+                                      stepSeqLengthAttach, stepSeqSmoothAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+        lfo2ShapeAttach, lfo2SyncAttach, stepSeqDivisionAttach;
+    std::array<std::unique_ptr<SliderAttachment>, 16> stepSeqStepAttach;
+    int lastLitStep = -1;   // which step the UI currently shows as playing
+
     // Tiny activity LED per slot -- brightens with |source x depth| so users see
     // the routing is actually doing something. Painted by the editor's timer.
     struct ModActivity : juce::Component

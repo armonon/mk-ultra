@@ -397,6 +397,29 @@ void BiohazardLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, in
                                              juce::Slider::SliderStyle, juce::Slider& slider)
 {
     const auto acc = accent();
+
+    // Step-sequencer steps: a vertical bipolar bar rather than a horizontal
+    // track, brightened while that step is the one playing. (The rest of this
+    // function draws horizontally, so vertical sliders come through here.)
+    if (slider.getComponentID() == "step")
+    {
+        auto b = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height).reduced (1.0f);
+        const bool lit = (bool) slider.getProperties().getWithDefault ("lit", false);
+        g.setColour (metalLo);
+        g.fillRoundedRectangle (b, 2.0f);
+        const float mid = b.getCentreY();
+        g.setColour (juce::Colours::white.withAlpha (0.10f));
+        g.drawHorizontalLine ((int) mid, b.getX(), b.getRight());
+        const float top = juce::jmin (mid, sliderPos);
+        const float bot = juce::jmax (mid, sliderPos);
+        g.setColour (lit ? acc : acc.withAlpha (0.55f));
+        g.fillRect (juce::Rectangle<float> (b.getX() + 1.0f, top, b.getWidth() - 2.0f,
+                                            juce::jmax (1.5f, bot - top)));
+        g.setColour (lit ? acc.withAlpha (0.85f) : juce::Colours::white.withAlpha (0.06f));
+        g.drawRoundedRectangle (b, 2.0f, lit ? 1.4f : 1.0f);
+        return;
+    }
+
     const float cy = y + height * 0.5f;
 
     // Recessed track.

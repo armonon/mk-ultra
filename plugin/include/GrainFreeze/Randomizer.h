@@ -33,6 +33,15 @@ inline const char* paramIdString (ParamId id)
         case ParamId::beautyAmount:    return "beautyAmount";
         case ParamId::polishWidth:     return "polishWidth";
         case ParamId::bitCrush:        return "crushBits";
+        case ParamId::damageAmount:      return "damageAmount";
+        case ParamId::damageBits:        return "damageBits";
+        case ParamId::airExciterDrive:   return "airExciterDrive";
+        case ParamId::airMix:            return "airMix";
+        case ParamId::airSquelchHz:      return "airSquelchHz";
+        case ParamId::airDelayMix:       return "airDelayMix";
+        case ParamId::dryWet:            return "dryWet";
+        case ParamId::mixWidth:          return "mixWidth";
+        case ParamId::stutterChance:     return "stutterChance";
         case ParamId::numParams:       return "";
         default:                   return "";
     }
@@ -65,6 +74,17 @@ inline MusicalRange musicalRange (ParamId id)
         case ParamId::beautyAmount:    return { 0.0f, 0.6f };
         case ParamId::polishWidth:     return { 0.0f, 0.6f };
         case ParamId::bitCrush:        return { 1.0f, 18.0f }; // bits
+        // Mod-matrix targets: ranges here are only a fallback -- randomize()
+        // stops at bitCrush (see kNumRandomizableParams).
+        case ParamId::damageAmount:      return { 0.0f, 0.7f };
+        case ParamId::damageBits:        return { 4.0f, 16.0f };  // bits
+        case ParamId::airExciterDrive:   return { 0.0f, 0.7f };
+        case ParamId::airMix:            return { 0.0f, 0.7f };
+        case ParamId::airSquelchHz:      return { 400.0f, 12000.0f }; // Hz
+        case ParamId::airDelayMix:       return { 0.0f, 0.6f };
+        case ParamId::dryWet:            return { 0.3f, 1.0f };
+        case ParamId::mixWidth:          return { 0.8f, 1.4f };
+        case ParamId::stutterChance:     return { 0.0f, 0.5f };
         case ParamId::numParams:       return { 0.0f, 1.0f };
         default:                   return { 0.0f, 1.0f };
     }
@@ -104,7 +124,7 @@ public:
 
     void randomize (Mode mode, float amount)
     {
-        randomize (mode, amount, 0, kNumModParams - 1);
+        randomize (mode, amount, 0, kNumRandomizableParams - 1);
     }
 
     // Randomize only a contiguous span of ParamIds, e.g. just the Entropy knobs

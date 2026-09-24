@@ -1142,15 +1142,17 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     // ---- Universal Modulation Matrix ----
     setupSectionLabel (modMatrixTitle, "MOD MATRIX", 13.0f);
     addAndMakeVisible (modMatrixTitle);
-    const juce::StringArray mmSourceNames { "None", "Global LFO", "Time Breaker", "Macro Texture",
-                                            "Macro Beauty", "Macro Space", "Macro Chaos", "Macro Motion",
-                                            "Macro Damage", "Macro Emotion", "Morph X", "Morph Y",
-                                            "Input Env" };
-    const juce::StringArray mmTargetNames { "None", "Grain Size", "Density", "Pitch", "Spray", "Spread",
-                                            "Position", "Pitch Jitter", "Output", "Reverb (Grain)",
-                                            "Echo Time", "Echo Feedback", "Echo Mix", "Reverb (Beauty)",
-                                            "Chorus Rate", "Chorus Depth", "Beauty Amount", "Width",
-                                            "Bit Crush" };
+    // Take the item lists straight off the parameters, so the dropdowns can never
+    // drift out of step with what the processor actually routes.
+    auto choicesOf = [this] (const char* paramId) -> juce::StringArray
+    {
+        if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter (paramId)))
+            return c->choices;
+        jassertfalse;
+        return {};
+    };
+    const juce::StringArray mmSourceNames = choicesOf ("modSlot1Source");
+    const juce::StringArray mmTargetNames = choicesOf ("modSlot1Target");
     for (int i = 0; i < 4; ++i)
     {
         modMatrixSource[(size_t) i].addItemList (mmSourceNames, 1);
@@ -1175,6 +1177,67 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             proc.apvts, s + "Target", modMatrixTarget[(size_t) i]);
         modMatrixDepthAttach[(size_t) i] = std::make_unique<SliderAttachment> (
             proc.apvts, s + "Depth", modMatrixDepth[(size_t) i]);
+    }
+
+    // ---- MOD SOURCES: controls for the matrix's own generators ----
+    setupSectionLabel (modSourcesTitle, "MOD SOURCES", 13.0f);
+    setupSectionLabel (stepSeqTitle,    "STEP SEQ",    13.0f);
+    addAndMakeVisible (modSourcesTitle);
+    addAndMakeVisible (stepSeqTitle);
+
+    auto setupModKnob = [this] (juce::Slider& k, juce::Label& l, const juce::String& name,
+                                const juce::String& paramId, std::unique_ptr<SliderAttachment>& attach,
+                                const juce::String& tooltip)
+    {
+        k.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+        k.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        k.setTooltip (tooltip);
+        addAndMakeVisible (k);
+        l.setText (name, juce::dontSendNotification);
+        l.setJustificationType (juce::Justification::centred);
+        l.setFont (juce::FontOptions (11.0f));
+        addAndMakeVisible (l);
+        attach = std::make_unique<SliderAttachment> (proc.apvts, paramId, k);
+    };
+    setupModKnob (lfo2Rate, lfo2RateL, "Rate", "lfo2Rate", lfo2RateAttach,
+                  "LFO 2 speed in Hz. Ignored while Sync is set to a note division.");
+    setupModKnob (modRandomRate, modRandomRateL, "Random", "modRandomRate", modRandomRateAttach,
+                  "How often the Random source picks a new value, in times per second");
+    setupModKnob (modCcNumber, modCcNumberL, "CC #", "modCcNumber", modCcNumberAttach,
+                  "Which MIDI CC the \"MIDI CC\" source follows (Mod Wheel is 1, Expression is 11)");
+    setupModKnob (stepSeqLength, stepSeqLengthL, "Steps", "stepSeqLength", stepSeqLengthAttach,
+                  "How many steps play before the pattern loops");
+    setupModKnob (stepSeqSmooth, stepSeqSmoothL, "Glide", "stepSeqSmooth", stepSeqSmoothAttach,
+                  "Slide between steps instead of jumping -- 0 is a hard step, 1 is a slow ramp");
+
+    lfo2Shape.addItemList (choicesOf ("lfo2Shape"), 1);
+    lfo2Sync.addItemList  (choicesOf ("lfo2Sync"), 1);
+    stepSeqDivision.addItemList (choicesOf ("stepSeqDivision"), 1);
+    addAndMakeVisible (lfo2Shape);
+    addAndMakeVisible (lfo2Sync);
+    addAndMakeVisible (stepSeqDivision);
+    lfo2Shape.setTooltip ("LFO 2 waveform");
+    lfo2Sync.setTooltip ("Free runs at the Rate knob; a note division locks LFO 2 to the host tempo");
+    stepSeqDivision.setTooltip ("How long each step lasts, as a note division of the host tempo");
+    lfo2ShapeAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        proc.apvts, "lfo2Shape", lfo2Shape);
+    lfo2SyncAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        proc.apvts, "lfo2Sync", lfo2Sync);
+    stepSeqDivisionAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        proc.apvts, "stepSeqDivision", stepSeqDivision);
+
+    for (int i = 0; i < 16; ++i)
+    {
+        auto& st = stepSeqSteps[(size_t) i];
+        st.setSliderStyle (juce::Slider::LinearVertical);
+        st.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        st.setRange (-1.0, 1.0);
+        st.setComponentID ("step");   // the LookAndFeel draws these as vertical bars
+        st.setTooltip ("Step " + juce::String (i + 1) + ": how far this step pushes the target "
+                       "(negative pulls the other way)");
+        addAndMakeVisible (st);
+        stepSeqStepAttach[(size_t) i] = std::make_unique<SliderAttachment> (
+            proc.apvts, "stepSeq" + juce::String (i + 1), st);
     }
 
     // "Advanced" expanders: collapsed by default so each machine shows only its
@@ -1465,26 +1528,26 @@ void GrainFreezeEditor::timerCallback()
             const auto srcIdx = (int) proc.apvts.getRawParameterValue (juce::String (ids[(size_t) i]) + "Source")->load();
             const auto tgtIdx = (int) proc.apvts.getRawParameterValue (juce::String (ids[(size_t) i]) + "Target")->load();
             const auto depth  = proc.apvts.getRawParameterValue (juce::String (ids[(size_t) i]) + "Depth")->load();
-            float level = 0.0f;
-            if (srcIdx > 0 && tgtIdx > 0 && std::abs (depth) > 0.001f)
-            {
-                // Approximate the live source value via the editor's existing reads
-                // (the macros / global LFO output / Time Breaker gate are all
-                // visible to the editor). 1 = LFO; 2 = TB gate; 3+ = macros.
-                float src = 0.0f;
-                if (srcIdx == 2) src = proc.getTimeBreakerGate();
-                else if (srcIdx >= 3 && srcIdx <= 9)
-                {
-                    static const char* macroIds[7] = { "macroTexture", "macroBeauty", "macroSpace",
-                                                       "macroChaos", "macroMotion", "macroDamage", "macroEmotion" };
-                    src = proc.apvts.getRawParameterValue (macroIds[srcIdx - 3])->load();
-                }
-                else if (srcIdx == 12) src = proc.getInputEnvelope();
-                level = juce::jlimit (0.0f, 1.0f, std::abs (src * depth));
-            }
+            // The processor publishes each slot's live source value, so the LED is
+            // right for every source -- including the ones only it can see (LFO 2,
+            // the step sequencer, the random S&H, MIDI).
+            const float level = (srcIdx > 0 && tgtIdx > 0 && std::abs (depth) > 0.001f)
+                                    ? juce::jlimit (0.0f, 1.0f, std::abs (proc.getModSlotSourceValue (i) * depth))
+                                    : 0.0f;
             auto& led = modMatrixActivity[(size_t) i];
             led.level = juce::jmax (level, led.level * 0.85f);   // smooth decay
             if (led.level > 0.005f) led.repaint();
+        }
+
+        // Light whichever step the sequencer is playing.
+        if (const int lit = proc.getModStepIndex(); lit != lastLitStep)
+        {
+            for (int i = 0; i < (int) stepSeqSteps.size(); ++i)
+            {
+                stepSeqSteps[(size_t) i].getProperties().set ("lit", i == lit);
+                stepSeqSteps[(size_t) i].repaint();
+            }
+            lastLitStep = lit;
         }
     }
 
@@ -1869,6 +1932,14 @@ void GrainFreezeEditor::updateTabVisibility()
     for (auto* l : { &machDuckerAmountL, &machDuckerThresholdL, &machDuckerAttackL, &machDuckerReleaseL })
         l->setVisible (machinesTab && adv);
     modMatrixTitle.setVisible (machinesTab && adv);
+    modSourcesTitle.setVisible (machinesTab && adv);
+    stepSeqTitle.setVisible (machinesTab && adv);
+    for (auto* c : { &lfo2Shape, &lfo2Sync, &stepSeqDivision })  c->setVisible (machinesTab && adv);
+    for (auto* k : { &lfo2Rate, &modRandomRate, &modCcNumber, &stepSeqLength, &stepSeqSmooth })
+        k->setVisible (machinesTab && adv);
+    for (auto* l : { &lfo2RateL, &modRandomRateL, &modCcNumberL, &stepSeqLengthL, &stepSeqSmoothL })
+        l->setVisible (machinesTab && adv);
+    for (auto& st : stepSeqSteps)     st.setVisible (machinesTab && adv);
     for (auto& c : modMatrixSource)   c.setVisible (machinesTab && adv);
     for (auto& c : modMatrixTarget)   c.setVisible (machinesTab && adv);
     for (auto& s : modMatrixDepth)    s.setVisible (machinesTab && adv);
@@ -2581,6 +2652,25 @@ void GrainFreezeEditor::resized()
                     row.removeFromLeft (18);
                 }
                 area.removeFromTop (2);
+            }
+            area.removeFromTop (6);
+
+            // MOD SOURCES: the generators the matrix can route. LFO 2 and the
+            // random S&H share one row; the step sequencer gets its own strip.
+            stageRow (kRowH, &modSourcesTitle, nullptr, { { &lfo2Shape, 92 }, { &lfo2Sync, 84 } },
+                      { { &lfo2Rate, &lfo2RateL }, { &modRandomRate, &modRandomRateL },
+                        { &modCcNumber, &modCcNumberL } });
+            stageRow (kRowH, &stepSeqTitle, nullptr, { { &stepSeqDivision, 92 } },
+                      { { &stepSeqLength, &stepSeqLengthL }, { &stepSeqSmooth, &stepSeqSmoothL } });
+            {
+                // 16 vertical steps across the knob columns, starting where the
+                // knobs do so the strip lines up with the rest of the grammar.
+                auto row = area.removeFromTop (76);
+                row.removeFromLeft (kStageTitleW + kStageOnW + kStageExtraW + 8);
+                const int cell = juce::jmax (12, row.getWidth() / 16);
+                for (auto& st : stepSeqSteps)
+                    st.setBounds (row.removeFromLeft (cell).reduced (2, 2));
+                area.removeFromTop (6);
             }
         }
     }

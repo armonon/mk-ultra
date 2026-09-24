@@ -14,6 +14,45 @@ bool isOn (const std::atomic<float>* p, bool fallback = false) noexcept
     return loadParam (p, fallback ? 1.0f : 0.0f) > 0.5f;
 }
 
+int matrixTargetParamId (int idx) noexcept
+{
+    // Maps a Mod Matrix "Target" dropdown index to a ParamId. Index 0 is None,
+    // -1 means "not a target". Kept at file scope so the block can also ask, up
+    // front, whether anything is aimed at a given parameter.
+    switch (idx)
+    {
+        case 1:  return (int) gf::ParamId::grainSize;
+        case 2:  return (int) gf::ParamId::density;
+        case 3:  return (int) gf::ParamId::pitch;
+        case 4:  return (int) gf::ParamId::spray;
+        case 5:  return (int) gf::ParamId::spread;
+        case 6:  return (int) gf::ParamId::position;
+        case 7:  return (int) gf::ParamId::pitchJitter;
+        case 8:  return (int) gf::ParamId::output;
+        case 9:  return (int) gf::ParamId::reverbMix;
+        case 10: return (int) gf::ParamId::echoTime;
+        case 11: return (int) gf::ParamId::echoFeedback;
+        case 12: return (int) gf::ParamId::echoMix;
+        case 13: return (int) gf::ParamId::prettyReverbMix;
+        case 14: return (int) gf::ParamId::chorusRate;
+        case 15: return (int) gf::ParamId::chorusDepth;
+        case 16: return (int) gf::ParamId::beautyAmount;
+        case 17: return (int) gf::ParamId::polishWidth;
+        case 18: return (int) gf::ParamId::bitCrush;
+        case 19: return (int) gf::ParamId::grainShape;
+        case 20: return (int) gf::ParamId::damageAmount;
+        case 21: return (int) gf::ParamId::damageBits;
+        case 22: return (int) gf::ParamId::airExciterDrive;
+        case 23: return (int) gf::ParamId::airMix;
+        case 24: return (int) gf::ParamId::airSquelchHz;
+        case 25: return (int) gf::ParamId::airDelayMix;
+        case 26: return (int) gf::ParamId::dryWet;
+        case 27: return (int) gf::ParamId::mixWidth;
+        case 28: return (int) gf::ParamId::stutterChance;
+        default: return -1;
+    }
+}
+
 int maxGrainsForPerformanceMode (int mode) noexcept
 {
     switch (juce::jlimit (0, 3, mode))
@@ -112,6 +151,16 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.damageAmount, "damageAmount");
     bind (paramPtrs.damageClip, "damageClip");
     bind (paramPtrs.damageBits, "damageBits");
+    bind (paramPtrs.lfo2Rate, "lfo2Rate");
+    bind (paramPtrs.lfo2Shape, "lfo2Shape");
+    bind (paramPtrs.lfo2Sync, "lfo2Sync");
+    bind (paramPtrs.stepSeqDivision, "stepSeqDivision");
+    bind (paramPtrs.stepSeqLength, "stepSeqLength");
+    bind (paramPtrs.stepSeqSmooth, "stepSeqSmooth");
+    for (int i = 0; i < gf::ModSources::kMaxSteps; ++i)
+        bind (paramPtrs.stepSeqSteps[(size_t) i], ("stepSeq" + juce::String (i + 1)).toRawUTF8());
+    bind (paramPtrs.modRandomRate, "modRandomRate");
+    bind (paramPtrs.modCcNumber, "modCcNumber");
     bind (paramPtrs.damageRate, "damageRate");
     bind (paramPtrs.damageJitter, "damageJitter");
     bind (paramPtrs.damageNoise, "damageNoise");
@@ -491,15 +540,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     // route it (with a signed depth) to any TARGET parameter. This generalises
     // the Time Breaker routing pattern -- any source can hit any knob now.
     {
+        // Appending only, so a saved session's slot choices keep their meaning.
         const StringArray sources { "None", "Global LFO", "Time Breaker", "Macro Texture",
                                     "Macro Beauty", "Macro Space", "Macro Chaos", "Macro Motion",
                                     "Macro Damage", "Macro Emotion", "Morph X", "Morph Y",
-                                    "Input Env" };
+                                    "Input Env",
+                                    "LFO 2", "Step Seq", "Random",
+                                    "Velocity", "Note Pitch", "Mod Wheel", "Expression", "MIDI CC" };
         const StringArray targets { "None", "Grain Size", "Density", "Pitch", "Spray", "Spread",
                                     "Position", "Pitch Jitter", "Output", "Reverb (Grain)",
                                     "Echo Time", "Echo Feedback", "Echo Mix", "Reverb (Beauty)",
                                     "Chorus Rate", "Chorus Depth", "Beauty Amount", "Width",
-                                    "Bit Crush" };
+                                    "Bit Crush",
+                                    "Grain Shape", "Damage Amount", "Damage Bits", "Exciter Drive",
+                                    "Air Mix", "Squelch Cutoff", "Air Delay Mix", "Dry/Wet",
+                                    "Mix Width", "Stutter Chance" };
         for (int i = 1; i <= 4; ++i)
         {
             addChoice ("modSlot" + juce::String (i) + "Source", "Mod Slot " + juce::String (i) + " Source", sources, 0);
@@ -507,6 +562,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
             addFloat  ("modSlot" + juce::String (i) + "Depth",  "Mod Slot " + juce::String (i) + " Depth",
                        NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
         }
+
+        // ---- Sources that need controls of their own.
+        const StringArray syncDivs { "Free", "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
+        const StringArray stepDivs { "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
+        addFloat  ("lfo2Rate",  "LFO 2 Rate",  NormalisableRange<float> (0.01f, 20.0f, 0.01f, 0.4f), 0.5f);
+        addChoice ("lfo2Shape", "LFO 2 Shape", StringArray { "Sine", "Triangle", "Saw", "Square" }, 0);
+        addChoice ("lfo2Sync",  "LFO 2 Sync",  syncDivs, 0);
+        addChoice ("stepSeqDivision", "Step Seq Division", stepDivs, 5);   // 1/16
+        addInt    ("stepSeqLength",   "Step Seq Length", 1, gf::ModSources::kMaxSteps, 8);
+        addFloat  ("stepSeqSmooth",   "Step Seq Glide", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+        // A pattern out of the box, so routing "Step Seq" does something audible
+        // before anyone has drawn anything.
+        static constexpr float kDefaultSteps[gf::ModSources::kMaxSteps] =
+            { 1.0f, 0.0f, 0.5f, 0.0f, 1.0f, 0.0f, 0.5f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0 };
+        for (int i = 0; i < gf::ModSources::kMaxSteps; ++i)
+            addFloat ("stepSeq" + juce::String (i + 1), "Step " + juce::String (i + 1),
+                      NormalisableRange<float> (-1.0f, 1.0f, 0.001f), kDefaultSteps[i]);
+        addFloat  ("modRandomRate", "Random Rate", NormalisableRange<float> (0.1f, 40.0f, 0.01f, 0.4f), 4.0f);
+        addInt    ("modCcNumber",   "MIDI CC Number", 0, 127, 1);
     }
     // Tempo sync for the Echo time and the Global Mod LFO rate. "Free" = use the
     // free knob; any division locks to the host BPM.
@@ -833,6 +907,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
         inputEnv.setReleaseTime (120.0f);
     }
     timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
+    modSources.prepare (sampleRate);
     pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
 
     // Report every latency-adding stage so the host can compensate. AIR's figure
@@ -1082,8 +1157,29 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
     const bool beautyActive = ctl.beautySpaceOn;
     const int routingModeValue = (int) loadParam (p.routingMode, 0.0f);
     const bool pitchMatchOn = isOn (p.pitchMatchOn);
+    // Is anything aimed at Dry/Wet? If so we need the dry copy even when the base
+    // value says full wet -- otherwise a mod that pulls it back has nothing to
+    // fade up, and the mixer's aliasing guard silently drops the dry add.
+    const bool dryWetModulated = [this, &ctl]
+    {
+        for (int i = 0; i < 4; ++i)
+            if (matrixTargetParamId ((int) loadParam (paramPtrs.modSlotTarget[(size_t) i]))
+                    == (int) gf::ParamId::dryWet
+                && std::abs (loadParam (paramPtrs.modSlotDepth[(size_t) i])) > 0.0001f)
+                return true;
+        if (ctl.motionMatrixOn)
+        {
+            const auto& mp = modPtrs[(size_t) gf::ParamId::dryWet];
+            if (loadParam (mp.lfoDepth) > 0.0001f || loadParam (mp.shDepth) > 0.0001f
+                || std::abs (loadParam (mp.globalAmt)) > 0.0001f)
+                return true;
+        }
+        return false;
+    }();
+
     const bool needsDry = loadParam (p.dryLevel) > 0.001f
                        || ctl.dryWet < 0.999f
+                       || dryWetModulated
                        || pitchMatchOn
                        || ctl.sampleModeOn
                        || sampleFreezePending
@@ -1111,6 +1207,45 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
 
     if (ctl.sampleModeOn || sampleFreezePending)
         sampleEngine.pushInput (needsDry ? dryInBuffer : buffer);
+
+    // Mod Matrix MIDI sources. Tracked unconditionally -- routing Velocity or the
+    // Mod Wheel to a knob shouldn't require switching the MIDI grain controls on.
+    for (const auto meta : midi)
+    {
+        const auto m = meta.getMessage();
+        if (m.isNoteOn())
+        {
+            lastNoteVelocity.store (m.getFloatVelocity(), std::memory_order_relaxed);
+            lastNotePitch.store (juce::jlimit (-1.0f, 1.0f, (m.getNoteNumber() - 60) / 48.0f),
+                                 std::memory_order_relaxed);
+        }
+        else if (m.isController())
+        {
+            const int cc = m.getControllerNumber();
+            if (cc >= 0 && cc < 128)
+                midiCcValues[(size_t) cc].store (m.getControllerValue() / 127.0f,
+                                                 std::memory_order_relaxed);
+        }
+    }
+
+    // Mod Matrix generators: LFO 2, the step sequencer and the random sample &
+    // hold advance once per block (a block of jitter, same as the Time Breaker
+    // gate the matrix already routes).
+    {
+        float steps[gf::ModSources::kMaxSteps];
+        for (int i = 0; i < gf::ModSources::kMaxSteps; ++i)
+            steps[i] = loadParam (p.stepSeqSteps[(size_t) i]);
+        gf::ModSources::Params sp;
+        sp.lfoRate      = loadParam (p.lfo2Rate, 0.5f);
+        sp.lfoShape     = (int) loadParam (p.lfo2Shape);
+        sp.lfoDivision  = (int) loadParam (p.lfo2Sync);
+        sp.stepDivision = (int) loadParam (p.stepSeqDivision, 5.0f);
+        sp.stepLength   = (int) loadParam (p.stepSeqLength, 8.0f);
+        sp.stepSmooth   = loadParam (p.stepSeqSmooth);
+        sp.steps        = steps;
+        sp.randomRate   = loadParam (p.modRandomRate, 4.0f);
+        modSources.advance (n, currentBpm, sp);
+    }
 
     // Advance the mod matrix in control-rate steps across the block. We tick at
     // least once per block, and pull modulated parameters after each tick so the
@@ -1242,34 +1377,21 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
             case 10: return 2.0f * (apvts.getRawParameterValue ("macroMorph")  ? apvts.getRawParameterValue ("macroMorph")->load()  : 0.5f) - 1.0f;
             case 11: return 2.0f * (apvts.getRawParameterValue ("macroMorphY") ? apvts.getRawParameterValue ("macroMorphY")->load() : 0.5f) - 1.0f;
             case 12: return inputEnvelopeValue.load (std::memory_order_relaxed);   // Input Env (0..1)
+            case 13: return modSources.lfo();                       // LFO 2      -1..+1
+            case 14: return modSources.step();                      // Step Seq   -1..+1
+            case 15: return modSources.random();                    // Random S&H -1..+1
+            case 16: return lastNoteVelocity.load (std::memory_order_relaxed);   // Velocity 0..1
+            case 17: return lastNotePitch.load (std::memory_order_relaxed);      // Note    -1..+1
+            case 18: return midiCcValues[1].load (std::memory_order_relaxed);    // Mod Wheel
+            case 19: return midiCcValues[11].load (std::memory_order_relaxed);   // Expression
+            case 20: return midiCcValues[(size_t) juce::jlimit (0, 127, (int) loadParam (paramPtrs.modCcNumber, 1.0f))]
+                                .load (std::memory_order_relaxed);               // assignable CC
             default: return 0.0f;
         }
     };
     auto matrixTargetId = [] (int idx) -> int
     {
-        // Maps the "Target" dropdown index to a ParamId. Index 0 is None.
-        switch (idx)
-        {
-            case 1:  return (int) gf::ParamId::grainSize;
-            case 2:  return (int) gf::ParamId::density;
-            case 3:  return (int) gf::ParamId::pitch;
-            case 4:  return (int) gf::ParamId::spray;
-            case 5:  return (int) gf::ParamId::spread;
-            case 6:  return (int) gf::ParamId::position;
-            case 7:  return (int) gf::ParamId::pitchJitter;
-            case 8:  return (int) gf::ParamId::output;
-            case 9:  return (int) gf::ParamId::reverbMix;
-            case 10: return (int) gf::ParamId::echoTime;
-            case 11: return (int) gf::ParamId::echoFeedback;
-            case 12: return (int) gf::ParamId::echoMix;
-            case 13: return (int) gf::ParamId::prettyReverbMix;
-            case 14: return (int) gf::ParamId::chorusRate;
-            case 15: return (int) gf::ParamId::chorusDepth;
-            case 16: return (int) gf::ParamId::beautyAmount;
-            case 17: return (int) gf::ParamId::polishWidth;
-            case 18: return (int) gf::ParamId::bitCrush;
-            default: return -1;
-        }
+        return matrixTargetParamId (idx);
     };
     std::array<int,   4> mmTarget {};
     std::array<float, 4> mmContrib {};   // source value × depth (computed once per block)
@@ -1278,8 +1400,10 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
         const int srcIdx = (int) loadParam (paramPtrs.modSlotSource[(size_t) i]);
         const int tgtIdx = (int) loadParam (paramPtrs.modSlotTarget[(size_t) i]);
         const float depth = loadParam (paramPtrs.modSlotDepth[(size_t) i]);
+        const float srcValue = srcIdx > 0 ? matrixSourceValue (srcIdx) : 0.0f;
+        modSlotSourceValue[(size_t) i].store (srcValue, std::memory_order_relaxed);
         mmTarget[(size_t) i] = matrixTargetId (tgtIdx);
-        mmContrib[(size_t) i] = (srcIdx > 0 && tgtIdx > 0) ? matrixSourceValue (srcIdx) * depth : 0.0f;
+        mmContrib[(size_t) i] = (srcIdx > 0 && tgtIdx > 0) ? srcValue * depth : 0.0f;
     }
 
     auto target = [this, &ctl, tbGate, tbT1, tbD1, tbT2, tbD2, mmTarget, mmContrib] (gf::ParamId id)
@@ -1439,7 +1563,8 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
     mixParams.pitchMatchOn = pitchMatchOn;
     mixParams.tempoLockOn = ctl.tempoLockOn;
     mixParams.limiterOn = isOn (p.limiterOn, true);
-    mixParams.dryLevel = juce::jmax (loadParam (p.dryLevel), 1.0f - ctl.dryWet);
+    const float dryWetValue = target (gf::ParamId::dryWet);
+    mixParams.dryLevel = juce::jmax (loadParam (p.dryLevel), 1.0f - dryWetValue);
     if (! textureActive && ! beautyActive)
         mixParams.dryLevel = 1.0f;
     mixParams.dryLevel *= 1.0f - identity * 0.75f;
@@ -1455,7 +1580,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
     mixParams.eqMid  = loadParam (p.eqMid);
     mixParams.eqHigh = loadParam (p.eqHigh);
     mixParams.eqLoFi = juce::jlimit (0.0f, 1.0f, loadParam (p.eqLoFi) + identity * 0.35f);
-    mixParams.width  = juce::jlimit (0.0f, 2.0f, loadParam (p.mixWidth, 1.0f) + ctl.space * 0.35f);
+    mixParams.width  = juce::jlimit (0.0f, 2.0f, target (gf::ParamId::mixWidth) + ctl.space * 0.35f);
     mixParams.pitchLockOn     = isOn (p.pitchLockOn); // Pitch/Formant machine is a separate master-bus insert
     mixParams.pitchLockMode   = (int) loadParam (p.pitchLockMode, 1.0f);
     mixParams.pitchLockKey    = (int) loadParam (p.pitchLockKey);
@@ -1522,7 +1647,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
             sliceSamples = juce::jmax (1, (int) (currentSampleRate * loadParam (p.stutterSize, 80.0f) * 0.001f));
         }
         timeBreaker.process (buffer, sliceSamples, clockSamples,
-                             juce::jmax (loadParam (p.stutterChance), 0.5f * loadParam (p.timeBreakerMix, 1.0f)),
+                             juce::jmax (target (gf::ParamId::stutterChance), 0.5f * loadParam (p.timeBreakerMix, 1.0f)),
                              loadParam (p.reverseChance),
                              loadParam (p.timeBreakerMix, 1.0f));
     }
@@ -1536,10 +1661,10 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
     if (ctl.damageOn || macroDamage > 0.02f)
     {
         gf::DamageParams dp;
-        dp.amount  = ctl.damageOn ? juce::jlimit (0.0f, 1.0f, loadParam (p.damageAmount, 0.5f) + macroDamage * 0.6f)
+        dp.amount  = ctl.damageOn ? juce::jlimit (0.0f, 1.0f, target (gf::ParamId::damageAmount) + macroDamage * 0.6f)
                                   : macroDamage;
         dp.clip    = (int) loadParam (p.damageClip, 0.0f);
-        dp.bits    = loadParam (p.damageBits, 16.0f);
+        dp.bits    = target (gf::ParamId::damageBits);
         dp.rate    = loadParam (p.damageRate, 1.0f);
         dp.jitter  = loadParam (p.damageJitter, 0.0f);
         dp.noise   = loadParam (p.damageNoise, 0.0f);
@@ -1570,14 +1695,14 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
         gf::AirEngine::Params ap;
         ap.on                = true;
         ap.crossoverHz       = loadParam (p.airCrossover, 2500.0f);
-        ap.mix               = loadParam (p.airMix, 0.5f);
+        ap.mix               = target (gf::ParamId::airMix);
         ap.squelchOn         = isOn (p.airSquelchOn);
         ap.squelchMode       = (int) loadParam (p.airSquelchMode, 1.0f);
-        ap.squelchHz         = loadParam (p.airSquelchHz, 4000.0f);
+        ap.squelchHz         = target (gf::ParamId::airSquelchHz);
         ap.squelchRes        = loadParam (p.airSquelchRes, 0.5f);
         ap.squelchEnv        = loadParam (p.airSquelchEnv, 0.0f);
         ap.exciterOn         = isOn (p.airExciterOn);
-        ap.exciterDrive      = loadParam (p.airExciterDrive, 0.3f);
+        ap.exciterDrive      = target (gf::ParamId::airExciterDrive);
         ap.exciterMix        = loadParam (p.airExciterMix, 0.5f);
         ap.dynShelfOn        = isOn (p.airShelfOn);
         ap.dynShelfHz        = loadParam (p.airShelfHz, 8000.0f);
@@ -1590,7 +1715,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
         ap.delayOn           = isOn (p.airDelayOn);
         ap.delayMs           = loadParam (p.airDelayMs, 120.0f);
         ap.delayFeedback     = loadParam (p.airDelayFeedback, 0.35f);
-        ap.delayMix          = loadParam (p.airDelayMix, 0.4f);
+        ap.delayMix          = target (gf::ParamId::airDelayMix);
         airEngine.process (buffer, ap);
     }
 
