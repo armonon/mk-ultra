@@ -51,8 +51,9 @@ namespace gf
 namespace mix
 {
 
-void MixEngine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+void MixEngine::addParameters (gf::ParamLayoutBuilder& layout)
 {
+    layout.group ("mix", "Mix & Routing");
     using namespace juce;
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "pluginOn", 1 }, "Plugin On", true));
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "entropyOn", 1 }, "Texture / Grain On", true));

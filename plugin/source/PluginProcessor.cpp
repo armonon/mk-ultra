@@ -471,7 +471,10 @@ void GrainFreezeProcessor::applyMorph ()
 juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::createLayout()
 {
     using namespace juce;
-    AudioProcessorValueTreeState::ParameterLayout layout;
+    // Grouped rather than flat: a host's automation menu shows named sections
+    // instead of several hundred alphabetical entries. Parameter IDs are
+    // unchanged, so automation in existing projects still resolves.
+    gf::ParamLayoutBuilder layout;
     gf::entropy::EntropyEngine::addParameters (layout);
     gf::mix::MixEngine::addParameters (layout);
     gf::pretty::PrettifierEngine::addParameters (layout);
@@ -509,6 +512,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         addBool (stem + "Lock",  name + " Randomize Lock", false);
     };
 
+    layout.group ("global", "Global");
     addChoice ("performanceMode", "Performance Mode", StringArray { "Eco", "Live", "Studio", "Render" }, 1);
     addBool ("analyzerOn", "Analyzer On", true);
     addBool ("waveformOn", "Waveform On", true);
@@ -520,6 +524,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addChoice ("oversamplingMode", "Oversampling Mode", StringArray { "Off", "Auto", "Always" }, 1);
     addFloat ("dryWet", "Dry/Wet", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
 
+    layout.group ("machines", "Machines");
     addMachine ("beautySpace", "Beauty & Space", true);
     addMachine ("textureGrain", "Texture / Grain", true);
     addMachine ("identityLoss", "Identity Loss", true);
@@ -542,12 +547,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
 
     // Polyphonic granular: when on AND MIDI is enabled, each grain picks a random
     // active note for its pitch, so a held chord becomes a polyphonic grain cloud.
+    layout.group ("midi", "MIDI & Voices");
     addBool ("polyGrain", "Polyphonic Grains", false);
     // MPE: when on, MIDI is parsed via juce::MPEInstrument and each voice's
     // pitch bend + pressure + timbre is routed into the grain cloud per voice.
     // Implies polyGrain (a single MPE note still gets its own pitch bend).
     addBool ("mpeOn", "MPE Mode", false);
 
+    layout.group ("modmatrix", "Mod Matrix");
     // Universal Modulation Matrix: 4 generic slots that each pick a SOURCE and
     // route it (with a signed depth) to any TARGET parameter. This generalises
     // the Time Breaker routing pattern -- any source can hit any knob now.
@@ -594,6 +601,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         addFloat  ("modRandomRate", "Random Rate", NormalisableRange<float> (0.1f, 40.0f, 0.01f, 0.4f), 4.0f);
         addInt    ("modCcNumber",   "MIDI CC Number", 0, 127, 1);
     }
+    layout.group ("sync", "Tempo Sync");
     // Tempo sync for the Echo time and the Global Mod LFO rate. "Free" = use the
     // free knob; any division locks to the host BPM.
     {
@@ -604,6 +612,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         // rhythmic granular textures that lock to the groove.
         addChoice ("densityDivision", "Density Sync",  divs, 0);
     }
+    layout.group ("damage", "Damage");
     addMachine ("damage", "Damage", false);
     // Damage detail: a full destruction stage. damageAmount is the master drive.
     addChoice ("damageClip", "Damage Clip", StringArray { "Tube", "Tape", "Hard", "Fold", "Diode" }, 0);
@@ -621,6 +630,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     // Sidechain Ducker: self-sidechains the WET (entropy + prettifier returns) off the
     // input envelope so the original sound breathes through the texture instead of
     // being smothered. Pure MK-ULTRA-identity feature.
+    layout.group ("ducker", "Ducker");
     addBool   ("duckOn",        "Ducker",          false);
     // Key source. "Input" is the classic MK-ULTRA self-sidechain; "Sidechain"
     // reads the external key bus, so a kick on a send can duck the texture.
@@ -635,6 +645,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     // low band stays untouched. Everything here is a performance control.
     // Convolution Space source: five synthesised spaces ship built in, so the
     // module makes sound the moment it's enabled; "Custom" is a user-loaded file.
+    layout.group ("air", "AIR");
     addChoice ("convolutionIR", "Convolution IR", StringArray { "Custom", "Hall", "Plate", "Room", "Cavern", "Spring" }, 1);
     addBool   ("airOn",             "Air",                false);
     addFloat  ("airCrossover",      "Air Crossover",      NormalisableRange<float> (200.0f, 12000.0f, 1.0f, 0.35f), 2500.0f);
@@ -659,12 +670,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addFloat  ("airDelayMs",        "Air Delay Time",     NormalisableRange<float> (1.0f, 1400.0f, 0.1f, 0.4f), 120.0f);
     addFloat  ("airDelayFeedback",  "Air Delay Feedback", NormalisableRange<float> (0.0f, 0.95f, 0.001f), 0.35f);
     addFloat  ("airDelayMix",       "Air Delay Mix",      NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.4f);
+    layout.group ("motion", "Motion");
     addMachine ("motionMatrix", "Motion Matrix", true);
     addFloat ("analyzerScopeMix", "Analyzer / Scopes Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
     addFloat ("analyzerScopeAmount", "Analyzer / Scopes Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
     addBool ("analyzerScopeModOn", "Analyzer / Scopes Mod On", true);
     addBool ("analyzerScopeLock", "Analyzer / Scopes Randomize Lock", false);
 
+    layout.group ("identity", "Identity & Mutation");
     addFloat ("identityLoss", "Identity Loss", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addInt ("mutationSeed", "Mutation Seed", 0, 999999, 0);
     addChoice ("mutationMode", "Mutation Mode",
@@ -672,6 +685,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addBool ("mutationTempoSync", "Mutation Tempo Sync", false);
     addFloat ("mutationSmoothing", "Mutation Smoothing", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.25f);
 
+    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
     for (const auto& stemAndName : {
         std::pair<const char*, const char*> { "echo", "Echo" },
         { "reverb", "Reverb" },
@@ -681,6 +695,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     })
         addModLock (stemAndName.first, stemAndName.second);
 
+    layout.group ("grain", "Grain Detail");
     addBool ("grainReverseOn", "Grain Reverse On", false);
     addFloat ("grainReverseChance", "Grain Reverse Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat ("grainSkew", "Grain Skew", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
@@ -699,6 +714,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addBool ("grainOctaveCloudOn", "Grain Octave Cloud On", false);
     addFloat ("grainOctaveCloud", "Grain Octave Cloud", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat ("grainAmpChaos", "Grain Amp Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
     for (const auto& stemAndName : {
         std::pair<const char*, const char*> { "grainReverse", "Grain Reverse" },
         { "grainFeedback", "Grain Feedback" },
@@ -708,6 +724,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     })
         addModLock (stemAndName.first, stemAndName.second);
 
+    layout.group ("spectral", "Spectral");
     addBool ("spectralWarpOn", "Spectral Warp On", false);
     addFloat ("spectralWarp", "Spectral Warp", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addBool ("spectralSmearOn", "Spectral Smear On", false);
@@ -722,6 +739,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addFloat ("spectralVowel", "Spectral Vowel", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat ("spectralResonance", "Spectral Resonance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addChoice ("spectralQuality", "Spectral Quality", StringArray { "Eco", "Live", "Studio", "Render" }, 1);
+    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
     for (const auto& stemAndName : {
         std::pair<const char*, const char*> { "spectralWarp", "Spectral Warp" },
         { "spectralSmear", "Spectral Smear" },
@@ -731,6 +749,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     })
         addModLock (stemAndName.first, stemAndName.second);
 
+    layout.group ("pitch", "Pitch & Formant");
     addFloat ("pitchSpread", "Pitch Spread", NormalisableRange<float> (0.0f, 48.0f, 0.001f), 0.0f);
     addBool ("pitchQuantizeOn", "Pitch Quantize On", false);
     addFloat ("pitchQuantize", "Pitch Quantize", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
@@ -746,6 +765,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addFloat ("frequencyShiftHz", "Frequency Shift Hz", NormalisableRange<float> (-5000.0f, 5000.0f, 0.001f), 0.0f);
     addFloat ("frequencyShiftMix", "Frequency Shift Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat ("inharmonicity", "Inharmonicity", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
+    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
     for (const auto& stemAndName : {
         std::pair<const char*, const char*> { "formantShift", "Formant Shift" },
         { "ringMod", "Ring Mod" },
@@ -755,6 +775,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     })
         addModLock (stemAndName.first, stemAndName.second);
 
+    layout.group ("glitch", "Time & Glitch");
     addBool ("stutterOn", "Stutter On", false);
     addFloat ("stutterRate", "Stutter Rate", NormalisableRange<float> (0.25f, 64.0f, 0.001f), 8.0f);
     addFloat ("stutterSize", "Stutter Size", NormalisableRange<float> (1.0f, 1000.0f, 1.0f), 80.0f);
@@ -771,6 +792,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addFloat ("bufferJumpChance", "Buffer Jump Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat ("bufferJumpSize", "Buffer Jump Size", NormalisableRange<float> (1.0f, 4000.0f, 1.0f), 250.0f);
     addBool ("gateOn", "Gate On", false);
+    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
     for (const auto& stemAndName : {
         std::pair<const char*, const char*> { "stutter", "Stutter" },
         { "reverseChance", "Reverse Chance" },
@@ -780,6 +802,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     })
         addModLock (stemAndName.first, stemAndName.second);
 
+    layout.group ("destroy", "Lo-Fi & Destroy");
     addBool ("bitCrushOn", "Bit Crush On", false);
     addFloat ("bitDepth", "Bit Depth", NormalisableRange<float> (1.0f, 24.0f, 0.001f), 16.0f);
     addBool ("sampleRateOn", "Sample Rate On", false);
@@ -799,6 +822,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addBool ("speakerBreakupOn", "Speaker Breakup On", false);
     addFloat ("codecCrush", "Codec Crush", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addBool ("codecCrushOn", "Codec Crush On", false);
+    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
     for (const auto& stemAndName : {
         std::pair<const char*, const char*> { "bitCrush", "Bit Crush" },
         { "sampleRate", "Sample Rate" },
@@ -811,9 +835,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
 
     // Modulation parameters, per modulatable knob. These live in the APVTS so
     // they are automatable AND captured by the .preset files automatically.
+    // Ten per knob is most of the plugin's parameter count, so each knob gets its
+    // own section rather than one 280-entry "Modulation" heap.
+    auto prettyName = [] (const juce::String& id)
+    {
+        juce::String out;
+        for (int i = 0; i < id.length(); ++i)
+        {
+            const auto c = id[i];
+            if (i == 0)                              out << juce::CharacterFunctions::toUpperCase (c);
+            else if (juce::CharacterFunctions::isUpperCase (c)) out << ' ' << c;
+            else                                     out << c;
+        }
+        return out;
+    };
     for (int i = 0; i < gf::kNumModParams; ++i)
     {
         const auto base = juce::String (gf::paramIdString ((gf::ParamId) i));
+        layout.group ("mod_" + base, prettyName (base) + " Mod");
         layout.add (std::make_unique<AudioParameterFloat> (
             ParameterID { base + "_lfoRate", 1 }, base + " LFO Rate",
             NormalisableRange<float> (0.0f, 12.0f, 0.01f), 0.0f));
@@ -845,6 +884,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
             NormalisableRange<float> (-1.0f, 1.0f, 0.01f), 0.0f));
     }
 
+    layout.group ("modmatrix", "Mod Matrix");
     layout.add (std::make_unique<AudioParameterFloat> (
         ParameterID { "globalRate", 1 }, "Global Mod Rate",
         NormalisableRange<float> (0.01f, 8.0f, 0.01f), 0.5f));
@@ -853,8 +893,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         StringArray { "Sine", "Triangle", "Saw", "Square" }, 0));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "globalModOn", 1 }, "Global Mod On", true));
 
+    layout.group ("global", "Global");
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "panic", 1 }, "Panic", false));
 
+    layout.group ("sampler", "Source & Sample");
     // Granular source: chew on the live input, or on an audio file the user drops
     // onto the plugin. Defaults to Live, so nothing changes until a file arrives.
     addChoice ("grainSource", "Grain Source", StringArray { "Live", "Sample" }, 0);
@@ -868,6 +910,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "sampleLevel", 1 }, "Sample Level",
                                                         NormalisableRange<float> (0.0f, 1.5f, 0.001f), 1.0f));
 
+    layout.group ("macros", "Macros");
     static constexpr const char* macroIds[] = {
         "macroBeauty", "macroChaos", "macroEmotion", "macroDamage",
         "macroMotion", "macroSpace", "macroTexture", "macroGlue", "macroMorph", "macroMorphY"
@@ -881,12 +924,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
             ParameterID { macroIds[i], 1 }, macroNames[i],
             NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
+    layout.group ("identity", "Identity & Mutation");
     layout.add (std::make_unique<AudioParameterChoice> (
         ParameterID { "randomMode", 1 }, "Random Mode",
         StringArray { "Subtle", "Musical", "Glitch", "Ambient", "Horror", "Destroyed", "Cinematic", "Beautiful", "Dream", "Angel", "Vintage", "Alien", "Machine", "Identity Loss" }, 1));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "mutationAmount", 1 }, "Mutation Amount",
                                                         NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.35f));
 
+    layout.group ("assistant", "Assistant");
     for (const auto& text : { juce::String ("More Beautiful"), juce::String ("More Expensive"), juce::String ("More Wide"),
                                juce::String ("More Dreamy"), juce::String ("More Emotional"), juce::String ("More Dark"),
                                juce::String ("More Angelic"), juce::String ("More Broken"), juce::String ("More Vintage"),
@@ -896,7 +941,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         layout.add (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, text, false));
     }
 
-    return layout;
+    return layout.build();
 }
 
 namespace

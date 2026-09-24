@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "GrainFreeze/ParamGroups.h"
 #include <juce_dsp/juce_dsp.h>
 #include "GrainFreeze/PitchMatch.h"
 #include "GrainFreeze/FormantShifter.h"
@@ -55,7 +56,7 @@ struct Params
 class MixEngine
 {
 public:
-    static void addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    static void addParameters (gf::ParamLayoutBuilder& layout);
 
     void prepare (double sampleRate, int samplesPerBlock, int numChannels);
     void reset();

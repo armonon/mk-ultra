@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "GrainFreeze/ParamGroups.h"
 #include <juce_dsp/juce_dsp.h>
 #include "GrainFreeze/FormantShifter.h"
 #include <array>
@@ -83,7 +84,7 @@ struct Params
 class PrettifierEngine
 {
 public:
-    static void addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    static void addParameters (gf::ParamLayoutBuilder& layout);
     void prepare (double sampleRate, int samplesPerBlock, int numChannels);
     void reset();
     void process (juce::AudioBuffer<float>& buffer, const Params& params, double hostBpm, bool tempoLock);

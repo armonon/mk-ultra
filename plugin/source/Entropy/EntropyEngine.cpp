@@ -23,8 +23,9 @@ namespace gf
 namespace entropy
 {
 
-void EntropyEngine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+void EntropyEngine::addParameters (gf::ParamLayoutBuilder& layout)
 {
+    layout.group ("texture", "Texture / Grain");
     using namespace juce;
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { pid::frozen, 1 },      "Freeze", false));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { pid::grainSize, 1 },   "Grain Size", NormalisableRange<float> (1.0f, 2000.0f, 1.0f), 120.0f));

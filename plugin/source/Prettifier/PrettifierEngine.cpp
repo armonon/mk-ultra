@@ -9,8 +9,9 @@ namespace gf
 namespace pretty
 {
 
-void PrettifierEngine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+void PrettifierEngine::addParameters (gf::ParamLayoutBuilder& layout)
 {
+    layout.group ("beauty", "Beauty & Space");
     using namespace juce;
     layout.add (std::make_unique<AudioParameterBool>  (ParameterID { "prettifierEnabled", 1 }, "Beauty & Space Enabled", true));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "prettifierInTrim", 1 }, "Beauty & Space In", NormalisableRange<float> (0.0f, 2.0f, 0.001f), 1.0f));
