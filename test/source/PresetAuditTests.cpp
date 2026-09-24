@@ -52,6 +52,7 @@ TEST_CASE ("Every factory preset loads, makes sound, and changes the signal", "[
         proc.prepareToPlay (kSr, kBlock);
 
         juce::AudioBuffer<float> out (2, total);
+        out.clear();   // the block loop leaves a partial tail block unwritten
         juce::MidiBuffer midi;
         for (int pos = 0; pos + kBlock <= total; pos += kBlock)
         {

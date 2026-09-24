@@ -28,8 +28,11 @@ int maxGrainsForPerformanceMode (int mode) noexcept
 
 GrainFreezeProcessor::GrainFreezeProcessor()
     : AudioProcessor (BusesProperties()
-        .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+        .withInput  ("Input",     juce::AudioChannelSet::stereo(), true)
+        .withOutput ("Output",    juce::AudioChannelSet::stereo(), true)
+        // External key input for the Ducker. Off by default so a plain insert
+        // stays 2-in / 2-out; the host enables it when the user routes a send.
+        .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, &undoManager, "PARAMS", createLayout())
 {
     cacheParameterPointers();
@@ -39,6 +42,7 @@ GrainFreezeProcessor::GrainFreezeProcessor()
     apvts.addParameterListener ("macroMorph", this);
     apvts.addParameterListener ("macroMorphY", this);
     apvts.addParameterListener ("convolutionIR", this);
+    apvts.addParameterListener ("airOn", this);
     // First-insert "signature" sound. If the host restores saved state,
     // setStateInformation runs after construction and overrides this.
     presets.loadDefaultPatch();
@@ -54,6 +58,8 @@ GrainFreezeProcessor::~GrainFreezeProcessor()
     apvts.removeParameterListener ("pitchFormantOn", this);
     apvts.removeParameterListener ("macroMorph", this);
     apvts.removeParameterListener ("macroMorphY", this);
+    apvts.removeParameterListener ("convolutionIR", this);
+    apvts.removeParameterListener ("airOn", this);
 }
 
 void GrainFreezeProcessor::cacheParameterPointers()
@@ -115,6 +121,7 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.damageSplitHz, "damageSplitHz");
     bind (paramPtrs.damageHighAmount, "damageHighAmount");
     bind (paramPtrs.duckOn, "duckOn");
+    bind (paramPtrs.duckSource, "duckSource");
     bind (paramPtrs.duckAmount, "duckAmount");
     bind (paramPtrs.duckThreshold, "duckThreshold");
     bind (paramPtrs.duckAttack, "duckAttack");
@@ -320,12 +327,26 @@ void GrainFreezeProcessor::parameterChanged (const juce::String& id, float value
         formantLatencyActive.store (active, std::memory_order_relaxed);
         triggerAsyncUpdate(); // setLatencySamples must run on the message thread
     }
+    else if (id == "airOn")
+    {
+        // AIR delays its whole output by the exciter's oversampler latency.
+        airLatencyActive.store (value > 0.5f, std::memory_order_relaxed);
+        triggerAsyncUpdate();
+    }
+}
+
+void GrainFreezeProcessor::updateReportedLatency()
+{
+    int latency = formantLatencyActive.load (std::memory_order_relaxed)
+                      ? gf::FormantShifter::kLatency : 0;
+    if (airLatencyActive.load (std::memory_order_relaxed))
+        latency += airEngine.getLatencySamples();
+    setLatencySamples (latency);
 }
 
 void GrainFreezeProcessor::handleAsyncUpdate()
 {
-    setLatencySamples (formantLatencyActive.load (std::memory_order_relaxed)
-                       ? gf::FormantShifter::kLatency : 0);
+    updateReportedLatency();
 
     if (morphRequested.exchange (false))
         applyMorph();
@@ -515,6 +536,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     // input envelope so the original sound breathes through the texture instead of
     // being smothered. Pure MK-ULTRA-identity feature.
     addBool   ("duckOn",        "Ducker",          false);
+    // Key source. "Input" is the classic MK-ULTRA self-sidechain; "Sidechain"
+    // reads the external key bus, so a kick on a send can duck the texture.
+    addChoice ("duckSource",    "Duck Key",        StringArray { "Input", "Sidechain" }, 0);
     addFloat  ("duckAmount",    "Duck Amount",     NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f);
     addFloat  ("duckThreshold", "Duck Threshold",  NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.1f);
     addFloat  ("duckAttack",    "Duck Attack",     NormalisableRange<float> (0.1f, 200.0f, 0.1f, 0.3f), 8.0f);
@@ -811,11 +835,12 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
     pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
 
-    // Report the formant shifter's lookahead so the host can compensate.
+    // Report every latency-adding stage so the host can compensate. AIR's figure
+    // is only known once its exciter has been prepared, hence after the calls above.
     formantLatencyActive.store (isOn (paramPtrs.pitchLockFormant) || isOn (paramPtrs.pitchFormantOn),
                                 std::memory_order_relaxed);
-    setLatencySamples (formantLatencyActive.load (std::memory_order_relaxed)
-                       ? gf::FormantShifter::kLatency : 0);
+    airLatencyActive.store (isOn (paramPtrs.airOn), std::memory_order_relaxed);
+    updateReportedLatency();
     dryInBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
     entropyBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
     prettifierBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
@@ -837,7 +862,19 @@ bool GrainFreezeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
     const auto out = layouts.getMainOutputChannelSet();
     if (out != juce::AudioChannelSet::stereo() && out != juce::AudioChannelSet::mono())
         return false;
-    return layouts.getMainInputChannelSet() == out;
+    if (layouts.getMainInputChannelSet() != out)
+        return false;
+
+    // Optional Ducker key input: disabled, mono or stereo.
+    if (layouts.inputBuses.size() > 1)
+    {
+        const auto side = layouts.inputBuses[1];
+        if (! side.isDisabled()
+            && side != juce::AudioChannelSet::mono()
+            && side != juce::AudioChannelSet::stereo())
+            return false;
+    }
+    return true;
 }
 
 GrainFreezeProcessor::ControlSnapshot GrainFreezeProcessor::makeControlSnapshot() const
@@ -989,9 +1026,31 @@ float GrainFreezeProcessor::getTimeBreakerModOffset (gf::ParamId id) const
     return off;
 }
 
-void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+
+    if (fullBuffer.getNumChannels() <= 0)
+        return;
+
+    // The host hands us every bus in one buffer: the main in/out pair first, then
+    // the optional Sidechain input. Everything downstream works on a view of the
+    // main bus alone, so the key signal can never leak into the output, and the
+    // engines keep seeing the channel count they were prepared for.
+    const int mainChannels = juce::jlimit (1, fullBuffer.getNumChannels(),
+                                           juce::jmax (getMainBusNumInputChannels(),
+                                                       getMainBusNumOutputChannels()));
+    juce::AudioBuffer<float> buffer (fullBuffer.getArrayOfWritePointers(),
+                                     mainChannels, fullBuffer.getNumSamples());
+
+    // Sidechain key, when the host has enabled and connected the bus. Both
+    // branches are prvalues, so this is a pointer view -- no audio-thread copy.
+    const auto* sideBus = getBus (true, 1);
+    const bool haveSideKey = sideBus != nullptr && sideBus->isEnabled()
+                          && fullBuffer.getNumChannels() > mainChannels;
+    const juce::AudioBuffer<float> sideBuffer = haveSideKey ? getBusBuffer (fullBuffer, true, 1)
+                                                           : juce::AudioBuffer<float>();
+
     const auto ctl = makeControlSnapshot();
     const auto& p = paramPtrs;
     const int channels = buffer.getNumChannels();
@@ -1416,7 +1475,13 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         ducker.setReleaseMs (loadParam (paramPtrs.duckRelease, 140.0f));
         const float amt = loadParam (paramPtrs.duckAmount, 0.5f);
         const float thr = loadParam (paramPtrs.duckThreshold, 0.1f);
-        const auto& trigger = needsDry ? dryInBuffer : buffer;
+        // Key source: the plugin's own input (self-sidechain) or the external
+        // Sidechain bus. An unrouted external key falls back to self rather than
+        // silently doing nothing.
+        const bool useExternalKey = (int) loadParam (paramPtrs.duckSource, 0.0f) == 1
+                                 && sideBuffer.getNumChannels() > 0;
+        const auto& trigger = useExternalKey ? sideBuffer
+                                            : (needsDry ? dryInBuffer : buffer);
         if (textureActive)  ducker.process (entropyBuffer,   trigger, amt, thr);
         if (beautyActive)   ducker.process (prettifierBuffer, trigger, amt, thr);
     }

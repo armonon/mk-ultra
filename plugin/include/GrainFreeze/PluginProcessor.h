@@ -263,6 +263,7 @@ private:
         std::atomic<float>* damageSplitHz = nullptr;
         std::atomic<float>* damageHighAmount = nullptr;
         std::atomic<float>* duckOn = nullptr;
+        std::atomic<float>* duckSource = nullptr;
         std::atomic<float>* duckAmount = nullptr;
         std::atomic<float>* duckThreshold = nullptr;
         std::atomic<float>* duckAttack = nullptr;
@@ -429,10 +430,15 @@ private:
     std::array<std::atomic<float>*, (size_t) gf::kNumModParams> modTargetPtrs {};
     std::array<juce::NormalisableRange<float>, (size_t) gf::kNumModParams> modTargetRanges {};
 
-    // Latency reporting: the formant-preserving shifter adds lookahead when on.
+    // Latency reporting. Two stages add delay: the formant-preserving shifter's
+    // lookahead, and AIR (its exciter runs oversampled, and the whole AIR output
+    // -- low band, dry top and wet top -- is aligned to that). Both are reported
+    // so the host can compensate; recomputed whenever either is switched.
     void parameterChanged (const juce::String& id, float value) override;
     void handleAsyncUpdate() override;
+    void updateReportedLatency();
     std::atomic<bool> formantLatencyActive { false };
+    std::atomic<bool> airLatencyActive { false };
 
     int    controlRateDivider = 0;   // counts samples between mod-matrix ticks
     int    controlRateSamples = 441; // ~100 Hz control rate at 44.1k

@@ -567,6 +567,7 @@ private:
     std::unique_ptr<ButtonAttachment> airOnAttach, airSquelchOnAttach, airExciterOnAttach,
                                       airShelfOnAttach, airPhaserOnAttach, airDelayOnAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> airSquelchModeAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> machDuckerSourceAttach;
     std::unique_ptr<SliderAttachment> airCrossoverAttach, airMixAttach,
                                       airSquelchHzAttach, airSquelchResAttach, airSquelchEnvAttach,
                                       airExciterDriveAttach, airExciterMixAttach,
@@ -576,6 +577,7 @@ private:
 
     // Sidechain Ducker (self-sidechain on input env -> attenuates the wet).
     juce::ToggleButton machDuckerOn { "On" };
+    juce::ComboBox     machDuckerSource;
     juce::Slider       machDuckerAmount, machDuckerThreshold, machDuckerAttack, machDuckerRelease;
     juce::Label        machDuckerAmountL, machDuckerThresholdL, machDuckerAttackL, machDuckerReleaseL;
 

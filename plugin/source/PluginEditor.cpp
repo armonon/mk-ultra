@@ -1079,6 +1079,13 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     machKnob (machDuckerThreshold, machDuckerThresholdL, "Threshold", "duckThreshold", machDuckerThresholdAttach);
     machKnob (machDuckerAttack,    machDuckerAttackL,    "Attack",    "duckAttack",    machDuckerAttackAttach);
     machKnob (machDuckerRelease,   machDuckerReleaseL,   "Release",   "duckRelease",   machDuckerReleaseAttach);
+    machDuckerSource.addItemList ({ "Input", "Sidechain" }, 1);
+    addAndMakeVisible (machDuckerSource);
+    machDuckerSourceAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        proc.apvts, "duckSource", machDuckerSource);
+    machDuckerSource.setTooltip ("Key source: Input self-sidechains off what you feed the plugin; "
+                                 "Sidechain reads the external key bus, so a kick on a send can duck the texture "
+                                 "(falls back to Input when nothing is routed)");
     machDuckerOn.setTooltip ("Self-sidechain Ducker: the input envelope attenuates the WET (entropy + Beauty/Space) so the original sound breathes through the texture");
     machDuckerAmount.setTooltip ("Maximum gain reduction at full trigger (0 = no duck, 1 = full silence at peak)");
     machDuckerThreshold.setTooltip ("Trigger level below which no ducking happens (so quiet passages keep the full wet)");
@@ -1856,6 +1863,7 @@ void GrainFreezeEditor::updateTabVisibility()
     // Ducker + mod matrix + poly/MPE: deep layer.
     machDuckerTitle.setVisible (machinesTab && adv);
     machDuckerOn.setVisible (machinesTab && adv);
+    machDuckerSource.setVisible (machinesTab && adv);
     for (auto* s : { &machDuckerAmount, &machDuckerThreshold, &machDuckerAttack, &machDuckerRelease })
         s->setVisible (machinesTab && adv);
     for (auto* l : { &machDuckerAmountL, &machDuckerThresholdL, &machDuckerAttackL, &machDuckerReleaseL })
@@ -2547,7 +2555,7 @@ void GrainFreezeEditor::resized()
         }
         if (adv)
         {
-            stageRow (kRowH, &machDuckerTitle, &machDuckerOn, {},
+            stageRow (kRowH, &machDuckerTitle, &machDuckerOn, { { &machDuckerSource, 128 } },
                       { { &machDuckerAmount, &machDuckerAmountL }, { &machDuckerThreshold, &machDuckerThresholdL },
                         { &machDuckerAttack, &machDuckerAttackL }, { &machDuckerRelease, &machDuckerReleaseL } });
 
