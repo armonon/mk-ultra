@@ -1,5 +1,6 @@
 #include "GrainFreeze/PluginProcessor.h"
 #include "GrainFreeze/PluginEditor.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <array>
 
 namespace
@@ -232,6 +233,7 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.densityDivision, "densityDivision");
     bind (paramPtrs.lfoDivision, "lfoDivision");
 
+    bind (paramPtrs.grainSource, "grainSource");
     bind (paramPtrs.sampleMode, "sampleMode");
     bind (paramPtrs.sampleWindow, "sampleWindow");
     bind (paramPtrs.sampleSource, "sampleSource");
@@ -396,6 +398,16 @@ void GrainFreezeProcessor::updateReportedLatency()
 void GrainFreezeProcessor::handleAsyncUpdate()
 {
     updateReportedLatency();
+
+    // Restoring a session: re-read the sample file (it may have moved or been
+    // deleted, in which case the source quietly falls back to the live input).
+    if (sampleReloadRequested.exchange (false))
+    {
+        if (juce::File f (granularSamplePath); f.existsAsFile())
+            loadGranularSample (f);
+        else
+            entropyEngine.clearSample();
+    }
 
     if (morphRequested.exchange (false))
         applyMorph();
@@ -843,6 +855,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
 
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "panic", 1 }, "Panic", false));
 
+    // Granular source: chew on the live input, or on an audio file the user drops
+    // onto the plugin. Defaults to Live, so nothing changes until a file arrives.
+    addChoice ("grainSource", "Grain Source", StringArray { "Live", "Sample" }, 0);
+
     // Sample Mode: freeze a moment of audio and loop/play it from the keyboard.
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "sampleMode", 1 }, "Sample Mode", false));
     layout.add (std::make_unique<AudioParameterChoice> (
@@ -883,6 +899,95 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     return layout;
 }
 
+namespace
+{
+// Resample `src` from `srcRate` to `dstRate`, trimmed to at most `maxOutSamples`.
+// Runs on the message thread (loading a file), so allocating here is fine.
+juce::AudioBuffer<float> resampleBuffer (const juce::AudioBuffer<float>& src,
+                                        double srcRate, double dstRate, int maxOutSamples)
+{
+    const int srcLen = src.getNumSamples();
+    const int ch = src.getNumChannels();
+    if (srcLen <= 0 || ch <= 0 || srcRate <= 0.0 || dstRate <= 0.0 || maxOutSamples <= 0)
+        return {};
+
+    if (std::abs (srcRate - dstRate) < 1.0e-6)
+    {
+        juce::AudioBuffer<float> out (ch, juce::jmin (srcLen, maxOutSamples));
+        for (int c = 0; c < ch; ++c)
+            out.copyFrom (c, 0, src, c, 0, out.getNumSamples());
+        return out;
+    }
+
+    // Input samples consumed per output sample. Keep a couple of samples in hand
+    // so the interpolator can't read past the end of the source.
+    const double ratio = srcRate / dstRate;
+    const int outLen = juce::jlimit (1, maxOutSamples,
+                                     (int) std::floor ((double) (srcLen - 4) / ratio));
+    juce::AudioBuffer<float> out (ch, outLen);
+    out.clear();
+    juce::LagrangeInterpolator interp;
+    for (int c = 0; c < ch; ++c)
+    {
+        interp.reset();
+        interp.process (ratio, src.getReadPointer (c), out.getWritePointer (c), outLen);
+    }
+    return out;
+}
+}
+
+bool GrainFreezeProcessor::loadGranularSample (const juce::File& audioFile)
+{
+    if (! audioFile.existsAsFile())
+        return false;
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (audioFile));
+    if (reader == nullptr || reader->numChannels == 0 || reader->lengthInSamples <= 0)
+        return false;
+
+    // Read at most kMaxSampleSeconds of the file, at its own rate.
+    const auto maxIn = (juce::int64) (kMaxSampleSeconds * reader->sampleRate);
+    const int len = (int) juce::jmin (reader->lengthInSamples, maxIn);
+    juce::AudioBuffer<float> raw ((int) juce::jmin (2u, reader->numChannels), len);
+    raw.clear();
+    if (! reader->read (&raw, 0, len, 0, true, reader->numChannels > 1))
+        return false;
+
+    granularSampleOriginal = std::move (raw);
+    granularSampleRate = reader->sampleRate;
+    granularSamplePath = audioFile.getFullPathName();
+    pushGranularSampleToEngine();
+
+    // A loaded file is what the user wants to hear, so switch the source over.
+    if (auto* p = apvts.getParameter ("grainSource"))
+        p->setValueNotifyingHost (1.0f);
+    return true;
+}
+
+void GrainFreezeProcessor::clearGranularSample()
+{
+    granularSampleOriginal.setSize (0, 0);
+    granularSampleRate = 0.0;
+    granularSamplePath.clear();
+    entropyEngine.clearSample();
+    if (auto* p = apvts.getParameter ("grainSource"))
+        p->setValueNotifyingHost (0.0f);   // back to the live input
+}
+
+void GrainFreezeProcessor::pushGranularSampleToEngine()
+{
+    if (granularSampleOriginal.getNumSamples() <= 0 || granularSampleRate <= 0.0)
+    {
+        entropyEngine.clearSample();
+        return;
+    }
+    entropyEngine.setSampleBuffer (resampleBuffer (granularSampleOriginal, granularSampleRate,
+                                                   currentSampleRate,
+                                                   (int) (kMaxSampleSeconds * currentSampleRate)));
+}
+
 void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     entropyEngine.prepare (sampleRate, samplesPerBlock, getTotalNumOutputChannels());
@@ -919,6 +1024,11 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     dryInBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
     entropyBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
     prettifierBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
+
+    // A loaded sample is held at its original rate, so it has to be resampled
+    // again whenever the host's rate changes or it would play at the wrong pitch.
+    currentSampleRate = sampleRate;
+    pushGranularSampleToEngine();
 
     // Run the mod matrix at ~100 Hz regardless of sample rate.
     controlRateSamples = juce::jmax (1, (int) (sampleRate / 100.0));
@@ -1277,6 +1387,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
     if (mpeWasOn && ! mpeMode)
         mpeTracker.releaseAllNotes();   // drop stale voices when MPE is toggled off mid-note
     mpeWasOn = mpeMode;
+    entropyEngine.setSourceMode ((int) loadParam (p.grainSource, 0.0f));
     entropyEngine.setPolyOn (polyOn);
     entropyEngine.setMpeOn (mpeMode);
     if (mpeMode)
@@ -1871,6 +1982,7 @@ void GrainFreezeProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.appendChild (wrap ("AB_SLOT_C", slotC), nullptr);
         state.appendChild (wrap ("AB_SLOT_D", slotD), nullptr);
         state.setProperty ("convolutionIRPath", convolutionIRPath, nullptr);
+        state.setProperty ("granularSamplePath", granularSamplePath, nullptr);
         juce::MemoryOutputStream stream (destData, false);
         state.writeToStream (stream);
     }
@@ -1900,9 +2012,11 @@ void GrainFreezeProcessor::setStateInformation (const void* data, int sizeInByte
         for (int i = tree.getNumChildren(); --i >= 0;)
             if (tree.getChild (i).hasType ("PARAMS"))
                 tree.removeChild (i, nullptr);
-        convolutionIRPath = tree.getProperty ("convolutionIRPath").toString();   // may be a missing file; editor flags it
+        convolutionIRPath  = tree.getProperty ("convolutionIRPath").toString();   // may be a missing file; editor flags it
+        granularSamplePath = tree.getProperty ("granularSamplePath").toString();
         apvts.replaceState (tree);
         irReloadRequested.store (true, std::memory_order_relaxed);
+        sampleReloadRequested.store (true, std::memory_order_relaxed);
         triggerAsyncUpdate();
     }
 }

@@ -25,6 +25,10 @@ struct Grain
     float  panL        = 0.7071f;
     float  panR        = 0.7071f;
     float  skew        = 1.0f;  // window warp exponent, latched at spawn
+    // Which buffer this grain reads: the live capture ring or the loaded sample.
+    // Latched at spawn so switching source mid-grain can't misread the other
+    // buffer's length.
+    bool   fromSample  = false;
 };
 
 class GranularEngine
@@ -128,11 +132,46 @@ public:
     void setVelocityToAmp (float n)     { velocityToAmp.store (juce::jlimit (0.0f, 1.0f, n)); }
     void setMaxActiveGrains (int n)     { maxActiveGrains.store (juce::jlimit (1, kMaxGrains, n)); }
 
+    // ---- Sample source ----------------------------------------------------
+    // Hand the engine audio to granulate instead of the live input. The buffer
+    // must already be at the engine's sample rate. Called from the message
+    // thread: it parks the buffer, and process() swaps it in (a move, so no
+    // allocation and no free on the audio thread -- the old memory goes back to
+    // the message thread inside `pendingSample` and is released there).
+    void setSampleBuffer (juce::AudioBuffer<float>&& buf)
+    {
+        pendingSample = std::move (buf);
+        // Announce the length straight away: the UI has to be able to say "2.0s
+        // loaded" the moment a file is dropped, even with the transport stopped
+        // (the audio thread may not run again for a while).
+        announcedSampleLen.store (pendingSample.getNumSamples(), std::memory_order_release);
+        sampleSwapRequested.store (true, std::memory_order_release);
+    }
+    void clearSample()
+    {
+        pendingSample.setSize (0, 0);
+        announcedSampleLen.store (0, std::memory_order_release);
+        sampleSwapRequested.store (true, std::memory_order_release);
+    }
+    // 0 = granulate the live input, 1 = granulate the loaded sample. Falls back
+    // to live while no sample is loaded, so the mode can never go silent.
+    void setSourceMode (int mode) { sourceMode.store (mode, std::memory_order_relaxed); }
+    // What the engine has been handed (not what it has swapped in yet) -- this is
+    // the answer the UI wants. The audio thread uses sampleLen instead.
+    bool hasSample() const { return announcedSampleLen.load (std::memory_order_acquire) > 0; }
+    double getSampleLengthSeconds() const
+    {
+        const int len = announcedSampleLen.load (std::memory_order_acquire);
+        return len > 0 && sr > 0.0 ? (double) len / sr : 0.0;
+    }
+
     bool isPrepared() const { return prepared; }
 
 private:
     void spawnGrain();
-    inline float readInterpolated (int channel, double pos) const;
+    inline float readInterpolated (int channel, double pos, bool fromSample) const;
+    // True when the sample source is selected AND there is a sample to read.
+    bool readingSample() const { return sourceMode.load (std::memory_order_relaxed) == 1 && sampleLen > 0; }
 
     static constexpr int kMaxGrains    = 128;
     static constexpr int kWindowPoints = 2048;       // Hann lookup table size
@@ -145,6 +184,14 @@ private:
     int   captureWrite = 0;                          // write head
     int   captureLen   = 0;                          // length in samples
     bool  prepared     = false;
+
+    // Loaded sample to granulate instead of the live input, plus the handoff
+    // slot the message thread fills (see setSampleBuffer).
+    juce::AudioBuffer<float> sampleBuf, pendingSample;
+    int  sampleLen = 0;
+    std::atomic<bool> sampleSwapRequested { false };
+    std::atomic<int>  announcedSampleLen { 0 };   // length the message thread handed over
+    std::atomic<int>  sourceMode { 0 };
 
     double sr        = 44100.0;
     int    channels  = 2;

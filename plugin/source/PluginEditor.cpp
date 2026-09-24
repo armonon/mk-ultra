@@ -965,6 +965,46 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         s->setPopupDisplayEnabled (true, false, this); // drag-only: hover popups get stuck as orphaned bubbles
 
     // MIDI play controls — make the shared piano roll actually drive the grains.
+    // ---- Granular source: live input, or an audio file dropped on the plugin ----
+    setupSectionLabel (grainSourceTitle, "SOURCE", 13.0f);
+    addAndMakeVisible (grainSourceTitle);
+    grainSourceBox.addItemList ({ "Live", "Sample" }, 1);
+    grainSourceBox.setTooltip ("What the grain cloud chews on: the live input, or an audio file you load. "
+                               "Drop a file anywhere on the plugin to load one.");
+    addAndMakeVisible (grainSourceBox);
+    grainSourceAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        proc.apvts, "grainSource", grainSourceBox);
+
+    grainSampleLoad.setTooltip ("Load an audio file for the grain cloud to granulate "
+                                "(or just drop one onto the plugin)");
+    grainSampleLoad.onClick = [this]
+    {
+        const juce::File start (proc.getGranularSamplePath().isNotEmpty()
+                                ? juce::File (proc.getGranularSamplePath()).getParentDirectory()
+                                : juce::File::getSpecialLocation (juce::File::userMusicDirectory));
+        sampleChooser = std::make_unique<juce::FileChooser> (
+            "Load Sample", start, "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
+        sampleChooser->launchAsync (
+            juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this] (const juce::FileChooser& fc)
+            {
+                if (const auto f = fc.getResult(); f.existsAsFile())
+                    loadSampleFile (f);
+            });
+    };
+    addAndMakeVisible (grainSampleLoad);
+    grainSampleClear.setTooltip ("Forget the loaded sample and go back to granulating the live input");
+    grainSampleClear.onClick = [this]
+    {
+        proc.clearGranularSample();
+        updateGrainSampleLabel();
+    };
+    addAndMakeVisible (grainSampleClear);
+    grainSampleName.setJustificationType (juce::Justification::centredLeft);
+    grainSampleName.setFont (juce::FontOptions (12.0f));
+    addAndMakeVisible (grainSampleName);
+    updateGrainSampleLabel();
+
     addAndMakeVisible (midiEnableButton);
     midiEnableButton.setTooltip ("Let the keyboard / incoming MIDI transpose the grains");
     midiEnableAttach = std::make_unique<ButtonAttachment> (proc.apvts, "midiEnable", midiEnableButton);
@@ -1845,6 +1885,11 @@ void GrainFreezeEditor::updateTabVisibility()
 
     // MIDI on-ramp: always on the Texture drawer (it used to hide behind the
     // experimental-input-tools flag, which also made acceptsMidi() false).
+    grainSourceTitle.setVisible (entropyTab);
+    grainSourceBox.setVisible (entropyTab);
+    grainSampleLoad.setVisible (entropyTab);
+    grainSampleClear.setVisible (entropyTab);
+    grainSampleName.setVisible (entropyTab);
     midiEnableButton.setVisible (entropyTab);
     for (auto* c : { &midiRootSlider, &midiGlideSlider, &midiVelAmpSlider })
         c->setVisible (entropyTab);
@@ -1984,6 +2029,73 @@ void GrainFreezeEditor::updateTabVisibility()
 
     if (keyboard != nullptr)
         keyboard->setVisible (inputToolsVisible);
+}
+
+bool GrainFreezeEditor::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (const auto& f : files)
+        if (juce::File (f).hasFileExtension ("wav;aif;aiff;flac;ogg;mp3"))
+            return true;
+    return false;
+}
+
+void GrainFreezeEditor::fileDragEnter (const juce::StringArray& files, int, int)
+{
+    if (isInterestedInFileDrag (files))
+    {
+        fileDragActive = true;
+        repaint();
+    }
+}
+
+void GrainFreezeEditor::fileDragExit (const juce::StringArray&)
+{
+    fileDragActive = false;
+    repaint();
+}
+
+void GrainFreezeEditor::filesDropped (const juce::StringArray& files, int, int)
+{
+    fileDragActive = false;
+    repaint();
+    for (const auto& f : files)
+    {
+        const juce::File file (f);
+        if (file.hasFileExtension ("wav;aif;aiff;flac;ogg;mp3"))
+        {
+            loadSampleFile (file);
+            return;   // one sample at a time
+        }
+    }
+}
+
+void GrainFreezeEditor::loadSampleFile (const juce::File& file)
+{
+    if (! proc.loadGranularSample (file))
+    {
+        grainSampleName.setText ("Could not read " + file.getFileName(), juce::dontSendNotification);
+        return;
+    }
+    updateGrainSampleLabel();
+}
+
+void GrainFreezeEditor::updateGrainSampleLabel()
+{
+    const juce::File f (proc.getGranularSamplePath());
+    if (f.getFullPathName().isEmpty())
+    {
+        grainSampleName.setText ("Drop an audio file anywhere to granulate it",
+                                 juce::dontSendNotification);
+        return;
+    }
+    if (! proc.hasGranularSample())
+    {
+        grainSampleName.setText ("Sample not found: " + f.getFileName(), juce::dontSendNotification);
+        return;
+    }
+    grainSampleName.setText (f.getFileName() + "  ("
+                                 + juce::String (proc.getGranularSampleSeconds(), 1) + "s)",
+                             juce::dontSendNotification);
 }
 
 void GrainFreezeEditor::paint (juce::Graphics& g)
@@ -2159,6 +2271,23 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     {
         g.setColour (LF::bg.withAlpha ((1.0f - bootPhase) * 0.9f));
         g.fillRect (bounds);
+    }
+
+    // Dragging an audio file over the plugin: say what dropping it will do.
+    if (fileDragActive)
+    {
+        g.setColour (acc.withAlpha (0.10f));
+        g.fillRect (bounds);
+        g.setColour (acc);
+        g.drawRoundedRectangle (bounds.reduced (6.0f), 10.0f, 2.5f);
+        auto strip = juce::Rectangle<float> (bounds.getCentreX() - 220.0f, bounds.getCentreY() - 30.0f,
+                                             440.0f, 60.0f);
+        g.setColour (LF::bg.withAlpha (0.88f));
+        g.fillRoundedRectangle (strip, 8.0f);
+        g.setColour (acc);
+        g.drawRoundedRectangle (strip, 8.0f, 1.5f);
+        g.setFont (juce::FontOptions (18.0f));
+        g.drawText ("Drop to granulate this file", strip, juce::Justification::centred);
     }
 }
 
@@ -2356,6 +2485,18 @@ void GrainFreezeEditor::resized()
         });
         area.removeFromTop (gap);
         bottom = area.removeFromTop (122);
+        // SOURCE row: [SOURCE][Live/Sample][Load...][Clear][file name]
+        {
+            area.removeFromTop (4);
+            auto srow = area.removeFromTop (34);
+            grainSourceTitle.setBounds (srow.removeFromLeft (84).withSizeKeepingCentre (84, 20));
+            grainSourceBox.setBounds (srow.removeFromLeft (104).withSizeKeepingCentre (100, 26));
+            srow.removeFromLeft (6);
+            grainSampleLoad.setBounds (srow.removeFromLeft (84).withSizeKeepingCentre (80, 26));
+            grainSampleClear.setBounds (srow.removeFromLeft (70).withSizeKeepingCentre (66, 26));
+            srow.removeFromLeft (8);
+            grainSampleName.setBounds (srow.withTrimmedRight (8));
+        }
         // MIDI row: [MIDI on][Root][Glide][Vel->Amp]   [Poly Grains][MPE]
         {
             area.removeFromTop (4);

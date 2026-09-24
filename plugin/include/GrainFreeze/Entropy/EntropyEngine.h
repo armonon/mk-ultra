@@ -54,6 +54,12 @@ public:
     void setActiveNotes (const float* notes, int n)    { granular.setActiveNotes (notes, n); }
     void setMpeOn       (bool b)                       { granular.setMpeOn (b); }
     void setSeed        (unsigned s)                   { granular.setSeed (s); }
+    // Sample source: granulate a loaded file instead of the live input.
+    void setSampleBuffer (juce::AudioBuffer<float>&& b) { granular.setSampleBuffer (std::move (b)); }
+    void clearSample()                                 { granular.clearSample(); }
+    void setSourceMode  (int mode)                     { granular.setSourceMode (mode); }
+    bool hasSample() const                             { return granular.hasSample(); }
+    double getSampleLengthSeconds() const              { return granular.getSampleLengthSeconds(); }
     void setActiveVoices (const gf::GranularEngine::VoicePush* v, int n) { granular.setActiveVoices (v, n); }
     int  copyGrainSnapshot (gf::GranularEngine::GrainSnapshot* out, int maxOut) const
     { return granular.copyGrainSnapshot (out, maxOut); }

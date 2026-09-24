@@ -155,6 +155,19 @@ public:
     void applyConvolutionSelection();
     juce::String getConvolutionIRPath() const { return convolutionIRPath; }
 
+    // ---- Sample source ----------------------------------------------------
+    // Load an audio file for the granular engine to chew on instead of the live
+    // input, and switch the source over to it. Returns false if the file can't
+    // be read. Long files are trimmed (see kMaxSampleSeconds) so a dropped
+    // 10-minute bounce can't eat memory.
+    static constexpr double kMaxSampleSeconds = 30.0;
+    bool loadGranularSample (const juce::File& audioFile);
+    void clearGranularSample();
+    juce::String getGranularSamplePath() const { return granularSamplePath; }
+    // Seconds of audio the engine currently holds, 0 when there is none.
+    double getGranularSampleSeconds() const { return entropyEngine.getSampleLengthSeconds(); }
+    bool hasGranularSample() const { return entropyEngine.hasSample(); }
+
     // Test hook: deterministic grain spawning so audits are reproducible.
     void setDeterministicSeed (unsigned s) { entropyEngine.setSeed (s); }
     // Morph-corner snapshot by name (AB_SLOT_A .. AB_SLOT_D); invalid tree if unknown.
@@ -349,6 +362,7 @@ private:
         std::atomic<float>* lfoDivision = nullptr;
         std::atomic<float>* densityDivision = nullptr;
 
+        std::atomic<float>* grainSource = nullptr;
         std::atomic<float>* sampleMode = nullptr;
         std::atomic<float>* sampleWindow = nullptr;
         std::atomic<float>* sampleSource = nullptr;
@@ -505,6 +519,15 @@ private:
     juce::AudioBuffer<float> entropyBuffer;
     juce::AudioBuffer<float> prettifierBuffer;
     juce::String convolutionIRPath;
+
+    // Sample source. The file is kept at its original rate so it can be
+    // re-resampled if the host changes sample rate, and the path is saved with
+    // the session so the sample comes back with the project.
+    juce::String granularSamplePath;
+    juce::AudioBuffer<float> granularSampleOriginal;
+    double granularSampleRate = 0.0;
+    std::atomic<bool> sampleReloadRequested { false };
+    void pushGranularSampleToEngine();
 
     juce::ValueTree slotA { "AB_SLOT_A" };
     juce::ValueTree slotB { "AB_SLOT_B" };

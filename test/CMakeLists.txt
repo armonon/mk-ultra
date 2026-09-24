@@ -19,6 +19,7 @@ add_executable(GrainFreezeTests
     source/StateTests.cpp
     source/RoutingTests.cpp
     source/ModSourcesTests.cpp
+    source/SampleSourceTests.cpp
     # The full processor (+ editor it references) so tests can load presets,
     # round-trip state and benchmark the real signal chain.
     ${CMAKE_SOURCE_DIR}/plugin/source/PluginProcessor.cpp

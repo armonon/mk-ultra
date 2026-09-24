@@ -241,6 +241,7 @@ private:
 };
 
 class GrainFreezeEditor : public juce::AudioProcessorEditor,
+                          public juce::FileDragAndDropTarget,
                           private juce::Timer
 {
 public:
@@ -249,6 +250,13 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+
+    // Dropping an audio file anywhere on the editor loads it as the granular
+    // source -- the most discoverable way in, and it works over any drawer.
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void filesDropped (const juce::StringArray& files, int x, int y) override;
+    void fileDragEnter (const juce::StringArray& files, int x, int y) override;
+    void fileDragExit  (const juce::StringArray& files) override;
 
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -592,6 +600,16 @@ private:
     // ---- MOD SOURCES: the controls behind the matrix's own generators. LFO 2,
     // the tempo-synced step sequencer (16 steps, length + glide) and the random
     // sample & hold, plus the assignable CC number for the "MIDI CC" source.
+    // ---- Granular source: live input or a dropped audio file.
+    juce::Label      grainSourceTitle, grainSampleName;
+    juce::ComboBox   grainSourceBox;
+    juce::TextButton grainSampleLoad { "Load..." }, grainSampleClear { "Clear" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> grainSourceAttach;
+    std::unique_ptr<juce::FileChooser> sampleChooser;
+    void loadSampleFile (const juce::File& file);
+    void updateGrainSampleLabel();
+    bool fileDragActive = false;   // paints a drop hint while a file is over us
+
     juce::Label     modSourcesTitle, stepSeqTitle;
     juce::Slider    lfo2Rate, modRandomRate, modCcNumber, stepSeqLength, stepSeqSmooth;
     juce::Label     lfo2RateL, modRandomRateL, modCcNumberL, stepSeqLengthL, stepSeqSmoothL;

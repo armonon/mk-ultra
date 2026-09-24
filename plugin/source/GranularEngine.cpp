@@ -30,6 +30,7 @@ void GranularEngine::prepare (double sampleRate, int /*maxBlockSize*/, int numCh
 void GranularEngine::reset()
 {
     capture.clear();
+    for (auto& g : grains) g.fromSample = false;
     captureWrite = 0;
     grainClock   = 0.0;
     wasFrozen    = false;
@@ -56,7 +57,7 @@ void GranularEngine::pushInput (const juce::AudioBuffer<float>& input)
     captureWrite = (captureWrite + n) % captureLen;
 }
 
-inline float GranularEngine::readInterpolated (int channel, double pos) const
+inline float GranularEngine::readInterpolated (int channel, double pos, bool fromSample) const
 {
     // 4-point cubic Hermite (Catmull-Rom) interpolation with wraparound.
     //
@@ -66,17 +67,22 @@ inline float GranularEngine::readInterpolated (int channel, double pos) const
     // through the sample points, which drops the interpolation error by roughly
     // an order of magnitude in the top octave. This is the single biggest
     // audible quality factor in a granular engine.
-    while (pos < 0)           pos += captureLen;
-    while (pos >= captureLen) pos -= captureLen;
+    // Either buffer can be the source; a grain latched which one at spawn.
+    const auto& buf = fromSample ? sampleBuf : capture;
+    const int   len = fromSample ? sampleLen : captureLen;
+    if (len <= 0 || buf.getNumChannels() <= 0) return 0.0f;
+
+    while (pos < 0)    pos += len;
+    while (pos >= len) pos -= len;
 
     const int   i1 = (int) pos;
     const float f  = (float) (pos - (double) i1);
 
-    const int i0 = (i1 - 1 + captureLen) % captureLen;
-    const int i2 = (i1 + 1) % captureLen;
-    const int i3 = (i1 + 2) % captureLen;
+    const int i0 = (i1 - 1 + len) % len;
+    const int i2 = (i1 + 1) % len;
+    const int i3 = (i1 + 2) % len;
 
-    const auto* d = capture.getReadPointer (channel);
+    const auto* d = buf.getReadPointer (juce::jlimit (0, buf.getNumChannels() - 1, channel));
     const float y0 = d[i0], y1 = d[i1], y2 = d[i2], y3 = d[i3];
 
     // Catmull-Rom coefficients.
@@ -104,17 +110,26 @@ void GranularEngine::spawnGrain()
     if (activeCount >= activeLimit) return;
     if (slot == nullptr) return; // pool exhausted; drop the grain
 
-    const bool  isFrozen = frozen.load();
-    const float pos01    = position.load();
+    const bool  isFrozen  = frozen.load();
+    const float pos01     = position.load();
+    const bool  useSample = readingSample();
 
-    // Anchor: when frozen, read around the locked anchor; otherwise trail the
-    // write head so we read the most recent material.
-    double anchor = isFrozen
-        ? (double) frozenAnchor
-        : (double) ((captureWrite - (int) (0.05 * sr) + captureLen) % captureLen);
-
-    // Position offsets a window across the captured material.
-    anchor += pos01 * captureLen;
+    // Anchor. Reading the loaded sample, Position scrubs through the file from
+    // start to end. Reading live input: when frozen, read around the locked
+    // anchor; otherwise trail the write head for the most recent material, with
+    // Position offsetting a window across the captured material.
+    double anchor = 0.0;
+    if (useSample)
+    {
+        anchor = (double) pos01 * (double) sampleLen;
+    }
+    else
+    {
+        anchor = isFrozen
+            ? (double) frozenAnchor
+            : (double) ((captureWrite - (int) (0.05 * sr) + captureLen) % captureLen);
+        anchor += pos01 * captureLen;
+    }
 
     // Spray randomizes the read offset for texture.
     const double spraySamps = (sprayMs.load() / 1000.0) * sr;
@@ -170,12 +185,29 @@ void GranularEngine::spawnGrain()
     // Latch the window shape so a grain keeps a consistent envelope even if the
     // user sweeps the Shape knob mid-grain.
     slot->skew = grainSkew.load (std::memory_order_relaxed);
+    slot->fromSample = useSample;
 }
 
 void GranularEngine::process (juce::AudioBuffer<float>& output)
 {
     output.clear();
     if (! prepared) return;
+
+    // Take a sample handed over by the message thread. std::swap moves the
+    // buffers' pointers, so nothing is allocated or freed here -- the outgoing
+    // memory lives on in `pendingSample` until the message thread replaces it.
+    if (sampleSwapRequested.exchange (false, std::memory_order_acquire))
+    {
+        std::swap (sampleBuf, pendingSample);
+        sampleLen = sampleBuf.getNumSamples();
+        // Grains reading the old sample would land at stale offsets.
+        if (sampleLen <= 0)
+            for (auto& g : grains) { if (g.fromSample) g.active = false; }
+        else
+            for (auto& g : grains)
+                if (g.fromSample && g.readPos >= (double) sampleLen)
+                    g.readPos = 0.0;
+    }
 
     // Latch the freeze anchor at the moment freezing engages.
     const bool nowFrozen = frozen.load();
@@ -219,8 +251,8 @@ void GranularEngine::process (juce::AudioBuffer<float>& output)
                                              (int) (prog * (kWindowPoints - 1)));
             const float win  = window[(size_t) wIdx] * g.amp;
 
-            const float sL = readInterpolated (0, g.readPos) * win;
-            const float sR = readInterpolated (channels > 1 ? 1 : 0, g.readPos) * win;
+            const float sL = readInterpolated (0, g.readPos, g.fromSample) * win;
+            const float sR = readInterpolated (channels > 1 ? 1 : 0, g.readPos, g.fromSample) * win;
 
             // Equal-power pan, resolved at spawn (see spawnGrain).
             left  += sL * g.panL;
