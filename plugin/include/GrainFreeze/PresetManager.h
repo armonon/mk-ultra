@@ -1,6 +1,8 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <atomic>
+#include <functional>
 #include "GrainFreeze/FactoryPresets.h"
 
 namespace gf
@@ -27,7 +29,16 @@ public:
     bool deletePreset (const juce::String& name);
 
     // All preset names (no extension), sorted.
+    // Factory presets plus whatever the last directory scan found. Never touches
+    // the filesystem: enumerating a directory can block for a long time (a
+    // network share, a cloud-synced folder, or a wedged syspolicyd answering the
+    // xattr read), and this is called while building the editor -- which would
+    // hang the host's UI thread on every plugin open.
     juce::StringArray getPresetNames() const;
+
+    // Rescan the user preset folder on a background thread, then call `onDone`
+    // on the message thread. Safe to call repeatedly.
+    void refreshUserPresetsAsync (std::function<void()> onDone = {});
 
     // Cycle through presets; wraps around. No-op if none exist.
     void loadNext();
@@ -54,6 +65,9 @@ private:
 
     juce::AudioProcessorValueTreeState& apvts;
     juce::String currentPreset;
+    juce::CriticalSection cacheLock;
+    juce::StringArray cachedUserPresets;
+    std::atomic<bool> scanning { false };
 };
 
 } // namespace gf

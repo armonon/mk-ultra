@@ -161,6 +161,8 @@ void GrainFreezeProcessor::cacheParameterPointers()
     for (int i = 0; i < gf::ModSources::kMaxSteps; ++i)
         bind (paramPtrs.stepSeqSteps[(size_t) i], ("stepSeq" + juce::String (i + 1)).toRawUTF8());
     bind (paramPtrs.modRandomRate, "modRandomRate");
+    bind (paramPtrs.curveBars, "curveBars");
+    bind (paramPtrs.curveSync, "curveSync");
     bind (paramPtrs.modCcNumber, "modCcNumber");
     bind (paramPtrs.damageRate, "damageRate");
     bind (paramPtrs.damageJitter, "damageJitter");
@@ -418,6 +420,17 @@ void GrainFreezeProcessor::handleAsyncUpdate()
 
 // Loads whatever the convolutionIR choice says: a built-in synthesised space,
 // or the user's file when "Custom" is selected and a file is remembered.
+void GrainFreezeProcessor::storeCurveToState()
+{
+    apvts.state.setProperty ("curveShape", curve.toString(), nullptr);
+}
+
+void GrainFreezeProcessor::loadCurveFromState()
+{
+    if (const auto shape = apvts.state.getProperty ("curveShape").toString(); shape.isNotEmpty())
+        curve.fromString (shape);
+}
+
 void GrainFreezeProcessor::applyConvolutionSelection()
 {
     const int sel = (int) loadParam (paramPtrs.convolutionIR, 1.0f);
@@ -565,7 +578,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
                                     "Macro Damage", "Macro Emotion", "Morph X", "Morph Y",
                                     "Input Env",
                                     "LFO 2", "Step Seq", "Random",
-                                    "Velocity", "Note Pitch", "Mod Wheel", "Expression", "MIDI CC" };
+                                    "Velocity", "Note Pitch", "Mod Wheel", "Expression", "MIDI CC",
+                                    "Curve" };
         const StringArray targets { "None", "Grain Size", "Density", "Pitch", "Spray", "Spread",
                                     "Position", "Pitch Jitter", "Output", "Reverb (Grain)",
                                     "Echo Time", "Echo Feedback", "Echo Mix", "Reverb (Beauty)",
@@ -599,6 +613,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
             addFloat ("stepSeq" + juce::String (i + 1), "Step " + juce::String (i + 1),
                       NormalisableRange<float> (-1.0f, 1.0f, 0.001f), kDefaultSteps[i]);
         addFloat  ("modRandomRate", "Random Rate", NormalisableRange<float> (0.1f, 40.0f, 0.01f, 0.4f), 4.0f);
+        // The drawable Curve: how long one pass of the drawing lasts, and whether
+        // it locks to the host timeline or free-runs.
+        addChoice ("curveBars", "Curve Length", StringArray { "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars" }, 2);
+        addBool   ("curveSync", "Curve Tempo Lock", true);
         addInt    ("modCcNumber",   "MIDI CC Number", 0, 127, 1);
     }
     layout.group ("sync", "Tempo Sync");
@@ -1058,6 +1076,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     }
     timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
     modSources.prepare (sampleRate);
+    curve.prepare (sampleRate);
     pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
 
     // Report every latency-adding stage so the host can compensate. AIR's figure
@@ -1287,11 +1306,20 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
     const int n = buffer.getNumSamples();
 
     // Refresh host tempo early so the mod LFO / echo sync can use it this block.
+    bool   havePpq = false;
+    double ppqPosition = 0.0;
     if (auto* ph = getPlayHead())
     {
         juce::AudioPlayHead::CurrentPositionInfo info;
-        if (ph->getCurrentPosition (info) && info.bpm > 0.0)
-            currentBpm = info.bpm;
+        if (ph->getCurrentPosition (info))
+        {
+            if (info.bpm > 0.0)
+                currentBpm = info.bpm;
+            // A musical position lets the Curve lock to the grid instead of
+            // free-running from wherever playback happened to start.
+            havePpq = info.isPlaying && info.ppqPosition > 0.0;
+            ppqPosition = info.ppqPosition;
+        }
     }
 
     if (isOn (p.panic))
@@ -1358,6 +1386,13 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
             e = inputEnv.processSample (0, maxAbs);
         }
         inputEnvelopeValue.store (juce::jlimit (0.0f, 1.0f, e), std::memory_order_relaxed);
+
+        // Bucket that envelope by the Curve's phase so the curve editor can show
+        // the incoming audio lined up with the grid the curve is drawn on.
+        const int bucket = juce::jlimit (0, 255, (int) (curve.getPhase() * 256.0f));
+        auto& slot = curveEnvHistory[(size_t) bucket];
+        const float prev = slot.load (std::memory_order_relaxed);
+        slot.store (juce::jmax (juce::jlimit (0.0f, 1.0f, e), prev * 0.92f), std::memory_order_relaxed);
     }
 
     if (ctl.sampleModeOn || sampleFreezePending)
@@ -1400,6 +1435,11 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
         sp.steps        = steps;
         sp.randomRate   = loadParam (p.modRandomRate, 4.0f);
         modSources.advance (n, currentBpm, sp);
+
+        static constexpr float kCurveBars[] = { 0.25f, 0.5f, 1.0f, 2.0f, 4.0f };
+        const int bi = juce::jlimit (0, 4, (int) loadParam (p.curveBars, 2.0f));
+        curve.advance (n, currentBpm, kCurveBars[bi],
+                       havePpq && isOn (p.curveSync, true), ppqPosition);
     }
 
     // Advance the mod matrix in control-rate steps across the block. We tick at
@@ -1542,6 +1582,7 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
             case 19: return midiCcValues[11].load (std::memory_order_relaxed);   // Expression
             case 20: return midiCcValues[(size_t) juce::jlimit (0, 127, (int) loadParam (paramPtrs.modCcNumber, 1.0f))]
                                 .load (std::memory_order_relaxed);               // assignable CC
+            case 21: return curve.value();                          // drawn Curve -1..+1
             default: return 0.0f;
         }
     };
@@ -1991,6 +2032,12 @@ void GrainFreezeProcessor::getSpectrumSnapshot (std::array<float, kSpectrumBins>
         out[(size_t) i] = spectrumBins[(size_t) i].load (std::memory_order_relaxed);
 }
 
+void GrainFreezeProcessor::getCurveEnvelope (std::array<float, 256>& out) const
+{
+    for (int i = 0; i < 256; ++i)
+        out[(size_t) i] = curveEnvHistory[(size_t) i].load (std::memory_order_relaxed);
+}
+
 void GrainFreezeProcessor::getModScopeSnapshot (std::array<float, 256>& out) const
 {
     const int head = modScopeHead.load (std::memory_order_relaxed);
@@ -2028,6 +2075,7 @@ void GrainFreezeProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.appendChild (wrap ("AB_SLOT_D", slotD), nullptr);
         state.setProperty ("convolutionIRPath", convolutionIRPath, nullptr);
         state.setProperty ("granularSamplePath", granularSamplePath, nullptr);
+        state.setProperty ("curveShape", curve.toString(), nullptr);
         juce::MemoryOutputStream stream (destData, false);
         state.writeToStream (stream);
     }
@@ -2059,6 +2107,8 @@ void GrainFreezeProcessor::setStateInformation (const void* data, int sizeInByte
                 tree.removeChild (i, nullptr);
         convolutionIRPath  = tree.getProperty ("convolutionIRPath").toString();   // may be a missing file; editor flags it
         granularSamplePath = tree.getProperty ("granularSamplePath").toString();
+        if (const auto shape = tree.getProperty ("curveShape").toString(); shape.isNotEmpty())
+            curve.fromString (shape);
         apvts.replaceState (tree);
         irReloadRequested.store (true, std::memory_order_relaxed);
         sampleReloadRequested.store (true, std::memory_order_relaxed);

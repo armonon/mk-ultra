@@ -7,6 +7,7 @@
 #include "GrainFreeze/ModPanel.h"
 #include "GrainFreeze/Saturator.h"
 #include "GrainFreeze/BiohazardLookAndFeel.h"
+#include "GrainFreeze/CurveEditor.h"
 #include "GrainFreeze/Biohazard.h"
 #include "GrainFreeze/UpdateChecker.h"
 #include "GrainFreeze/TourOverlay.h"
@@ -281,6 +282,7 @@ private:
     void addKnob (LabeledKnob& k, gf::ParamId id, const juce::String& paramID, const juce::String& name);
     void openModPanel (LabeledKnob& k, const juce::String& name);
     void refreshPresetList();
+    void populatePresetBox();
 
     GrainFreezeProcessor& proc;
 
@@ -600,6 +602,14 @@ private:
     // ---- MOD SOURCES: the controls behind the matrix's own generators. LFO 2,
     // the tempo-synced step sequencer (16 steps, length + glide) and the random
     // sample & hold, plus the assignable CC number for the "MIDI CC" source.
+    // ---- The drawable modulation curve: the play surface's centrepiece.
+    std::unique_ptr<gf::CurveEditor> curveEditor;
+    juce::Label     curveTitle, curveHint;
+    juce::ComboBox  curveBarsBox;
+    juce::ToggleButton curveSyncButton { "Sync" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> curveBarsAttach;
+    std::unique_ptr<ButtonAttachment> curveSyncAttach;
+
     // ---- Granular source: live input or a dropped audio file.
     juce::Label      grainSourceTitle, grainSampleName;
     juce::ComboBox   grainSourceBox;
@@ -607,6 +617,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> grainSourceAttach;
     std::unique_ptr<juce::FileChooser> sampleChooser;
     void loadSampleFile (const juce::File& file);
+    void updateCurveDivisions();
     void updateGrainSampleLabel();
     bool fileDragActive = false;   // paints a drop hint while a file is over us
 

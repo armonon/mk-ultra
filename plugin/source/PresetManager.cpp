@@ -114,14 +114,32 @@ juce::StringArray PresetManager::getPresetNames() const
     for (auto& fp : factoryPresets())   // built-ins first (default, then categories)
         names.add (fp.name);
 
-    juce::StringArray userNames;
-    auto files = getPresetDirectory().findChildFiles (
-        juce::File::findFiles, false, juce::String ("*") + kExtension);
-    for (auto& f : files)
-        userNames.add (f.getFileNameWithoutExtension());
-    userNames.sort (true);
-    names.addArray (userNames);
+    const juce::ScopedLock sl (cacheLock);
+    names.addArray (cachedUserPresets);
     return names;
+}
+
+void PresetManager::refreshUserPresetsAsync (std::function<void()> onDone)
+{
+    if (scanning.exchange (true))
+        return;   // a scan is already in flight
+
+    juce::Thread::launch ([this, onDone = std::move (onDone)]
+    {
+        juce::StringArray userNames;
+        auto files = getPresetDirectory().findChildFiles (
+            juce::File::findFiles, false, juce::String ("*") + kExtension);
+        for (auto& f : files)
+            userNames.add (f.getFileNameWithoutExtension());
+        userNames.sort (true);
+        {
+            const juce::ScopedLock sl (cacheLock);
+            cachedUserPresets = userNames;
+        }
+        scanning.store (false);
+        if (onDone)
+            juce::MessageManager::callAsync (onDone);
+    });
 }
 
 int PresetManager::indexOfCurrent (const juce::StringArray& names) const

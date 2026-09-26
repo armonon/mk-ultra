@@ -720,6 +720,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     for (auto* l : { &satTypeLabel, &satDriveLabel, &satMixLabel })
     {
         l->setJustificationType (juce::Justification::centred);
+        l->setComponentID ("caption");
         l->setFont (juce::Font (juce::FontOptions (11.0f)));
         addAndMakeVisible (*l);
     }
@@ -766,12 +767,14 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         l.setText (text, juce::dontSendNotification);
         l.setJustificationType (juce::Justification::centredLeft);
         l.setFont (juce::Font (juce::FontOptions (size, juce::Font::bold)));
+        l.setComponentID ("section");   // drawn uppercase + letter-spaced
         addAndMakeVisible (l);
     };
     auto setupDialLabel = [this] (juce::Label& l, const juce::String& text)
     {
         l.setText (text, juce::dontSendNotification);
         l.setJustificationType (juce::Justification::centred);
+        l.setComponentID ("caption");
         l.setFont (juce::Font (juce::FontOptions (12.0f)));
         addAndMakeVisible (l);
     };
@@ -1219,6 +1222,30 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             proc.apvts, s + "Depth", modMatrixDepth[(size_t) i]);
     }
 
+    // ---- The drawable Curve --------------------------------------------
+    setupSectionLabel (curveTitle, "CURVE", 13.0f);
+    addAndMakeVisible (curveTitle);
+    curveHint.setText ("Route it from any Mod Matrix slot", juce::dontSendNotification);
+    curveHint.setJustificationType (juce::Justification::centredRight);
+    curveHint.setFont (juce::FontOptions (11.0f));
+    curveHint.setColour (juce::Label::textColourId, gf::BiohazardLookAndFeel::textDim);
+    addAndMakeVisible (curveHint);
+
+    curveEditor = std::make_unique<gf::CurveEditor> (proc.curve);
+    curveEditor->onEdit = [this] (const gf::CurveSource::Shape&) { proc.storeCurveToState(); };
+    addAndMakeVisible (*curveEditor);
+
+    curveBarsBox.addItemList (choicesOf ("curveBars"), 1);
+    curveBarsBox.setTooltip ("How long one pass of the drawing lasts");
+    addAndMakeVisible (curveBarsBox);
+    curveBarsAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        proc.apvts, "curveBars", curveBarsBox);
+    curveBarsBox.onChange = [this] { updateCurveDivisions(); };
+    curveSyncButton.setTooltip ("Lock the curve to the host timeline, so it lines up with the grid every time");
+    addAndMakeVisible (curveSyncButton);
+    curveSyncAttach = std::make_unique<ButtonAttachment> (proc.apvts, "curveSync", curveSyncButton);
+    updateCurveDivisions();
+
     // ---- MOD SOURCES: controls for the matrix's own generators ----
     setupSectionLabel (modSourcesTitle, "MOD SOURCES", 13.0f);
     setupSectionLabel (stepSeqTitle,    "STEP SEQ",    13.0f);
@@ -1235,6 +1262,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         addAndMakeVisible (k);
         l.setText (name, juce::dontSendNotification);
         l.setJustificationType (juce::Justification::centred);
+        l.setComponentID ("caption");
         l.setFont (juce::FontOptions (11.0f));
         addAndMakeVisible (l);
         attach = std::make_unique<SliderAttachment> (proc.apvts, paramId, k);
@@ -1474,7 +1502,10 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             &tabEntropy, &tabMachines, &tabPrettifier, &tabAir, &tabMix,
             &homeTextureOn, &homeSpaceOn, &airOn,
             &morphPad, &morphPadLabel, &grainViz, &morphCapA, &morphCapB, &morphCapC, &morphCapD,
+            // The Curve is part of the play surface, not a drawer.
+            &curveTitle, &curveHint, &curveBarsBox, &curveSyncButton,
             &fadeOverlay, &tourOverlay, &drawerView };
+        if (curveEditor != nullptr) stay.push_back (curveEditor.get());
         for (auto& k : macroKnobs)  stay.push_back (&k);
         for (auto& l : macroLabels) stay.push_back (&l);
         if (waveformDisplay != nullptr) stay.push_back (waveformDisplay.get());
@@ -1595,6 +1626,15 @@ void GrainFreezeEditor::timerCallback()
     if (currentTab == -1 && animating)
         grainViz.refresh();
 
+    // The Curve's playhead and the audio drawn behind it.
+    if (currentTab == -1 && curveEditor != nullptr && curveEditor->isVisible())
+    {
+        std::array<float, 256> env {};
+        proc.getCurveEnvelope (env);
+        curveEditor->setEnvelope (env);
+        curveEditor->setPlayhead (proc.curve.getPhase());
+    }
+
     if (animating)
     {
         auto updateKnobRing = [this] (LabeledKnob& k)
@@ -1644,6 +1684,7 @@ void GrainFreezeEditor::addKnob (LabeledKnob& k, gf::ParamId id, const juce::Str
 
     k.label.setText (name, juce::dontSendNotification);
     k.label.setJustificationType (juce::Justification::centred);
+    k.label.setComponentID ("caption");
     addAndMakeVisible (k.label);
 
     k.lock.setComponentID ("lock"); // drawn as a padlock by the LookAndFeel
@@ -1671,6 +1712,20 @@ void GrainFreezeEditor::openModPanel (LabeledKnob& k, const juce::String& name)
 }
 
 void GrainFreezeEditor::refreshPresetList()
+{
+    // Kick a background rescan of the user folder and repopulate when it lands.
+    // The list below is built from the cache, so opening the editor never waits
+    // on the filesystem.
+    juce::Component::SafePointer<GrainFreezeEditor> safe (this);
+    proc.presets.refreshUserPresetsAsync ([safe]
+    {
+        if (auto* self = safe.getComponent())
+            self->populatePresetBox();
+    });
+    populatePresetBox();
+}
+
+void GrainFreezeEditor::populatePresetBox()
 {
     presetBox.clear (juce::dontSendNotification);
     auto names = proc.presets.getPresetNames();
@@ -1798,10 +1853,16 @@ void GrainFreezeEditor::updateTabVisibility()
     const bool prettifierTab = currentTab == 2;
     const bool machinesTab = currentTab == 3;
     const bool playSurface = currentTab == -1;
-    const bool homeTab = false;   // retired: macros are always visible, play surface replaces the rest
     constexpr bool inputToolsVisible = kMkUltraExperimentalInputTools;
 
     tabHome.setVisible (false);
+    // The Curve lives on the play surface.
+    if (curveEditor != nullptr) curveEditor->setVisible (playSurface);
+    curveTitle.setVisible (playSurface);
+    curveHint.setVisible (playSurface);
+    curveBarsBox.setVisible (playSurface);
+    curveSyncButton.setVisible (playSurface);
+
     tabEntropy.setToggleState (entropyTab, juce::dontSendNotification);
     tabMix.setToggleState (mixTab, juce::dontSendNotification);
     tabPrettifier.setToggleState (prettifierTab, juce::dontSendNotification);
@@ -2079,6 +2140,16 @@ void GrainFreezeEditor::loadSampleFile (const juce::File& file)
     updateGrainSampleLabel();
 }
 
+void GrainFreezeEditor::updateCurveDivisions()
+{
+    // Grid lines per loop: quarter-note divisions for the shorter lengths, then
+    // a line per beat once the loop is a bar or longer.
+    static constexpr int kDivs[] = { 4, 8, 16, 16, 16 };
+    const int idx = juce::jlimit (0, 4, curveBarsBox.getSelectedItemIndex());
+    if (curveEditor != nullptr)
+        curveEditor->setDivisions (kDivs[idx]);
+}
+
 void GrainFreezeEditor::updateGrainSampleLabel()
 {
     const juce::File f (proc.getGranularSamplePath());
@@ -2102,169 +2173,72 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
 {
     using LF = gf::BiohazardLookAndFeel;
 
-    // Fully static, lightweight background: no boot fade, no glow breathe, no
-    // flicker, no drifting bloom, no spores. paint() only runs on real repaints.
-    const float pulse = 0.12f;
-    const float boot = 1.0f;   // no boot fade now; logo halo still scales by this
-    // Paint in the same logical space the children are laid out in.
+    // The ground: near-black with a single soft accent bloom behind the top of
+    // the page, and nothing else. No artwork, no per-tab washes, no vignette --
+    // the controls and the visualisers carry the screen.
     g.addTransform (juce::AffineTransform::scale ((float) getWidth() / (float) kDesignW));
     const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) kDesignW, (float) kDesignH);
-    const int tab = 0;   // one visual theme for the whole page (was per-tab tints)
-
-    auto drawBgImage = [&g, &bounds] (const juce::Image& img, float opacity)
-    {
-        if (! img.isValid()) return;
-        g.setOpacity (opacity);
-        g.drawImage (img, bounds, juce::RectanglePlacement::fillDestination);
-        g.setOpacity (1.0f);
-    };
-
     const auto acc = lnf.accent();
 
-    // Static base gradient per tab tint.
     {
-        const bool pretty = (tab == 2);
-        // Premium-minimal: a consistent deep vignette with only the faintest tab
-        // tint, rather than strong warm/cool per-tab washes.
-        const juce::Colour topCol = pretty   ? juce::Colour (0xff14161b)
-                                  : tab == 1 ? juce::Colour (0xff16151a)
-                                             : juce::Colour (0xff121512);
-        const juce::Colour midCol = LF::bg;
-        const juce::Colour botCol = LF::bg.darker (0.4f);
-        juce::ColourGradient base (topCol, bounds.getCentreX(), 0.0f,
-                                   botCol, bounds.getCentreX(), bounds.getHeight(), false);
-        base.addColour (0.45, midCol);
-        g.setGradientFill (base);
+        juce::ColourGradient ground (juce::Colour (0xff0b0d12), bounds.getCentreX(), 0.0f,
+                                     LF::ink, bounds.getCentreX(), bounds.getHeight() * 0.75f, false);
+        g.setGradientFill (ground);
         g.fillRect (bounds);
     }
 
-    // Background artwork (static, subtle).
-    if (tab == 0 || tab == 3 || tab == 4)
-        drawBgImage (bgImage, 0.07f);
-    else if (tab == 2)
-        drawBgImage (prettifierBgImage, 0.11f);
-    else
-        drawBgImage (mixBgImage, 0.11f);
-
-    // Mix tab: static warm aura.
-    if (tab == 1)
+    // One bloom, high and wide, tinted by the accent. This is the only colour in
+    // the background and it is what makes the page feel lit rather than flat.
     {
-        const float auraA = 0.10f;
-        juce::ColourGradient aura (LF::gold.withAlpha (auraA),
-                                   bounds.getCentreX(), bounds.getHeight() * 0.40f,
-                                   juce::Colours::transparentBlack,
-                                   bounds.getCentreX(), bounds.getHeight() * 0.95f, true);
-        aura.addColour (0.5, LF::gold.withAlpha (auraA * 0.5f));
-        g.setGradientFill (aura);
+        const auto centre = juce::Point<float> (bounds.getCentreX(), bounds.getHeight() * 0.16f);
+        const float r = bounds.getWidth() * 0.85f;
+        juce::ColourGradient bloom (acc.withAlpha (0.085f), centre.x, centre.y,
+                                    juce::Colours::transparentBlack, centre.x + r, centre.y + r, true);
+        bloom.addColour (0.35, acc.withAlpha (0.030f));
+        g.setGradientFill (bloom);
         g.fillRect (bounds);
     }
 
-    // Soft top accent wash (static).
+    // Header rule.
     {
-        juce::ColourGradient topGlow (acc.withAlpha (pulse * 0.24f), bounds.getCentreX(), -40.0f,
-                                      juce::Colours::transparentBlack, bounds.getCentreX(), bounds.getHeight() * 0.55f, false);
-        g.setGradientFill (topGlow);
-        g.fillRect (bounds);
+        const auto band = juce::Rectangle<int> (0, 0, kDesignW, kDesignH).reduced (20).removeFromTop (kHeaderH);
+        g.setColour (LF::line);
+        g.fillRect (juce::Rectangle<float> ((float) band.getX(), (float) band.getBottom() + 6.0f,
+                                            (float) band.getWidth(), 1.0f));
     }
 
-    // Logo watermark on the Texture tab (static, subtle).
-    if (tab == 0 && logoImage.isValid() && ! watermark.isEmpty())
+    // Brand mark: one emblem, one soft halo, no per-tab switching.
     {
-        auto wmArea = watermark.getBounds();
-        g.setOpacity (0.06f);
-        g.drawImage (logoImage, wmArea, juce::RectanglePlacement::centred);
-        g.setOpacity (1.0f);
-    }
+        const auto band = juce::Rectangle<int> (0, 0, kDesignW, kDesignH).reduced (20).removeFromTop (kHeaderH);
+        auto logoBox = juce::Rectangle<float> (46.0f, 46.0f)
+                           .withCentre ({ (float) band.getX() + kLogoSlot * 0.5f, (float) band.getCentreY() });
+        const auto halo = logoBox.expanded (logoBox.getWidth() * 0.55f);
+        juce::ColourGradient glow (acc.withAlpha (0.22f), halo.getCentreX(), halo.getCentreY(),
+                                   juce::Colours::transparentBlack, halo.getRight(), halo.getBottom(), true);
+        g.setGradientFill (glow);
+        g.fillEllipse (halo);
 
-    // Header: brand logo only (switches per tab). No title text, no box -- the
-    // logo's black background is keyed out in prepLogo() so it blends cleanly.
-    // Tabs are real buttons positioned beside the logo in resized().
-    {
-        // Per tab: Entropy = native green emblem, Mix = white emblem, Prettifier = its own art.
-        const bool entropyTab = (tab == 0);
-        const bool mixTab     = (tab == 1);
-        const juce::Colour orange (0xffff8a1e);
-        const juce::Image& brandLogo = (tab == 2 && prettifierLogoImage.isValid()) ? prettifierLogoImage
-                                     : (mixTab && whiteLogoImage.isValid())        ? whiteLogoImage
-                                     : (entropyTab && greenLogoImage.isValid())    ? greenLogoImage
-                                                                                   : logoImage;
-        if (brandLogo.isValid())
+        if (logoImage.isValid())
+            g.drawImage (logoImage, logoBox, juce::RectanglePlacement::centred);
+        else
         {
-            // Emblem sits centred on the header row and may overhang it a little.
-            const auto band = juce::Rectangle<int> (0, 0, kDesignW, kDesignH).reduced (20).removeFromTop (kHeaderH);
-            auto logoBox = juce::Rectangle<float> (56.0f, 56.0f).withCentre ({ (float) band.getX() + kLogoSlot * 0.5f,
-                                                                               (float) band.getCentreY() });
-
-            // Soft halo behind the emblem: Entropy = large breathing green, Mix =
-            // large breathing orange (both clearly lit), other tabs keep accent.
-            const bool tinted = entropyTab || mixTab;
-            const juce::Colour glowCol = entropyTab ? LF::toxic : mixTab ? orange : acc;
-            const float breathe   = 1.0f + 0.05f * std::sin (animPhase * 1.7f);
-            const float haloScale = tinted ? 0.42f * breathe : 0.35f;
-            const float haloAlpha = (entropyTab ? 0.34f : mixTab ? 0.18f : 0.18f) + glowLevel * 0.05f;
-            const auto halo = logoBox.expanded (logoBox.getWidth() * haloScale);
-
-            // On the busy/light Mix backdrop, seat the emblem on a soft dark disc so
-            // the white logo and orange glow separate from the background.
-            if (mixTab)
-            {
-                const auto seat = halo.reduced (halo.getWidth() * 0.18f);
-                juce::ColourGradient dark (juce::Colours::black.withAlpha (0.45f * boot),
-                                           seat.getCentreX(), seat.getCentreY(),
-                                           juce::Colours::transparentBlack, seat.getRight(), seat.getBottom(), true);
-                g.setGradientFill (dark);
-                g.fillEllipse (seat);
-            }
-
-            // Mix keeps only its dark seat disc (drawn above) — no coloured glow.
-            if (! mixTab)
-            {
-                juce::ColourGradient glow (glowCol.withAlpha (haloAlpha * boot),
-                                           halo.getCentreX(), halo.getCentreY(),
-                                           juce::Colours::transparentBlack, halo.getRight(), halo.getBottom(), true);
-                if (tinted) // gentle inner core that fades out
-                    glow.addColour (0.32, glowCol.brighter (0.1f).withAlpha (haloAlpha * 0.6f * boot));
-                g.setGradientFill (glow);
-                g.fillEllipse (halo);
-            }
-
-            g.setOpacity (boot);
-            g.drawImage (brandLogo, logoBox, juce::RectanglePlacement::centred);
-            g.setOpacity (1.0f);
+            g.setColour (acc);
+            g.drawEllipse (logoBox.reduced (6.0f), 2.0f);
         }
+
+        // No wordmark here: the preset bar starts immediately to the right of the
+        // emblem, and the two collide.
     }
 
-    // Signal-chain strip: a connecting line behind the tiles, and a hollow ring
-    // in the on/off slot of the two stages that have no switch (Machines,
-    // Master) so the row keeps its rhythm.
+    // Signal-chain strip: a hairline behind the tiles so the row reads as a path.
     {
         const auto first = tabEntropy.getBounds(), last = tabMix.getBounds();
         if (! first.isEmpty() && ! last.isEmpty())
         {
             const float y = (float) first.getCentreY();
-            g.setColour (LF::textCol.withAlpha (0.14f));
-            g.drawLine ((float) homeTextureOn.getX(), y, (float) last.getRight(), y, 2.0f);
-            auto ring = [&] (const juce::Rectangle<int>& tile)
-            {
-                const float cx = (float) tile.getX() - 17.0f;
-                g.setColour (LF::textCol.withAlpha (0.35f));
-                g.drawEllipse (cx - 5.0f, y - 5.0f, 10.0f, 10.0f, 1.5f);
-            };
-            ring (tabMachines.getBounds());
-            ring (tabMix.getBounds());
+            g.setColour (LF::text.withAlpha (0.10f));
+            g.drawLine ((float) homeTextureOn.getX(), y, (float) last.getRight(), y, 1.0f);
         }
-    }
-
-    // Soft vignette for focus (gentle, modern).
-    {
-        const float vigAlpha = tab == 2 ? 0.16f : 0.26f;
-        juce::ColourGradient vig (juce::Colours::transparentBlack,
-                                  bounds.getCentreX(), bounds.getCentreY(),
-                                  juce::Colours::black.withAlpha (vigAlpha),
-                                  bounds.getCentreX(), bounds.getBottom(), true);
-        vig.addColour (0.7, juce::Colours::transparentBlack);
-        g.setGradientFill (vig);
-        g.fillRect (bounds);
     }
 
     if (bootPhase < 1.0f)
@@ -2276,18 +2250,16 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     // Dragging an audio file over the plugin: say what dropping it will do.
     if (fileDragActive)
     {
-        g.setColour (acc.withAlpha (0.10f));
+        g.setColour (LF::ink.withAlpha (0.72f));
         g.fillRect (bounds);
+        g.setColour (acc.withAlpha (0.7f));
+        g.drawRoundedRectangle (bounds.reduced (10.0f), 14.0f, 2.0f);
+        auto strip = juce::Rectangle<float> (bounds.getCentreX() - 230.0f, bounds.getCentreY() - 34.0f,
+                                             460.0f, 68.0f);
+        LF::drawPanel (g, strip, 12.0f, true);
         g.setColour (acc);
-        g.drawRoundedRectangle (bounds.reduced (6.0f), 10.0f, 2.5f);
-        auto strip = juce::Rectangle<float> (bounds.getCentreX() - 220.0f, bounds.getCentreY() - 30.0f,
-                                             440.0f, 60.0f);
-        g.setColour (LF::bg.withAlpha (0.88f));
-        g.fillRoundedRectangle (strip, 8.0f);
-        g.setColour (acc);
-        g.drawRoundedRectangle (strip, 8.0f, 1.5f);
-        g.setFont (juce::FontOptions (18.0f));
-        g.drawText ("Drop to granulate this file", strip, juce::Justification::centred);
+        g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
+        LF::drawTracked (g, "Drop to granulate this file", strip, juce::Justification::centred, 2.4f);
     }
 }
 
@@ -2847,6 +2819,19 @@ void GrainFreezeEditor::resized()
         morphCapB.setBounds (capRow.removeFromLeft (cw)); capRow.removeFromLeft (6);
         morphCapC.setBounds (capRow.removeFromLeft (cw)); capRow.removeFromLeft (6);
         morphCapD.setBounds (capRow.removeFromLeft (cw));
+
+        // The Curve is the centrepiece of the play surface: it takes whatever
+        // height is left under the pads, which is most of the page.
+        area.removeFromTop (18);
+        auto head = area.removeFromTop (24);
+        curveTitle.setBounds (head.removeFromLeft (110).withSizeKeepingCentre (110, 20));
+        curveBarsBox.setBounds (head.removeFromLeft (96).withSizeKeepingCentre (92, 24));
+        head.removeFromLeft (8);
+        curveSyncButton.setBounds (head.removeFromLeft (92).withSizeKeepingCentre (88, 24));
+        curveHint.setBounds (head.withTrimmedRight (4));
+        area.removeFromTop (8);
+        if (curveEditor != nullptr)
+            curveEditor->setBounds (area.removeFromTop (juce::jmax (150, area.getHeight() - 8)));
     }
 
     if (currentTab == 0)

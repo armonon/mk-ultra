@@ -7,6 +7,7 @@
 #include "GrainFreeze/Mix/MixEngine.h"
 #include "GrainFreeze/Modulation/MidiNoteController.h"
 #include "GrainFreeze/Modulation/ModSources.h"
+#include "GrainFreeze/Modulation/CurveSource.h"
 #include "GrainFreeze/ModMatrix.h"
 #include "GrainFreeze/Prettifier/PrettifierEngine.h"
 #include "GrainFreeze/Presets/SnapshotManager.h"
@@ -331,6 +332,8 @@ private:
         std::atomic<float>* stepSeqSmooth = nullptr;
         std::array<std::atomic<float>*, (size_t) gf::ModSources::kMaxSteps> stepSeqSteps {};
         std::atomic<float>* modRandomRate = nullptr;
+        std::atomic<float>* curveBars = nullptr;
+        std::atomic<float>* curveSync = nullptr;
         std::atomic<float>* modCcNumber = nullptr;
 
         // Universal modulation matrix slots (4 of each).
@@ -493,6 +496,17 @@ private:
     // tracked whether or not the MIDI grain controls are enabled, so "Velocity"
     // or "Mod Wheel" can modulate a knob without turning the keyboard on.
     gf::ModSources         modSources;
+public:
+    // The drawable modulation curve. The editor owns the shape; the audio thread
+    // reads it through CurveSource's own double buffer.
+    gf::CurveSource        curve;
+    // Persist the drawn shape with the session / user presets.
+    void storeCurveToState();
+    void loadCurveFromState();
+    // The input envelope, bucketed by the Curve's own phase, so the editor can
+    // draw the audio underneath the drawing it lines up with.
+    void getCurveEnvelope (std::array<float, 256>& out) const;
+private:
     std::atomic<float>     lastNoteVelocity { 0.0f };
     std::atomic<float>     lastNotePitch { 0.0f };       // (note - 60) / 48, -1..1
     std::array<std::atomic<float>, 128> midiCcValues {};
@@ -547,6 +561,7 @@ private:
     std::array<std::atomic<float>, 256> waveformHistory {};
     std::atomic<int> waveformHead { 0 };
     std::array<std::atomic<float>, 256> modScopeHistory {};
+    std::array<std::atomic<float>, 256> curveEnvHistory {};
     std::atomic<int> modScopeHead { 0 };
 
     // Spectrum analyzer FFT (audio-thread fill, UI-thread read via atomics).

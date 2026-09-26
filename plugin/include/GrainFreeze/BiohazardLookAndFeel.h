@@ -5,28 +5,45 @@
 namespace gf
 {
 
-// Toxic-green biohazard theme. Centralizes the palette and overrides JUCE's
-// drawing for rotary sliders, linear sliders, buttons, and combo boxes so the
-// whole plugin shares one industrial, radioactive look.
+// The plugin's visual language: near-black ground, one vivid accent, hairline
+// panels, flat thin-ring knobs and uppercase tracked labels. Everything is drawn
+// -- no bitmaps, no bevels, no metal -- so it stays crisp at every UI scale.
+//
+// (The class keeps its original name so every existing reference still resolves;
+// the "biohazard" era of brushed chrome and grunge textures is gone.)
 class BiohazardLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    // Palette, pulled from the reference image.
-    static const juce::Colour bg;        // near-black background
-    static const juce::Colour panel;     // slightly lifted panel surface
-    static const juce::Colour metal;     // brushed chrome
-    static const juce::Colour metalHi;   // highlight edge
-    static const juce::Colour metalLo;   // shadow edge
-    static const juce::Colour toxic;      // glowing toxic green
-    static const juce::Colour toxicDim;  // dimmer green for tracks
-    static const juce::Colour coral;      // negative-mod accent
-    static const juce::Colour textCol;   // pale green-white text
-    static const juce::Colour gold;     // (legacy) warm tone, used by the mix blend
+    // ---- Design tokens ----------------------------------------------------
+    static const juce::Colour ink;        // page ground
+    static const juce::Colour surface;    // panel
+    static const juce::Colour surfaceHi;  // raised panel / control face
+    static const juce::Colour line;       // hairline borders (low-alpha white)
+    static const juce::Colour accentA;    // the accent: electric blue
+    static const juce::Colour accentB;    // gradient partner / secondary: violet
+    static const juce::Colour accentC;    // tertiary: teal
+    static const juce::Colour text;       // primary text
+    static const juce::Colour textDim;    // labels, secondary text
+    static const juce::Colour negative;   // negative modulation / danger
+
+    // ---- Legacy names, re-pointed at the tokens above so existing call sites
+    // keep working. Prefer the tokens in new code.
+    static const juce::Colour bg;
+    static const juce::Colour panel;
+    static const juce::Colour metal;
+    static const juce::Colour metalHi;
+    static const juce::Colour metalLo;
+    static const juce::Colour toxic;
+    static const juce::Colour toxicDim;
+    static const juce::Colour coral;
+    static const juce::Colour textCol;
+    static const juce::Colour gold;
     static const juce::Colour goldDim;
-    static const juce::Colour blendAccent; // mix-tab bridge tone
-    static const juce::Colour iceBlue;    // prettifier accent (diamond blue)
+    static const juce::Colour blendAccent;
+    static const juce::Colour iceBlue;
     static const juce::Colour iceBlueDim;
 
+    // One accent for the whole plugin. The enum survives for call compatibility.
     enum class AccentTheme { entropy, mix, prettifier };
 
     BiohazardLookAndFeel();
@@ -37,6 +54,22 @@ public:
     juce::Colour accent() const;
     juce::Colour accentDim() const;
 
+    // ---- Shared drawing helpers -------------------------------------------
+    // Uppercase, letter-spaced text -- the single strongest signal of the style.
+    // JUCE has no tracking, so glyphs are advanced by hand.
+    static void drawTracked (juce::Graphics& g, const juce::String& textToDraw,
+                             juce::Rectangle<float> area, juce::Justification just,
+                             float tracking = 1.6f);
+
+    // A panel: flat fill plus a hairline. `elevated` lifts the fill one step.
+    static void drawPanel (juce::Graphics& g, juce::Rectangle<float> bounds,
+                           float radius = 10.0f, bool elevated = false);
+
+    // Soft bloom around a shape, for accent-lit elements.
+    static void drawGlow (juce::Graphics& g, const juce::Path& shape,
+                          juce::Colour colour, float strength = 1.0f);
+
+    // Kept for source compatibility with older call sites.
     void drawPanelInset (juce::Graphics& g, juce::Rectangle<float> bounds, float cornerRadius = 5.0f) const;
     void drawPanelRaised (juce::Graphics& g, juce::Rectangle<float> bounds, float cornerRadius = 5.0f) const;
 
@@ -67,6 +100,8 @@ public:
                        int buttonX, int buttonY, int buttonW, int buttonH,
                        juce::ComboBox&) override;
 
+    void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
+
     void drawPopupMenuBackground (juce::Graphics&, int width, int height) override;
 
     void drawPopupMenuItem (juce::Graphics&, const juce::Rectangle<int>& area,
@@ -76,27 +111,17 @@ public:
                             const juce::Colour* textColourToUse) override;
 
     void fillTextEditorBackground (juce::Graphics&, int width, int height, juce::TextEditor&) override;
+    void drawTextEditorOutline (juce::Graphics&, int width, int height, juce::TextEditor&) override;
 
     juce::Font getLabelFont (juce::Label&) override;
+    void drawLabel (juce::Graphics&, juce::Label&) override;
 
-    void drawLabel (juce::Graphics&, juce::Label&) override; // TEMP DIAG
+    void drawScrollbar (juce::Graphics&, juce::ScrollBar&, int x, int y, int width, int height,
+                        bool isScrollbarVertical, int thumbStartPosition, int thumbSize,
+                        bool isMouseOver, bool isMouseDown) override;
 
 private:
-    void drawBevelEmbossRect (juce::Graphics& g, juce::Rectangle<float> bounds, float cornerRadius,
-                              juce::Colour face, bool raised, float depth) const;
-    void drawBevelEmbossEllipse (juce::Graphics& g, juce::Rectangle<float> bounds,
-                                 juce::Colour face, bool raised, float depth) const;
-    void drawBrushedMetalEllipse (juce::Graphics& g, juce::Rectangle<float> bounds, bool raised) const;
-    void drawSpecularHighlight (juce::Graphics& g, juce::Rectangle<float> bounds, float amount) const;
-    void drawDiamondFace (juce::Graphics& g, juce::Rectangle<float> bounds, bool hover,
-                          juce::Colour accentTint) const;
-
     AccentTheme accentTheme = AccentTheme::entropy;
-    // Procedural weathered-metal texture, generated once and composited onto
-    // knob bodies (clipped to the circle) for an industrial, corroded look.
-    void ensureGrungeTexture (int diameter);
-    juce::Image grunge;
-    int grungeDiameter = 0;
 };
 
 } // namespace gf
