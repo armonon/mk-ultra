@@ -15,6 +15,10 @@ bool isOn (const std::atomic<float>* p, bool fallback = false) noexcept
     return loadParam (p, fallback ? 1.0f : 0.0f) > 0.5f;
 }
 
+// Defined further down, next to the sample loader that is its main caller.
+juce::AudioBuffer<float> resampleBuffer (const juce::AudioBuffer<float>& src,
+                                         double srcRate, double dstRate, int maxOutSamples);
+
 int matrixTargetParamId (int idx) noexcept
 {
     // Maps a Mod Matrix "Target" dropdown index to a ParamId. Index 0 is None,
@@ -444,6 +448,99 @@ void GrainFreezeProcessor::handleAsyncUpdate()
 
 // Loads whatever the convolutionIR choice says: a built-in synthesised space,
 // or the user's file when "Custom" is selected and a file is remembered.
+bool GrainFreezeProcessor::canBounce() const
+{
+    return granularSampleOriginal.getNumSamples() > 0
+        || bounceHasAudio.load (std::memory_order_relaxed);
+}
+
+bool GrainFreezeProcessor::renderBounce (const juce::File& destination, double maxSeconds)
+{
+    const double sr = currentSampleRate > 0.0 ? currentSampleRate : 48000.0;
+
+    // Source material: the loaded sample if there is one, otherwise the rolling
+    // input capture, read out from the oldest sample so it plays in order.
+    juce::AudioBuffer<float> source;
+    if (granularSampleOriginal.getNumSamples() > 0)
+    {
+        source = resampleBuffer (granularSampleOriginal, granularSampleRate, sr,
+                                 (int) (maxSeconds * sr));
+    }
+    else if (bounceRing.getNumSamples() > 0 && bounceHasAudio.load (std::memory_order_relaxed))
+    {
+        const int len = juce::jmin (bounceRing.getNumSamples(), (int) (maxSeconds * sr));
+        source.setSize (bounceRing.getNumChannels(), len);
+        const int ringLen = bounceRing.getNumSamples();
+        const int start = ((bounceWrite - len) % ringLen + ringLen) % ringLen;
+        for (int c = 0; c < source.getNumChannels(); ++c)
+            for (int i = 0; i < len; ++i)
+                source.setSample (c, i, bounceRing.getSample (c, (start + i) % ringLen));
+    }
+    if (source.getNumSamples() <= 0)
+        return false;
+
+    // Render through a second processor carrying this one's state, so nothing
+    // touches the instance the host is running.
+    auto worker = std::make_unique<GrainFreezeProcessor>();
+    {
+        juce::MemoryBlock state;
+        getStateInformation (state);
+        worker->setStateInformation (state.getData(), (int) state.getSize());
+        // setStateInformation defers the sample/IR reload to the message thread;
+        // do it now so the render hears the same thing this instance does.
+        worker->applyConvolutionSelection();
+        if (juce::File f (granularSamplePath); f.existsAsFile())
+            worker->loadGranularSample (f);
+    }
+
+    constexpr int block = 512;
+    worker->setPlayConfigDetails (2, 2, sr, block);
+    worker->prepareToPlay (sr, block);
+
+    const int tail = (int) (kBounceTailSeconds * sr);
+    const int total = source.getNumSamples() + tail;
+    juce::AudioBuffer<float> out (2, total);
+    out.clear();
+
+    juce::AudioBuffer<float> work (2, block);
+    juce::MidiBuffer midi;
+    for (int pos = 0; pos < total; pos += block)
+    {
+        const int n = juce::jmin (block, total - pos);
+        work.clear();
+        for (int c = 0; c < 2; ++c)
+        {
+            const int srcCh = juce::jmin (c, source.getNumChannels() - 1);
+            const int avail = juce::jlimit (0, n, source.getNumSamples() - pos);
+            if (avail > 0)
+                work.copyFrom (c, 0, source, srcCh, pos, avail);
+        }
+        juce::AudioBuffer<float> slice (work.getArrayOfWritePointers(), 2, 0, n);
+        worker->processBlock (slice, midi);
+        for (int c = 0; c < 2; ++c)
+            out.copyFrom (c, pos, slice, c, 0, n);
+    }
+
+    // Keep it under full scale without changing the sound: only pull back if it
+    // actually got there.
+    const float peak = juce::jmax (out.getMagnitude (0, 0, total), out.getMagnitude (1, 0, total));
+    if (peak > 0.99f)
+        out.applyGain (0.99f / peak);
+
+    destination.deleteFile();
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::OutputStream> stream (destination.createOutputStream());
+    if (stream == nullptr)
+        return false;
+    auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                   .withSampleRate (sr)
+                                                   .withNumChannels (2)
+                                                   .withBitsPerSample (24));
+    if (writer == nullptr)
+        return false;
+    return writer->writeFromAudioSampleBuffer (out, 0, total);
+}
+
 void GrainFreezeProcessor::captureAmountAnchor()
 {
     // Remember what the preset asked for, so Amount has something to scale.
@@ -1168,6 +1265,12 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
                                 std::memory_order_relaxed);
     airLatencyActive.store (isOn (paramPtrs.airOn), std::memory_order_relaxed);
     updateReportedLatency();
+    // Eight seconds of input, so Bounce always has material.
+    bounceRing.setSize (getTotalNumOutputChannels(), (int) (sampleRate * 8.0));
+    bounceRing.clear();
+    bounceWrite = 0;
+    bounceHasAudio.store (false, std::memory_order_relaxed);
+
     dryInBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
     entropyBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
     prettifierBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
@@ -1491,6 +1594,27 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
             const int count = onsets.process (needsDry ? dryInBuffer : buffer, offsets, 64);
             entropyEngine.setTriggers (offsets, count);
         }
+    }
+
+    // Keep the rolling input capture fed for Bounce.
+    if (const int ringLen = bounceRing.getNumSamples(); ringLen > 0)
+    {
+        const auto& src = needsDry ? dryInBuffer : buffer;
+        const int ch = juce::jmin (bounceRing.getNumChannels(), src.getNumChannels());
+        float blockPeak = 0.0f;
+        for (int i = 0; i < n; ++i)
+        {
+            const int w = (bounceWrite + i) % ringLen;
+            for (int c = 0; c < ch; ++c)
+            {
+                const float v = src.getSample (c, i);
+                bounceRing.setSample (c, w, v);
+                blockPeak = juce::jmax (blockPeak, std::abs (v));
+            }
+        }
+        bounceWrite = (bounceWrite + n) % ringLen;
+        if (blockPeak > 1.0e-4f)
+            bounceHasAudio.store (true, std::memory_order_relaxed);
     }
 
     if (ctl.sampleModeOn || sampleFreezePending)

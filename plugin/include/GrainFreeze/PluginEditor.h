@@ -602,6 +602,30 @@ private:
     // ---- MOD SOURCES: the controls behind the matrix's own generators. LFO 2,
     // the tempo-synced step sequencer (16 steps, length + glide) and the random
     // sample & hold, plus the assignable CC number for the "MIDI CC" source.
+    // ---- Bounce: render the current patch and drag the file straight out into
+    // the DAW. Dragging is the point -- it closes the loop that drag-in opened.
+    struct BounceButton : juce::TextButton
+    {
+        using juce::TextButton::TextButton;
+        std::function<juce::File()> renderToTempFile;
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            if (dragging || e.getDistanceFromDragStart() < 10 || ! renderToTempFile)
+                return;
+            dragging = true;
+            const auto file = renderToTempFile();
+            if (file.existsAsFile())
+                juce::DragAndDropContainer::performExternalDragDropOfFiles (
+                    { file.getFullPathName() }, false, this, [this] { dragging = false; });
+            else
+                dragging = false;
+        }
+        bool dragging = false;
+    };
+    BounceButton bounceButton { "Bounce" };
+    juce::File   lastBounceFile;
+    std::unique_ptr<juce::FileChooser> bounceChooser;
+
     // ---- Amount: the one knob that scales whatever preset is loaded.
     juce::Slider amountKnob;
     juce::Label  amountLabel;
@@ -629,6 +653,7 @@ private:
     std::unique_ptr<juce::FileChooser> sampleChooser;
     void loadSampleFile (const juce::File& file);
     void updateCurveDivisions();
+    juce::String bounceFileName() const;
     void updateGrainSampleLabel();
     bool fileDragActive = false;   // paints a drop hint while a file is over us
 

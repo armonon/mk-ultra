@@ -154,6 +154,17 @@ public:
         if (auto* p = apvts.getParameter ("convolutionIR"))
             p->setValueNotifyingHost (0.0f);
     }
+    // ---- Bounce -----------------------------------------------------------
+    // Render the current patch to an audio file: the loaded sample if there is
+    // one, otherwise the last few seconds of input. Runs on the message thread
+    // through a second processor built from this one's state, so the live audio
+    // thread is untouched. Returns false if there was nothing to render.
+    static constexpr double kBounceTailSeconds = 2.0;
+    bool renderBounce (const juce::File& destination, double maxSeconds = 12.0);
+    // True when there is material to bounce (a loaded sample, or audio that has
+    // come through recently).
+    bool canBounce() const;
+
     void applyConvolutionSelection();
     juce::String getConvolutionIRPath() const { return convolutionIRPath; }
 
@@ -557,6 +568,12 @@ private:
     std::vector<std::pair<juce::String, float>> amountAnchor;
 
     juce::String granularSamplePath;
+
+    // A rolling few seconds of input, kept so Bounce always has something to
+    // render even when no sample has been loaded.
+    juce::AudioBuffer<float> bounceRing;
+    int  bounceWrite = 0;
+    std::atomic<bool> bounceHasAudio { false };
     juce::AudioBuffer<float> granularSampleOriginal;
     double granularSampleRate = 0.0;
     std::atomic<bool> sampleReloadRequested { false };

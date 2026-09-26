@@ -1250,6 +1250,42 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             proc.apvts, s + "Depth", modMatrixDepth[(size_t) i]);
     }
 
+    // ---- Bounce ---------------------------------------------------------
+    bounceButton.setTooltip ("Render what you are hearing and drag it straight into your DAW. "
+                             "Click instead to save it to a file.");
+    bounceButton.renderToTempFile = [this]() -> juce::File
+    {
+        auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                        .getChildFile (bounceFileName());
+        if (! proc.renderBounce (file))
+            return {};
+        lastBounceFile = file;
+        return file;
+    };
+    bounceButton.onClick = [this]
+    {
+        if (! proc.canBounce())
+        {
+            grainSampleName.setText ("Nothing to bounce yet -- play some audio in, or load a sample",
+                                     juce::dontSendNotification);
+            return;
+        }
+        bounceChooser = std::make_unique<juce::FileChooser> (
+            "Save Bounce",
+            juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile (bounceFileName()),
+            "*.wav");
+        bounceChooser->launchAsync (
+            juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                | juce::FileBrowserComponent::warnAboutOverwriting,
+            [this] (const juce::FileChooser& fc)
+            {
+                const auto f = fc.getResult();
+                if (f.getFullPathName().isNotEmpty())
+                    proc.renderBounce (f);
+            });
+    };
+    addAndMakeVisible (bounceButton);
+
     // ---- Amount: bigger than the macros, and first, because it is the dial to
     // reach for straight after picking a preset.
     amountKnob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
@@ -1546,7 +1582,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             &morphPad, &morphPadLabel, &grainViz, &morphCapA, &morphCapB, &morphCapC, &morphCapD,
             // The Curve is part of the play surface, not a drawer.
             &curveTitle, &curveHint, &curveBarsBox, &curveSyncButton,
-            &amountKnob, &amountLabel,
+            &amountKnob, &amountLabel, &bounceButton,
             &fadeOverlay, &tourOverlay, &drawerView };
         if (curveEditor != nullptr) stay.push_back (curveEditor.get());
         for (auto& k : macroKnobs)  stay.push_back (&k);
@@ -2186,6 +2222,13 @@ void GrainFreezeEditor::loadSampleFile (const juce::File& file)
     updateGrainSampleLabel();
 }
 
+juce::String GrainFreezeEditor::bounceFileName() const
+{
+    auto name = proc.presets.getCurrentPresetName();
+    if (name.isEmpty()) name = "MK-ULTRA";
+    return juce::File::createLegalFileName (name + " bounce") + ".wav";
+}
+
 void GrainFreezeEditor::updateCurveDivisions()
 {
     // Grid lines per loop: quarter-note divisions for the shorter lengths, then
@@ -2347,6 +2390,7 @@ void GrainFreezeEditor::resized()
         updateButton.setBounds (hrow.removeFromRight (110));
         hrow.removeFromRight (gap);
     }
+    bounceButton.setBounds (hrow.removeFromRight (78));    hrow.removeFromRight (6);
     saveButton.setBounds (hrow.removeFromRight (64));      hrow.removeFromRight (6);
     presetName.setBounds (hrow);                           // whatever width is left
     area.removeFromTop (gap);
