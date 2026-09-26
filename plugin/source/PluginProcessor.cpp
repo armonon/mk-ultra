@@ -236,6 +236,9 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.lfoDivision, "lfoDivision");
 
     bind (paramPtrs.grainSource, "grainSource");
+    bind (paramPtrs.grainTrigger, "grainTrigger");
+    bind (paramPtrs.transientSense, "transientSense");
+    bind (paramPtrs.transientGrains, "transientGrains");
     bind (paramPtrs.sampleMode, "sampleMode");
     bind (paramPtrs.sampleWindow, "sampleWindow");
     bind (paramPtrs.sampleSource, "sampleSource");
@@ -915,6 +918,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "panic", 1 }, "Panic", false));
 
     layout.group ("sampler", "Source & Sample");
+    // Grain trigger: the free-running density clock, or the hits in the incoming
+    // audio. On drums and vocals, spawning ON the transients is the difference
+    // between staying inside the groove and smearing it.
+    addChoice ("grainTrigger", "Grain Trigger", StringArray { "Free", "Transient" }, 0);
+    addFloat  ("transientSense",  "Transient Sensitivity", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f);
+    addInt    ("transientGrains", "Grains Per Hit", 1, 8, 2);
+
     // Granular source: chew on the live input, or on an audio file the user drops
     // onto the plugin. Defaults to Live, so nothing changes until a file arrives.
     addChoice ("grainSource", "Grain Source", StringArray { "Live", "Sample" }, 0);
@@ -1077,6 +1087,7 @@ void GrainFreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     timeBreaker.prepare (sampleRate, getTotalNumOutputChannels());
     modSources.prepare (sampleRate);
     curve.prepare (sampleRate);
+    onsets.prepare (sampleRate);
     pitchFormantMachine.prepare (sampleRate, getTotalNumOutputChannels(), samplesPerBlock);
 
     // Report every latency-adding stage so the host can compensate. AIR's figure
@@ -1393,6 +1404,21 @@ void GrainFreezeProcessor::processBlock (juce::AudioBuffer<float>& fullBuffer, j
         auto& slot = curveEnvHistory[(size_t) bucket];
         const float prev = slot.load (std::memory_order_relaxed);
         slot.store (juce::jmax (juce::jlimit (0.0f, 1.0f, e), prev * 0.92f), std::memory_order_relaxed);
+    }
+
+    // Transient triggering: find the hits in what is coming in, and hand their
+    // positions to the grain cloud so it spawns on them rather than on a clock.
+    {
+        const int triggerMode = (int) loadParam (p.grainTrigger, 0.0f);
+        entropyEngine.setTriggerMode (triggerMode);
+        if (triggerMode == 1)
+        {
+            onsets.setSensitivity (loadParam (p.transientSense, 0.5f));
+            entropyEngine.setGrainsPerHit ((int) loadParam (p.transientGrains, 2.0f));
+            int offsets[64];
+            const int count = onsets.process (needsDry ? dryInBuffer : buffer, offsets, 64);
+            entropyEngine.setTriggers (offsets, count);
+        }
     }
 
     if (ctl.sampleModeOn || sampleFreezePending)

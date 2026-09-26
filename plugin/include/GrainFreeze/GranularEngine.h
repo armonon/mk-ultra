@@ -156,6 +156,19 @@ public:
     // 0 = granulate the live input, 1 = granulate the loaded sample. Falls back
     // to live while no sample is loaded, so the mode can never go silent.
     void setSourceMode (int mode) { sourceMode.store (mode, std::memory_order_relaxed); }
+
+    // ---- Trigger ----------------------------------------------------------
+    // 0 = the free-running density clock, 1 = spawn on the hits the processor
+    // found in the incoming audio. Offsets are sample positions inside the block
+    // about to be rendered, so the grains land ON the transients.
+    void setTriggerMode (int mode) { triggerMode = mode; }
+    void setGrainsPerHit (int n)   { grainsPerHit = juce::jlimit (1, 8, n); }
+    void setTriggers (const int* offsets, int count)
+    {
+        triggerCount = juce::jlimit (0, (int) triggers.size(), count);
+        for (int i = 0; i < triggerCount; ++i)
+            triggers[(size_t) i] = offsets[i];
+    }
     // What the engine has been handed (not what it has swapped in yet) -- this is
     // the answer the UI wants. The audio thread uses sampleLen instead.
     bool hasSample() const { return announcedSampleLen.load (std::memory_order_acquire) > 0; }
@@ -225,6 +238,12 @@ private:
     std::atomic<float> velocity    { 1.0f };
     std::atomic<float> velocityToAmp { 0.0f };
     std::atomic<int>   maxActiveGrains { 32 };
+
+    // Transient triggering (audio thread only; set just before process()).
+    int triggerMode = 0;
+    int grainsPerHit = 1;
+    int triggerCount = 0;
+    std::array<int, 64> triggers {};
 
     // Frozen snapshot: the read window is locked to where freeze engaged.
     int  frozenAnchor = 0;

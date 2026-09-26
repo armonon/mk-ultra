@@ -8,6 +8,7 @@
 #include "GrainFreeze/Modulation/MidiNoteController.h"
 #include "GrainFreeze/Modulation/ModSources.h"
 #include "GrainFreeze/Modulation/CurveSource.h"
+#include "GrainFreeze/OnsetDetector.h"
 #include "GrainFreeze/ModMatrix.h"
 #include "GrainFreeze/Prettifier/PrettifierEngine.h"
 #include "GrainFreeze/Presets/SnapshotManager.h"
@@ -332,6 +333,9 @@ private:
         std::atomic<float>* stepSeqSmooth = nullptr;
         std::array<std::atomic<float>*, (size_t) gf::ModSources::kMaxSteps> stepSeqSteps {};
         std::atomic<float>* modRandomRate = nullptr;
+        std::atomic<float>* grainTrigger = nullptr;
+        std::atomic<float>* transientSense = nullptr;
+        std::atomic<float>* transientGrains = nullptr;
         std::atomic<float>* curveBars = nullptr;
         std::atomic<float>* curveSync = nullptr;
         std::atomic<float>* modCcNumber = nullptr;
@@ -496,6 +500,8 @@ private:
     // tracked whether or not the MIDI grain controls are enabled, so "Velocity"
     // or "Mod Wheel" can modulate a knob without turning the keyboard on.
     gf::ModSources         modSources;
+    // Finds the hits in the input so grains can land on them.
+    gf::OnsetDetector      onsets;
 public:
     // The drawable modulation curve. The editor owns the shape; the audio thread
     // reads it through CurveSource's own double buffer.

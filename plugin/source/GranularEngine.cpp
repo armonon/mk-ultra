@@ -221,14 +221,28 @@ void GranularEngine::process (juce::AudioBuffer<float>& output)
     const float  gain      = outputGain.load();
     const int    outCh     = output.getNumChannels();
 
+    int nextTrigger = 0;
     for (int i = 0; i < n; ++i)
     {
-        // Sample-accurate grain spawning: accumulate time, spawn when due.
-        grainClock += spawnRate * secsPer;
-        while (grainClock >= 1.0)
+        if (triggerMode == 1)
         {
-            spawnGrain();
-            grainClock -= 1.0;
+            // Transient mode: the clock is the audio itself.
+            while (nextTrigger < triggerCount && triggers[(size_t) nextTrigger] == i)
+            {
+                for (int k = 0; k < grainsPerHit; ++k)
+                    spawnGrain();
+                ++nextTrigger;
+            }
+        }
+        else
+        {
+            // Sample-accurate grain spawning: accumulate time, spawn when due.
+            grainClock += spawnRate * secsPer;
+            while (grainClock >= 1.0)
+            {
+                spawnGrain();
+                grainClock -= 1.0;
+            }
         }
 
         float left = 0.0f, right = 0.0f;

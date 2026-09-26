@@ -1003,6 +1003,34 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         updateGrainSampleLabel();
     };
     addAndMakeVisible (grainSampleClear);
+    grainTriggerBox.addItemList ({ "Free", "Transient" }, 1);
+    grainTriggerBox.setTooltip ("What makes a grain: the free-running Density clock, or every hit the "
+                                "plugin finds in the incoming audio -- which keeps the cloud inside the groove");
+    addAndMakeVisible (grainTriggerBox);
+    grainTriggerAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        proc.apvts, "grainTrigger", grainTriggerBox);
+    {
+        auto tk = [this] (juce::Slider& k, juce::Label& l, const juce::String& name,
+                          const juce::String& paramId, std::unique_ptr<SliderAttachment>& attach,
+                          const juce::String& tip)
+        {
+            k.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+            k.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+            k.setTooltip (tip);
+            addAndMakeVisible (k);
+            l.setText (name, juce::dontSendNotification);
+            l.setJustificationType (juce::Justification::centred);
+            l.setComponentID ("caption");
+            l.setFont (juce::FontOptions (11.0f));
+            addAndMakeVisible (l);
+            attach = std::make_unique<SliderAttachment> (proc.apvts, paramId, k);
+        };
+        tk (transientSense, transientSenseL, "Sense", "transientSense", transientSenseAttach,
+            "How quiet a hit still counts. Low catches only the hits on the beat; high catches ghost notes too.");
+        tk (transientGrains, transientGrainsL, "Hits", "transientGrains", transientGrainsAttach,
+            "How many grains each hit spawns");
+    }
+
     grainSampleName.setJustificationType (juce::Justification::centredLeft);
     grainSampleName.setFont (juce::FontOptions (12.0f));
     addAndMakeVisible (grainSampleName);
@@ -1949,6 +1977,9 @@ void GrainFreezeEditor::updateTabVisibility()
     grainSourceTitle.setVisible (entropyTab);
     grainSourceBox.setVisible (entropyTab);
     grainSampleLoad.setVisible (entropyTab);
+    grainTriggerBox.setVisible (entropyTab);
+    for (auto* c : { &transientSense, &transientGrains }) c->setVisible (entropyTab);
+    for (auto* l : { &transientSenseL, &transientGrainsL }) l->setVisible (entropyTab);
     grainSampleClear.setVisible (entropyTab);
     grainSampleName.setVisible (entropyTab);
     midiEnableButton.setVisible (entropyTab);
@@ -2460,14 +2491,25 @@ void GrainFreezeEditor::resized()
         // SOURCE row: [SOURCE][Live/Sample][Load...][Clear][file name]
         {
             area.removeFromTop (4);
-            auto srow = area.removeFromTop (34);
+            auto srow = area.removeFromTop (46);
             grainSourceTitle.setBounds (srow.removeFromLeft (84).withSizeKeepingCentre (84, 20));
             grainSourceBox.setBounds (srow.removeFromLeft (104).withSizeKeepingCentre (100, 26));
             srow.removeFromLeft (6);
             grainSampleLoad.setBounds (srow.removeFromLeft (84).withSizeKeepingCentre (80, 26));
             grainSampleClear.setBounds (srow.removeFromLeft (70).withSizeKeepingCentre (66, 26));
             srow.removeFromLeft (8);
-            grainSampleName.setBounds (srow.withTrimmedRight (8));
+            grainSampleName.setBounds (srow.removeFromLeft (juce::jmax (80, srow.getWidth() - 290)));
+            // Trigger sits on the same row: what makes a grain.
+            grainTriggerBox.setBounds (srow.removeFromLeft (104).withSizeKeepingCentre (100, 26));
+            auto tcell = [&srow] (juce::Slider& k, juce::Label& l)
+            {
+                auto c = srow.removeFromLeft (64);
+                l.setBounds (c.removeFromTop (12));
+                const int d = juce::jmin (30, c.getHeight());
+                k.setBounds (c.withSizeKeepingCentre (d, d));
+            };
+            tcell (transientSense, transientSenseL);
+            tcell (transientGrains, transientGrainsL);
         }
         // MIDI row: [MIDI on][Root][Glide][Vel->Amp]   [Poly Grains][MPE]
         {

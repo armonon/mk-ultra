@@ -614,6 +614,12 @@ private:
     juce::Label      grainSourceTitle, grainSampleName;
     juce::ComboBox   grainSourceBox;
     juce::TextButton grainSampleLoad { "Load..." }, grainSampleClear { "Clear" };
+    // Trigger: free-running clock, or the hits in the incoming audio.
+    juce::ComboBox   grainTriggerBox;
+    juce::Slider     transientSense, transientGrains;
+    juce::Label      transientSenseL, transientGrainsL;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> grainTriggerAttach;
+    std::unique_ptr<SliderAttachment> transientSenseAttach, transientGrainsAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> grainSourceAttach;
     std::unique_ptr<juce::FileChooser> sampleChooser;
     void loadSampleFile (const juce::File& file);

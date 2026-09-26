@@ -59,6 +59,9 @@ public:
     void setSampleBuffer (juce::AudioBuffer<float>&& b) { granular.setSampleBuffer (std::move (b)); }
     void clearSample()                                 { granular.clearSample(); }
     void setSourceMode  (int mode)                     { granular.setSourceMode (mode); }
+    void setTriggerMode (int mode)                     { granular.setTriggerMode (mode); }
+    void setGrainsPerHit (int n)                       { granular.setGrainsPerHit (n); }
+    void setTriggers (const int* offsets, int count)   { granular.setTriggers (offsets, count); }
     bool hasSample() const                             { return granular.hasSample(); }
     double getSampleLengthSeconds() const              { return granular.getSampleLengthSeconds(); }
     void setActiveVoices (const gf::GranularEngine::VoicePush* v, int n) { granular.setActiveVoices (v, n); }
