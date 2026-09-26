@@ -40,6 +40,9 @@ public:
     // on the message thread. Safe to call repeatedly.
     void refreshUserPresetsAsync (std::function<void()> onDone = {});
 
+    // Fired after any successful load, so the processor can re-anchor Amount.
+    std::function<void()> onPresetLoaded;
+
     // Cycle through presets; wraps around. No-op if none exist.
     void loadNext();
     void loadPrevious();

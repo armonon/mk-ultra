@@ -602,6 +602,11 @@ private:
     // ---- MOD SOURCES: the controls behind the matrix's own generators. LFO 2,
     // the tempo-synced step sequencer (16 steps, length + glide) and the random
     // sample & hold, plus the assignable CC number for the "MIDI CC" source.
+    // ---- Amount: the one knob that scales whatever preset is loaded.
+    juce::Slider amountKnob;
+    juce::Label  amountLabel;
+    std::unique_ptr<SliderAttachment> amountAttach;
+
     // ---- The drawable modulation curve: the play surface's centrepiece.
     std::unique_ptr<gf::CurveEditor> curveEditor;
     juce::Label     curveTitle, curveHint;

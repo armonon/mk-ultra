@@ -1250,6 +1250,20 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             proc.apvts, s + "Depth", modMatrixDepth[(size_t) i]);
     }
 
+    // ---- Amount: bigger than the macros, and first, because it is the dial to
+    // reach for straight after picking a preset.
+    amountKnob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    amountKnob.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    amountKnob.setTooltip ("How far the loaded preset goes. 0 leaves the plugin at its defaults, "
+                           "1 is the preset as written, past that pushes every move it made further.");
+    addAndMakeVisible (amountKnob);
+    amountAttach = std::make_unique<SliderAttachment> (proc.apvts, "presetAmount", amountKnob);
+    amountLabel.setText ("Amount", juce::dontSendNotification);
+    amountLabel.setJustificationType (juce::Justification::centred);
+    amountLabel.setComponentID ("caption");
+    amountLabel.setFont (juce::FontOptions (12.0f));
+    addAndMakeVisible (amountLabel);
+
     // ---- The drawable Curve --------------------------------------------
     setupSectionLabel (curveTitle, "CURVE", 13.0f);
     addAndMakeVisible (curveTitle);
@@ -1532,6 +1546,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             &morphPad, &morphPadLabel, &grainViz, &morphCapA, &morphCapB, &morphCapC, &morphCapD,
             // The Curve is part of the play surface, not a drawer.
             &curveTitle, &curveHint, &curveBarsBox, &curveSyncButton,
+            &amountKnob, &amountLabel,
             &fadeOverlay, &tourOverlay, &drawerView };
         if (curveEditor != nullptr) stay.push_back (curveEditor.get());
         for (auto& k : macroKnobs)  stay.push_back (&k);
@@ -2339,6 +2354,14 @@ void GrainFreezeEditor::resized()
     // ---- Zone 2: macros. Always visible. ----
     {
         auto macroRow = area.removeFromTop (kMacroCell);
+        {
+            // Amount sits ahead of the macros, larger, with a rule after it.
+            auto cell = macroRow.removeFromLeft (150);
+            amountLabel.setBounds (cell.removeFromTop (16));
+            const int d = juce::jmin (cell.getWidth() - 12, cell.getHeight() - 6);
+            amountKnob.setBounds (cell.withSizeKeepingCentre (d, d));
+            macroRow.removeFromLeft (14);
+        }
         macroRow = macroRow.withSizeKeepingCentre (juce::jmin (macroRow.getWidth(), kMacroCell * kNumMacros), macroRow.getHeight());
         for (int i = 0; i < kNumMacros; ++i)
             layoutDialCell (macroRow, macroLabels[(size_t) i], macroKnobs[(size_t) i], kMacroCell, kMacroKnob);

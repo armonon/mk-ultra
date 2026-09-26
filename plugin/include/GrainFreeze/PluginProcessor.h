@@ -333,6 +333,7 @@ private:
         std::atomic<float>* stepSeqSmooth = nullptr;
         std::array<std::atomic<float>*, (size_t) gf::ModSources::kMaxSteps> stepSeqSteps {};
         std::atomic<float>* modRandomRate = nullptr;
+        std::atomic<float>* presetAmount = nullptr;
         std::atomic<float>* grainTrigger = nullptr;
         std::atomic<float>* transientSense = nullptr;
         std::atomic<float>* transientGrains = nullptr;
@@ -507,6 +508,14 @@ public:
     // reads it through CurveSource's own double buffer.
     gf::CurveSource        curve;
     // Persist the drawn shape with the session / user presets.
+    // ---- Amount -----------------------------------------------------------
+    // One knob that scales the whole loaded preset: 0 leaves the plugin at its
+    // defaults, 1 is the preset as its author wrote it, and beyond that pushes
+    // every move it made further in the same direction. Captured whenever a
+    // preset loads; applied on the message thread.
+    void captureAmountAnchor();
+    void applyPresetAmount();
+
     void storeCurveToState();
     void loadCurveFromState();
     // The input envelope, bucketed by the Curve's own phase, so the editor can
@@ -543,6 +552,10 @@ private:
     // Sample source. The file is kept at its original rate so it can be
     // re-resampled if the host changes sample rate, and the path is saved with
     // the session so the sample comes back with the project.
+    // paramID -> the value the loaded preset asked for. Amount interpolates
+    // between each parameter's default and this.
+    std::vector<std::pair<juce::String, float>> amountAnchor;
+
     juce::String granularSamplePath;
     juce::AudioBuffer<float> granularSampleOriginal;
     double granularSampleRate = 0.0;
@@ -558,6 +571,7 @@ private:
     // corner snapshots (A=bottom-left, B=bottom-right, C=top-left, D=top-right)
     // and write the result on the message thread, so host + editor knobs follow.
     std::atomic<bool>  morphRequested { false };
+    std::atomic<bool>  amountRequested { false };
     void applyMorph (); // reads the live macroMorph (X) + macroMorphY (Y)
 
     std::atomic<float> outLevelL { 0.0f };

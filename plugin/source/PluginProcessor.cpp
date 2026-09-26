@@ -83,6 +83,16 @@ GrainFreezeProcessor::GrainFreezeProcessor()
     apvts.addParameterListener ("macroMorphY", this);
     apvts.addParameterListener ("convolutionIR", this);
     apvts.addParameterListener ("airOn", this);
+    apvts.addParameterListener ("presetAmount", this);
+    // Amount re-anchors on every preset load: whatever the preset asked for
+    // becomes "1", and the dial scales the distance from the defaults.
+    presets.onPresetLoaded = [this]
+    {
+        captureAmountAnchor();
+        if (auto* p = apvts.getParameter ("presetAmount"))
+            p->setValueNotifyingHost (p->getNormalisableRange().convertTo0to1 (1.0f));
+    };
+
     // First-insert "signature" sound. If the host restores saved state,
     // setStateInformation runs after construction and overrides this.
     presets.loadDefaultPatch();
@@ -100,6 +110,7 @@ GrainFreezeProcessor::~GrainFreezeProcessor()
     apvts.removeParameterListener ("macroMorphY", this);
     apvts.removeParameterListener ("convolutionIR", this);
     apvts.removeParameterListener ("airOn", this);
+    apvts.removeParameterListener ("presetAmount", this);
 }
 
 void GrainFreezeProcessor::cacheParameterPointers()
@@ -236,6 +247,7 @@ void GrainFreezeProcessor::cacheParameterPointers()
     bind (paramPtrs.lfoDivision, "lfoDivision");
 
     bind (paramPtrs.grainSource, "grainSource");
+    bind (paramPtrs.presetAmount, "presetAmount");
     bind (paramPtrs.grainTrigger, "grainTrigger");
     bind (paramPtrs.transientSense, "transientSense");
     bind (paramPtrs.transientGrains, "transientGrains");
@@ -383,6 +395,12 @@ void GrainFreezeProcessor::parameterChanged (const juce::String& id, float value
         formantLatencyActive.store (active, std::memory_order_relaxed);
         triggerAsyncUpdate(); // setLatencySamples must run on the message thread
     }
+    else if (id == "presetAmount")
+    {
+        juce::ignoreUnused (value);
+        amountRequested.store (true, std::memory_order_relaxed);
+        triggerAsyncUpdate();
+    }
     else if (id == "airOn")
     {
         // AIR delays its whole output by the exciter's oversampler latency.
@@ -414,6 +432,9 @@ void GrainFreezeProcessor::handleAsyncUpdate()
             entropyEngine.clearSample();
     }
 
+    if (amountRequested.exchange (false))
+        applyPresetAmount();
+
     if (morphRequested.exchange (false))
         applyMorph();
 
@@ -423,6 +444,53 @@ void GrainFreezeProcessor::handleAsyncUpdate()
 
 // Loads whatever the convolutionIR choice says: a built-in synthesised space,
 // or the user's file when "Custom" is selected and a file is remembered.
+void GrainFreezeProcessor::captureAmountAnchor()
+{
+    // Remember what the preset asked for, so Amount has something to scale.
+    // Excluded: the dial itself, the morph axes (they are a separate gesture),
+    // Panic, and the UI/performance settings, which are not part of a sound.
+    static const juce::StringArray excluded {
+        "presetAmount", "macroMorph", "macroMorphY", "panic", "performanceMode",
+        "analyzerOn", "waveformOn", "modScopeOn", "animationsOn", "ecoUiMode",
+        "analyzerFps", "oversamplingMode", "experimentalInputToolsOn"
+    };
+
+    amountAnchor.clear();
+    for (auto* p : getParameters())
+    {
+        auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p);
+        if (rp == nullptr || excluded.contains (rp->paramID))
+            continue;
+        if (rp->paramID.endsWith ("Lock") || rp->paramID.startsWith ("assistant_"))
+            continue;
+        amountAnchor.emplace_back (rp->paramID, rp->getValue());   // normalised
+    }
+}
+
+void GrainFreezeProcessor::applyPresetAmount()
+{
+    if (amountAnchor.empty())
+        return;
+
+    const float amount = loadParam (paramPtrs.presetAmount, 1.0f);
+    preserveLocked ([this, amount]
+    {
+        for (const auto& [id, target] : amountAnchor)
+        {
+            auto* p = apvts.getParameter (id);
+            if (p == nullptr)
+                continue;
+            // Scale the distance the preset moved this parameter from its
+            // default. Normalised space keeps every parameter on the same
+            // footing whatever its units.
+            const float base = p->getDefaultValue();
+            const float v = juce::jlimit (0.0f, 1.0f, base + (target - base) * amount);
+            if (std::abs (p->getValue() - v) > 1.0e-5f)
+                p->setValueNotifyingHost (v);
+        }
+    });
+}
+
 void GrainFreezeProcessor::storeCurveToState()
 {
     apvts.state.setProperty ("curveShape", curve.toString(), nullptr);
@@ -918,6 +986,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "panic", 1 }, "Panic", false));
 
     layout.group ("sampler", "Source & Sample");
+    // Amount: scales everything the loaded preset did. Not itself part of a
+    // preset -- it is the dial you reach for after picking one.
+    addFloat ("presetAmount", "Amount", NormalisableRange<float> (0.0f, 2.0f, 0.001f), 1.0f);
+
     // Grain trigger: the free-running density clock, or the hits in the incoming
     // audio. On drums and vocals, spawning ON the transients is the difference
     // between staying inside the groove and smearing it.

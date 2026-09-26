@@ -64,7 +64,10 @@ void PresetManager::loadDefaultPatch()
 bool PresetManager::loadPreset (const juce::String& name)
 {
     if (applyFactory (name))            // built-in factory preset
+    {
+        if (onPresetLoaded) onPresetLoaded();
         return true;
+    }
 
     auto file = getPresetDirectory().getChildFile (name + kExtension);
     if (! file.existsAsFile()) return false;
@@ -77,6 +80,7 @@ bool PresetManager::loadPreset (const juce::String& name)
 
     apvts.replaceState (tree);
     currentPreset = name;
+    if (onPresetLoaded) onPresetLoaded();
     return true;
 }
 
