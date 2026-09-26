@@ -110,79 +110,170 @@ void FadeOverlay::paint (juce::Graphics& g)
     g.fillAll (gf::BiohazardLookAndFeel::bg.withAlpha (juce::jlimit (0.0f, 1.0f, amount)));
 }
 
-PresetBrowser::PresetBrowser (juce::StringArray names, juce::String currentName,
-                              std::function<void (juce::String)> onChoose)
-    : allNames (std::move (names)), current (std::move (currentName)), choose (std::move (onChoose))
+PresetBrowser::PresetBrowser (juce::StringArray names, juce::String currentName, Callbacks cb)
+    : allNames (std::move (names)), current (std::move (currentName)), callbacks (std::move (cb))
 {
+    using LF = gf::BiohazardLookAndFeel;
+    startedOn = current;   // so Escape-ing out can put things back
+
     title.setText ("PRESETS", juce::dontSendNotification);
-    title.setFont (juce::Font (juce::FontOptions (14.0f, juce::Font::bold)).withExtraKerningFactor (0.12f));
-    title.setColour (juce::Label::textColourId, gf::BiohazardLookAndFeel::textCol);
+    title.setFont (juce::Font (juce::FontOptions (13.0f, juce::Font::bold)));
+    title.setComponentID ("section");
     addAndMakeVisible (title);
 
-    search.setTextToShowWhenEmpty ("search presets...", gf::BiohazardLookAndFeel::textCol.withAlpha (0.4f));
-    search.setColour (juce::TextEditor::backgroundColourId, gf::BiohazardLookAndFeel::metal);
-    search.onTextChange = [this] { applyFilter(); };
-    search.onReturnKey  = [this] { commit (0); };
+    search.setTextToShowWhenEmpty ("search", LF::textDim);
+    search.onTextChange = [this] { rebuildRows(); };
+    search.onReturnKey  = [this] { commitRow (list.getSelectedRow()); };
     addAndMakeVisible (search);
+
+    favouritesOnly.setClickingTogglesState (true);
+    favouritesOnly.setTooltip ("Show only the presets you have starred");
+    favouritesOnly.onClick = [this] { rebuildRows(); };
+    addAndMakeVisible (favouritesOnly);
 
     list.setRowHeight (26);
     list.setColour (juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
     addAndMakeVisible (list);
 
-    applyFilter();
-    setSize (320, 420);
+    rebuildRows();
+    setSize (360, 480);
 }
 
-void PresetBrowser::applyFilter()
+void PresetBrowser::rebuildRows()
 {
     const auto q = search.getText().trim().toLowerCase();
-    filtered.clear();
+    const bool favesOnly = favouritesOnly.getToggleState();
+
+    rows.clear();
+    juce::String lastCategory;
     for (const auto& n : allNames)
-        if (q.isEmpty() || n.toLowerCase().contains (q))
-            filtered.add (n);
+    {
+        if (q.isNotEmpty() && ! n.toLowerCase().contains (q))
+            continue;
+        if (favesOnly && callbacks.isFavourite && ! callbacks.isFavourite (n))
+            continue;
+
+        // The factory names are "Category - Name"; anything else groups as User.
+        const auto category = n.contains (" - ") ? n.upToFirstOccurrenceOf (" - ", false, false).trim()
+                                                 : juce::String ("User");
+        if (category != lastCategory)
+        {
+            rows.push_back ({ category, true });
+            lastCategory = category;
+        }
+        rows.push_back ({ n, false });
+    }
     list.updateContent();
+
+    // Keep the current preset in view without auditioning it again.
+    for (size_t i = 0; i < rows.size(); ++i)
+        if (! rows[i].isHeader && rows[i].text == current)
+        {
+            list.selectRow ((int) i, true, true);
+            break;
+        }
     list.repaint();
 }
 
-void PresetBrowser::commit (int row)
+void PresetBrowser::commitRow (int row)
 {
-    if (juce::isPositiveAndBelow (row, filtered.size()))
-    {
-        if (choose) choose (filtered[row]);
-        if (auto* cb = findParentComponentOfClass<juce::CallOutBox>())
-            cb->dismiss();
-    }
+    if (row < 0 || row >= (int) rows.size() || rows[(size_t) row].isHeader)
+        return;
+    if (callbacks.commit)
+        callbacks.commit (rows[(size_t) row].text);
+    if (auto* cb = findParentComponentOfClass<juce::CallOutBox>())
+        cb->dismiss();
 }
 
-int PresetBrowser::getNumRows() { return filtered.size(); }
+int PresetBrowser::getNumRows() { return (int) rows.size(); }
 
 void PresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int w, int h, bool selected)
 {
-    if (! juce::isPositiveAndBelow (row, filtered.size())) return;
+    if (row < 0 || row >= (int) rows.size()) return;
     using LF = gf::BiohazardLookAndFeel;
-    auto r = juce::Rectangle<int> (0, 0, w, h).reduced (3, 2).toFloat();
-    const bool isCurrent = filtered[row] == current;
+    const auto& r = rows[(size_t) row];
+    auto area = juce::Rectangle<int> (0, 0, w, h).reduced (3, 2).toFloat();
 
+    if (r.isHeader)
+    {
+        g.setColour (LF::textDim);
+        g.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::bold)));
+        LF::drawTracked (g, r.text, area.withTrimmedLeft (8.0f), juce::Justification::centredLeft, 2.0f);
+        g.setColour (LF::line);
+        g.fillRect (juce::Rectangle<float> (area.getX() + 8.0f, area.getBottom() - 1.0f,
+                                            area.getWidth() - 16.0f, 1.0f));
+        return;
+    }
+
+    const bool isCurrent = r.text == current;
     if (selected)
     {
-        g.setColour (LF::toxic.withAlpha (0.22f));
-        g.fillRoundedRectangle (r, 5.0f);
-        g.setColour (LF::toxic.withAlpha (0.5f));
-        g.drawRoundedRectangle (r.reduced (0.5f), 5.0f, 1.0f);
-    }
-    else if (isCurrent)
-    {
-        g.setColour (LF::panel.brighter (0.10f));
-        g.fillRoundedRectangle (r, 5.0f);
+        g.setColour (LF::accentA.withAlpha (0.18f));
+        g.fillRoundedRectangle (area, 6.0f);
+        g.setColour (LF::accentA);
+        g.fillRoundedRectangle (area.withWidth (2.5f), 1.2f);
     }
 
-    g.setColour (isCurrent ? LF::toxic : LF::textCol.withAlpha (0.9f));
-    g.setFont (juce::Font (juce::FontOptions (14.0f, isCurrent ? juce::Font::bold : juce::Font::plain)));
-    g.drawText (filtered[row], r.withTrimmedLeft (10), juce::Justification::centredLeft, true);
+    // Star.
+    const bool fave = callbacks.isFavourite && callbacks.isFavourite (r.text);
+    auto starArea = area.removeFromRight (26.0f);
+    {
+        juce::Path star;
+        const auto c = starArea.getCentre();
+        const float outer = 6.0f, inner = 2.6f;
+        for (int i = 0; i < 10; ++i)
+        {
+            const float ang = juce::MathConstants<float>::pi * (float) i / 5.0f
+                            - juce::MathConstants<float>::halfPi;
+            const float rad = (i % 2 == 0) ? outer : inner;
+            const juce::Point<float> p { c.x + std::cos (ang) * rad, c.y + std::sin (ang) * rad };
+            if (i == 0) star.startNewSubPath (p); else star.lineTo (p);
+        }
+        star.closeSubPath();
+        if (fave) { g.setColour (LF::accentA); g.fillPath (star); }
+        else      { g.setColour (LF::textDim.withAlpha (0.45f)); g.strokePath (star, juce::PathStrokeType (1.0f)); }
+    }
+
+    g.setColour (isCurrent ? LF::accentA : LF::text.withAlpha (0.88f));
+    g.setFont (juce::Font (juce::FontOptions (13.5f, isCurrent ? juce::Font::bold : juce::Font::plain)));
+    // Drop the redundant "Category - " prefix; the header above already says it.
+    const auto shown = r.text.contains (" - ") ? r.text.fromFirstOccurrenceOf (" - ", false, false)
+                                               : r.text;
+    g.drawText (shown, area.withTrimmedLeft (12).toNearestInt(), juce::Justification::centredLeft, true);
 }
 
-void PresetBrowser::listBoxItemClicked (int row, const juce::MouseEvent&) { commit (row); }
-void PresetBrowser::returnKeyPressed (int lastRowSelected) { commit (lastRowSelected); }
+void PresetBrowser::listBoxItemClicked (int row, const juce::MouseEvent& e)
+{
+    if (row < 0 || row >= (int) rows.size() || rows[(size_t) row].isHeader)
+        return;
+
+    // The star column toggles rather than loads.
+    if (e.x > getWidth() - 34 && callbacks.setFavourite && callbacks.isFavourite)
+    {
+        const auto name = rows[(size_t) row].text;
+        callbacks.setFavourite (name, ! callbacks.isFavourite (name));
+        list.repaint();
+        return;
+    }
+    commitRow (row);
+}
+
+void PresetBrowser::selectedRowsChanged (int lastRowSelected)
+{
+    // Auditioning: moving the selection loads the preset but leaves the browser
+    // open, so the arrow keys walk the library and you hear every one.
+    if (lastRowSelected < 0 || lastRowSelected >= (int) rows.size())
+        return;
+    const auto& r = rows[(size_t) lastRowSelected];
+    if (r.isHeader || r.text == current)
+        return;
+    current = r.text;
+    if (callbacks.audition)
+        callbacks.audition (r.text);
+    list.repaint();
+}
+
+void PresetBrowser::returnKeyPressed (int lastRowSelected) { commitRow (lastRowSelected); }
 
 void PresetBrowser::paint (juce::Graphics& g)
 {
@@ -195,8 +286,10 @@ void PresetBrowser::paint (juce::Graphics& g)
 void PresetBrowser::resized()
 {
     auto area = getLocalBounds().reduced (12);
-    title.setBounds (area.removeFromTop (24));
-    area.removeFromTop (6);
+    auto head = area.removeFromTop (24);
+    title.setBounds (head.removeFromLeft (110));
+    favouritesOnly.setBounds (head.removeFromRight (104).withSizeKeepingCentre (100, 24));
+    area.removeFromTop (8);
     search.setBounds (area.removeFromTop (30));
     area.removeFromTop (8);
     list.setBounds (area);
@@ -633,14 +726,22 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
     addAndMakeVisible (browseButton);
     browseButton.onClick = [this]
     {
+        PresetBrowser::Callbacks cb;
+        cb.audition = [this] (juce::String name)
+        {
+            // Load it but leave the browser open, so the arrow keys walk the library.
+            proc.preserveLocked ([this, name] { proc.presets.loadPreset (name); });
+            populatePresetBox();
+        };
+        cb.commit = [this] (juce::String name)
+        {
+            proc.preserveLocked ([this, name] { proc.presets.loadPreset (name); });
+            refreshPresetList();
+        };
+        cb.isFavourite  = [this] (juce::String name) { return isFavouritePreset (name); };
+        cb.setFavourite = [this] (juce::String name, bool on) { setFavouritePreset (name, on); };
         auto browser = std::make_unique<PresetBrowser> (
-            proc.presets.getPresetNames(),
-            proc.presets.getCurrentPresetName(),
-            [this] (juce::String name)
-            {
-                proc.preserveLocked ([this, name] { proc.presets.loadPreset (name); });
-                refreshPresetList();
-            });
+            proc.presets.getPresetNames(), proc.presets.getCurrentPresetName(), std::move (cb));
         browser->setLookAndFeel (&lnf);
         juce::CallOutBox::launchAsynchronously (std::move (browser),
                                                 browseButton.getScreenBounds(), nullptr);
@@ -2257,6 +2358,27 @@ void GrainFreezeEditor::loadSampleFile (const juce::File& file)
         return;
     }
     updateGrainSampleLabel();
+}
+
+bool GrainFreezeEditor::isFavouritePreset (const juce::String& name) const
+{
+    return favouritePresets().contains (name);
+}
+
+juce::StringArray GrainFreezeEditor::favouritePresets() const
+{
+    juce::StringArray out;
+    out.addTokens (proc.apvts.state.getProperty ("favouritePresets").toString(), "\n", "");
+    out.removeEmptyStrings();
+    return out;
+}
+
+void GrainFreezeEditor::setFavouritePreset (const juce::String& name, bool shouldBeFavourite)
+{
+    auto list = favouritePresets();
+    if (shouldBeFavourite) { if (! list.contains (name)) list.add (name); }
+    else                     list.removeString (name);
+    proc.apvts.state.setProperty ("favouritePresets", list.joinIntoString ("\n"), nullptr);
 }
 
 juce::String GrainFreezeEditor::bounceFileName() const

@@ -110,13 +110,24 @@ private:
     float amount = 0.0f;
 };
 
-// Searchable preset browser shown in a callout from the preset bar.
+// The preset browser. Presets are the way in to a plugin this size, so this is
+// a browser rather than a list: search, categories from the "Category - Name"
+// convention the factory presets already use, favourites, and -- the part that
+// matters -- moving the selection loads the preset immediately, so you can walk
+// the list with the arrow keys and hear each one without committing.
 class PresetBrowser : public juce::Component,
                       private juce::ListBoxModel
 {
 public:
-    PresetBrowser (juce::StringArray names, juce::String currentName,
-                   std::function<void (juce::String)> onChoose);
+    struct Callbacks
+    {
+        std::function<void (juce::String)> audition;      // load, keep browsing
+        std::function<void (juce::String)> commit;        // load and close
+        std::function<bool (juce::String)> isFavourite;
+        std::function<void (juce::String, bool)> setFavourite;
+    };
+
+    PresetBrowser (juce::StringArray names, juce::String currentName, Callbacks cb);
 
     void resized() override;
     void paint (juce::Graphics&) override;
@@ -124,18 +135,27 @@ public:
     int getNumRows() override;
     void paintListBoxItem (int row, juce::Graphics&, int w, int h, bool selected) override;
     void listBoxItemClicked (int row, const juce::MouseEvent&) override;
+    void selectedRowsChanged (int lastRowSelected) override;
     void returnKeyPressed (int lastRowSelected) override;
 
 private:
-    void applyFilter();
-    void commit (int row);
+    struct Row
+    {
+        juce::String text;
+        bool isHeader = false;
+    };
 
-    juce::Label       title;
-    juce::TextEditor  search;
-    juce::ListBox     list { "presets", this };
-    juce::StringArray allNames, filtered;
-    juce::String      current;
-    std::function<void (juce::String)> choose;
+    void rebuildRows();
+    void commitRow (int row);
+
+    juce::Label        title;
+    juce::TextEditor   search;
+    juce::TextButton   favouritesOnly { "Favourites" };
+    juce::ListBox      list { "presets", this };
+    juce::StringArray  allNames;
+    std::vector<Row>   rows;
+    juce::String       current, startedOn;
+    Callbacks          callbacks;
 };
 
 // Small grain cloud visualization. Reads a snapshot of active grains from the
@@ -658,6 +678,10 @@ private:
     void loadSampleFile (const juce::File& file);
     void updateCurveDivisions();
     juce::String bounceFileName() const;
+    // Favourites ride in the state tree, so they travel with the session.
+    bool isFavouritePreset (const juce::String& name) const;
+    juce::StringArray favouritePresets() const;
+    void setFavouritePreset (const juce::String& name, bool shouldBeFavourite);
     void updateGrainSampleLabel();
     bool fileDragActive = false;   // paints a drop hint while a file is over us
 
