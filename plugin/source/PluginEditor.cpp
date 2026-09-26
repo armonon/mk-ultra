@@ -1250,6 +1250,13 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             proc.apvts, s + "Depth", modMatrixDepth[(size_t) i]);
     }
 
+    // ---- The source display: Position and Spray, shown on the sound ----
+    sourceDisplay = std::make_unique<gf::SourceDisplay>();
+    sourceDisplay->setTooltip ("What the grain cloud is reading. The band is the window Position and "
+                               "Spray draw from; each dot is a live grain, placed where it is reading "
+                               "and how it is panned.");
+    addAndMakeVisible (*sourceDisplay);
+
     // ---- Bounce ---------------------------------------------------------
     bounceButton.setTooltip ("Render what you are hearing and drag it straight into your DAW. "
                              "Click instead to save it to a file.");
@@ -1705,6 +1712,35 @@ void GrainFreezeEditor::timerCallback()
     if (currentTab == -1 && animating)
         grainViz.refresh();
 
+    // The source display: the material, the read window, and the live cloud.
+    if (currentTab == 0 && sourceDisplay != nullptr && sourceDisplay->isVisible())
+    {
+        std::array<float, gf::SourceDisplay::kBuckets> peaks {};
+        proc.copySourcePeaks (peaks.data(), (int) peaks.size());
+        sourceDisplay->setWaveform (peaks);
+
+        gf::GranularEngine::GrainSnapshot snap[gf::SourceDisplay::kMaxGrainDots];
+        const int n = proc.copyGrainSnapshot (snap, gf::SourceDisplay::kMaxGrainDots);
+        sourceDisplay->setGrains (snap, n);
+
+        const auto norm = [this] (const char* id, float fallback)
+        {
+            if (auto* p = proc.apvts.getParameter (id))
+                return p->getValue();
+            return fallback;
+        };
+        // Spray is in milliseconds against a four-second capture, so show it as
+        // a fraction of what is on screen.
+        const float sprayMs = proc.apvts.getRawParameterValue ("spray") != nullptr
+                                  ? proc.apvts.getRawParameterValue ("spray")->load() : 0.0f;
+        sourceDisplay->setWindow (norm ("position", 0.5f),
+                                  juce::jlimit (0.0f, 1.0f, (sprayMs * 0.001f) / 4.0f));
+        sourceDisplay->setSourceName (proc.hasGranularSample()
+                                          ? juce::File (proc.getGranularSamplePath()).getFileName()
+                                          : juce::String ("LIVE INPUT"));
+        sourceDisplay->repaint();
+    }
+
     // The Curve's playhead and the audio drawn behind it.
     if (currentTab == -1 && curveEditor != nullptr && curveEditor->isVisible())
     {
@@ -2029,6 +2065,7 @@ void GrainFreezeEditor::updateTabVisibility()
     grainSourceBox.setVisible (entropyTab);
     grainSampleLoad.setVisible (entropyTab);
     grainTriggerBox.setVisible (entropyTab);
+    if (sourceDisplay != nullptr) sourceDisplay->setVisible (entropyTab);
     for (auto* c : { &transientSense, &transientGrains }) c->setVisible (entropyTab);
     for (auto* l : { &transientSenseL, &transientGrainsL }) l->setVisible (entropyTab);
     grainSampleClear.setVisible (entropyTab);
@@ -2554,6 +2591,13 @@ void GrainFreezeEditor::resized()
                 knobs[(size_t) idx].ring->setBounds (k);
         });
         area.removeFromTop (gap);
+        // The source the grains are reading, with the cloud on it. Wide and
+        // short: it is a map of the sound, not another meter.
+        if (sourceDisplay != nullptr)
+        {
+            sourceDisplay->setBounds (area.removeFromTop (96));
+            area.removeFromTop (gap);
+        }
         bottom = area.removeFromTop (122);
         // SOURCE row: [SOURCE][Live/Sample][Load...][Clear][file name]
         {

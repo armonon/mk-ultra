@@ -198,6 +198,12 @@ public:
     { return entropyEngine.copyGrainSnapshot (out, maxOut); }
     bool sampleFreezeReady() const { return sampleEngine.ready(); }
 
+    // The material the grains are reading, and where in it they are, so the
+    // Texture page can show Position and Spray on the sound instead of as numbers.
+    int copySourcePeaks (float* out, int numBuckets) const
+    { return entropyEngine.copySourcePeaks (out, numBuckets); }
+    float getReadOrigin01() const { return entropyEngine.getReadOrigin01(); }
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     void pullParameters();

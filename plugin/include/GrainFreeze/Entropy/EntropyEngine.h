@@ -67,6 +67,9 @@ public:
     void setActiveVoices (const gf::GranularEngine::VoicePush* v, int n) { granular.setActiveVoices (v, n); }
     int  copyGrainSnapshot (gf::GranularEngine::GrainSnapshot* out, int maxOut) const
     { return granular.copyGrainSnapshot (out, maxOut); }
+    int  copySourcePeaks (float* out, int numBuckets) const
+    { return granular.copySourcePeaks (out, numBuckets); }
+    float getReadOrigin01() const { return granular.getReadOrigin01(); }
 
 private:
     gf::GranularEngine granular;

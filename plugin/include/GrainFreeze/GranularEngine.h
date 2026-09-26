@@ -90,7 +90,7 @@ public:
     // editor's grain cloud display; reads of `grains` are racy (the audio thread
     // may be mutating them) but only a viz uses this -- audio is unaffected, and
     // a stale frame is invisible at the editor refresh rate.
-    struct GrainSnapshot { float pan; float age01; float amp; };
+    struct GrainSnapshot { float pan; float age01; float amp; float pos01; };
     int copyGrainSnapshot (GrainSnapshot* out, int maxOut) const
     {
         int n = 0;
@@ -103,6 +103,13 @@ public:
                               ? 1.0f - (float) g.samplesLeft / (float) g.lengthSamps
                               : 0.0f;
             out[n].amp   = g.amp;
+            // Where in the source this grain is reading, so the UI can show the
+            // cloud on the waveform instead of only as an abstract puff.
+            {
+                const int len = g.fromSample ? sampleLen : captureLen;
+                out[n].pos01 = len > 0 ? (float) (std::fmod (std::fmax (0.0, g.readPos), (double) len) / (double) len)
+                                       : 0.0f;
+            }
             ++n;
         }
         return n;
@@ -176,6 +183,41 @@ public:
     {
         const int len = announcedSampleLen.load (std::memory_order_acquire);
         return len > 0 && sr > 0.0 ? (double) len / sr : 0.0;
+    }
+
+    // Peak envelope of whatever the grains are currently reading, for the source
+    // display. Like copyGrainSnapshot this reads buffers the audio thread may be
+    // writing: it is a picture, and a torn frame is invisible at UI rates.
+    int copySourcePeaks (float* out, int numBuckets) const
+    {
+        const bool fromSample = readingSample();
+        const auto& buf = fromSample ? sampleBuf : capture;
+        const int len = fromSample ? sampleLen : captureLen;
+        if (out == nullptr || numBuckets <= 0 || len <= 0 || buf.getNumChannels() <= 0)
+            return 0;
+
+        const int per = juce::jmax (1, len / numBuckets);
+        for (int b = 0; b < numBuckets; ++b)
+        {
+            float peak = 0.0f;
+            const int start = b * per;
+            for (int i = 0; i < per && start + i < len; i += juce::jmax (1, per / 32))
+                for (int c = 0; c < buf.getNumChannels(); ++c)
+                    peak = juce::jmax (peak, std::abs (buf.getSample (c, start + i)));
+            out[b] = juce::jlimit (0.0f, 1.0f, peak);
+        }
+        return numBuckets;
+    }
+
+    // Where "Position 0" sits in the picture above. Reading a sample, the window
+    // starts at the beginning of the file; reading live, it trails the write head.
+    float getReadOrigin01() const
+    {
+        if (readingSample())
+            return 0.0f;
+        return captureLen > 0 ? (float) (((captureWrite - (int) (0.05 * sr)) % captureLen + captureLen) % captureLen)
+                                    / (float) captureLen
+                              : 0.0f;
     }
 
     bool isPrepared() const { return prepared; }
