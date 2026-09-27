@@ -1667,6 +1667,7 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
         std::vector<juce::Component*> stay {
             &prevButton, &nextButton, &presetBox, &presetName, &saveButton, &randomizeButton,
             &buttonA, &buttonB, &advancedButton, &moreButton, &tourButton, &panicButton, &updateButton,
+            &browseButton,
             &tabEntropy, &tabMachines, &tabPrettifier, &tabAir, &tabMix,
             &homeTextureOn, &homeSpaceOn, &airOn,
             &morphPad, &morphPadLabel, &grainViz, &morphCapA, &morphCapB, &morphCapC, &morphCapD,
@@ -1812,12 +1813,22 @@ void GrainFreezeEditor::timerCallback()
                 return p->getValue();
             return fallback;
         };
-        // Spray is in milliseconds against a four-second capture, so show it as
-        // a fraction of what is on screen.
+        // The waveform and the grain dots are both in buffer order, so Position
+        // has to be too: reading live it is an offset from the trailing read
+        // head, not an absolute point in the ring.
+        const float origin = proc.getReadOrigin01();
+        float marker = origin + norm ("position", 0.5f);
+        marker -= std::floor (marker);
+
+        // Spray is in milliseconds; show it as a fraction of what is on screen,
+        // which is the sample's length or the four-second capture ring.
         const float sprayMs = proc.apvts.getRawParameterValue ("spray") != nullptr
                                   ? proc.apvts.getRawParameterValue ("spray")->load() : 0.0f;
-        sourceDisplay->setWindow (norm ("position", 0.5f),
-                                  juce::jlimit (0.0f, 1.0f, (sprayMs * 0.001f) / 4.0f));
+        const float windowSeconds = proc.hasGranularSample()
+                                        ? (float) juce::jmax (0.1, proc.getGranularSampleSeconds())
+                                        : 4.0f;
+        sourceDisplay->setWindow (marker,
+                                  juce::jlimit (0.0f, 1.0f, (sprayMs * 0.001f) / windowSeconds));
         sourceDisplay->setSourceName (proc.hasGranularSample()
                                           ? juce::File (proc.getGranularSamplePath()).getFileName()
                                           : juce::String ("LIVE INPUT"));
@@ -2104,9 +2115,11 @@ void GrainFreezeEditor::updateTabVisibility()
 
     // Old 3-row toolbar: these now live in the "..." menu (or the Texture drawer).
     for (auto* b : { &copyAToBButton, &copyBToAButton, &resetBButton, &undoButton, &redoButton,
-                     &initButton, &randomizeAllButton, &browseButton, &shareButton, &deletePresetButton,
+                     &initButton, &randomizeAllButton, &shareButton, &deletePresetButton,
                      &buttonA, &buttonB })   // A/B recall == the morph pad's A/B corners; one system, not two
         b->setVisible (false);
+    // Browse is not one of those: the library is the way in, so it gets a button.
+    browseButton.setVisible (true);
 
     freezeButton.setVisible (entropyTab);
     const bool adv = advancedMode;
@@ -2521,7 +2534,10 @@ void GrainFreezeEditor::resized()
     auto hrow = header.withSizeKeepingCentre (header.getWidth(), 30);
     prevButton.setBounds (hrow.removeFromLeft (30));   hrow.removeFromLeft (2);
     nextButton.setBounds (hrow.removeFromLeft (30));   hrow.removeFromLeft (gap);
-    presetBox.setBounds  (hrow.removeFromLeft (220));  hrow.removeFromLeft (gap);
+    presetBox.setBounds  (hrow.removeFromLeft (156));  hrow.removeFromLeft (6);
+    // The browser is the way in to a library this size; it was reachable only
+    // from the "..." menu, and the button for it was never given bounds at all.
+    browseButton.setBounds (hrow.removeFromLeft (78));  hrow.removeFromLeft (gap);
     // Right cluster, outermost first.
     panicButton.setBounds    (hrow.removeFromRight (64));  hrow.removeFromRight (6);
     tourButton.setBounds     (hrow.removeFromRight (28));  hrow.removeFromRight (6);

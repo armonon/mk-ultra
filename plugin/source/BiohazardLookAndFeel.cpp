@@ -118,6 +118,22 @@ void BiohazardLookAndFeel::drawTracked (juce::Graphics& g, const juce::String& t
     }
 }
 
+// Tracked when it fits, shrunk to fit when it does not. drawTracked places
+// glyphs by hand and knows nothing about the area's width, so long captions like
+// "Chaos <-> Beauty" were being clipped to "IOS <-> BEA".
+static void drawTrackedFitted (juce::Graphics& g, const juce::String& textToDraw,
+                               juce::Rectangle<float> area, juce::Justification just,
+                               float tracking)
+{
+    const auto up = textToDraw.toUpperCase();
+    const float width = g.getCurrentFont().getStringWidthFloat (up)
+                      + tracking * (float) juce::jmax (0, up.length() - 1);
+    if (width <= area.getWidth())
+        BiohazardLookAndFeel::drawTracked (g, textToDraw, area, just, tracking);
+    else
+        g.drawFittedText (up, area.toNearestInt(), just, 1, 0.62f);
+}
+
 void BiohazardLookAndFeel::drawPanel (juce::Graphics& g, juce::Rectangle<float> bounds,
                                       float radius, bool elevated)
 {
@@ -161,7 +177,7 @@ void BiohazardLookAndFeel::drawEyebrow (juce::Graphics& g, const juce::String& t
     g.setColour (accentA);
     // 0.74rem at 0.16em tracking, in the reference's terms.
     g.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
-    drawTracked (g, textToDraw, area, just, 1.8f);
+    drawTrackedFitted (g, textToDraw, area, just, 1.8f);
 }
 
 void BiohazardLookAndFeel::drawGlow (juce::Graphics& g, const juce::Path& shape,
@@ -368,8 +384,8 @@ void BiohazardLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& 
     g.setFont (getTextButtonFont (b, b.getHeight()));
     juce::ignoreUnused (acc);
 
-    drawTracked (g, b.getButtonText(), b.getLocalBounds().toFloat(),
-                 juce::Justification::centred, chain ? 2.0f : 1.2f);
+    drawTrackedFitted (g, b.getButtonText(), b.getLocalBounds().toFloat(),
+                       juce::Justification::centred, chain ? 2.0f : 1.2f);
 }
 
 juce::Font BiohazardLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHeight)
@@ -384,8 +400,13 @@ void BiohazardLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButt
     const bool on = b.getToggleState();
     auto bounds = b.getLocalBounds().toFloat();
 
-    // A switch, not a tick box: capsule track with a travelling knob.
-    const float h = juce::jlimit (14.0f, 20.0f, bounds.getHeight() - 6.0f);
+    // A switch, not a tick box: capsule track with a travelling knob. It gives
+    // ground when the button is narrow, so a label beside it still fits -- these
+    // sit in fixed-width cells and a capsule that never shrank was clipping them.
+    const bool hasText = b.getButtonText().isNotEmpty();
+    float h = juce::jlimit (12.0f, 20.0f, bounds.getHeight() - 6.0f);
+    if (hasText)
+        h = juce::jmin (h, juce::jmax (12.0f, bounds.getWidth() * 0.42f / 1.85f));
     const float w = h * 1.85f;
     auto track = juce::Rectangle<float> (bounds.getX() + 1.0f, bounds.getCentreY() - h * 0.5f, w, h);
 
@@ -410,12 +431,19 @@ void BiohazardLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButt
     g.setColour (on ? juce::Colour (0xff160d07) : textDim);
     g.fillEllipse (knob);
 
-    auto textArea = bounds.withTrimmedLeft (w + 10.0f);
-    if (textArea.getWidth() > 4.0f && b.getButtonText().isNotEmpty())
+    auto textArea = bounds.withTrimmedLeft (w + 8.0f);
+    if (textArea.getWidth() > 4.0f && hasText)
     {
         g.setColour (b.isEnabled() ? (on ? text : textDim) : textDim.withAlpha (0.4f));
         g.setFont (uiFont (11.5f, true));
-        drawTracked (g, b.getButtonText(), textArea, juce::Justification::centredLeft, 1.2f);
+        // Tracked when there is room for it, shrunk to fit when there is not --
+        // drawTracked has no idea about clipping, so measure first.
+        const auto up = b.getButtonText().toUpperCase();
+        const float tracked = g.getCurrentFont().getStringWidthFloat (up) + 1.2f * (float) up.length();
+        if (tracked <= textArea.getWidth())
+            drawTracked (g, b.getButtonText(), textArea, juce::Justification::centredLeft, 1.2f);
+        else
+            g.drawFittedText (up, textArea.toNearestInt(), juce::Justification::centredLeft, 1, 0.7f);
     }
 }
 
@@ -554,7 +582,7 @@ void BiohazardLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
         if (id == "caption")
         {
             g.setColour (textDim);
-            drawTracked (g, label.getText(), area, label.getJustificationType(), 1.2f);
+            drawTrackedFitted (g, label.getText(), area, label.getJustificationType(), 1.2f);
             return;
         }
         g.setColour (label.findColour (juce::Label::textColourId));
