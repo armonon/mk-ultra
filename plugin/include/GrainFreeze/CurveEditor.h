@@ -46,9 +46,9 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        auto b = getLocalBounds().toFloat();
-        LF::drawPanel (g, b, 12.0f);
-        auto plot = b.reduced (10.0f);
+        auto b = getLocalBounds().toFloat().reduced (6.0f);
+        LF::drawStage (g, b, LF::kStageRadius);
+        auto plot = b.reduced (14.0f);
 
         // ---- Beat grid.
         for (int i = 0; i <= divisions; ++i)
@@ -101,8 +101,8 @@ public:
             body.lineTo (plot.getRight(), plot.getCentreY());
             body.lineTo (plot.getX(), plot.getCentreY());
             body.closeSubPath();
-            juce::ColourGradient fill (LF::accentA.withAlpha (0.26f), plot.getCentreX(), plot.getY(),
-                                       LF::accentA.withAlpha (0.02f), plot.getCentreX(), plot.getBottom(), false);
+            juce::ColourGradient fill (LF::accentA.withAlpha (0.24f), plot.getCentreX(), plot.getY(),
+                                       LF::accentB.withAlpha (0.03f), plot.getCentreX(), plot.getBottom(), false);
             g.setGradientFill (fill);
             g.fillPath (body);
         }

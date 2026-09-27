@@ -5,32 +5,34 @@ namespace gf
 {
 
 // ---- Design tokens --------------------------------------------------------
-const juce::Colour BiohazardLookAndFeel::ink       { 0xff06070a };
-const juce::Colour BiohazardLookAndFeel::surface   { 0xff0e1014 };
-const juce::Colour BiohazardLookAndFeel::surfaceHi { 0xff151920 };
-const juce::Colour BiohazardLookAndFeel::line      { 0x12ffffff };
-const juce::Colour BiohazardLookAndFeel::accentA   { 0xff4da6ff };
-const juce::Colour BiohazardLookAndFeel::accentB   { 0xff9b6bff };
-const juce::Colour BiohazardLookAndFeel::accentC   { 0xff3de2c8 };
-const juce::Colour BiohazardLookAndFeel::text      { 0xfff4f7fa };
-const juce::Colour BiohazardLookAndFeel::textDim   { 0xff7e8794 };
-const juce::Colour BiohazardLookAndFeel::negative  { 0xffff6b8a };
+const juce::Colour BiohazardLookAndFeel::ink       { 0xff07070a };
+const juce::Colour BiohazardLookAndFeel::stage     { 0xff020203 };
+const juce::Colour BiohazardLookAndFeel::surface   { 0xff100f14 };
+const juce::Colour BiohazardLookAndFeel::surfaceHi { 0xff1b1a21 };
+const juce::Colour BiohazardLookAndFeel::line      { 0x17ffffff };
+const juce::Colour BiohazardLookAndFeel::lineHi    { 0x1fffffff };
+const juce::Colour BiohazardLookAndFeel::accentA   { 0xfff4b35e };
+const juce::Colour BiohazardLookAndFeel::accentB   { 0xffff6b6b };
+const juce::Colour BiohazardLookAndFeel::accentC   { 0xff67e8f9 };
+const juce::Colour BiohazardLookAndFeel::text      { 0xfff7f0e8 };
+const juce::Colour BiohazardLookAndFeel::textDim   { 0xffa99e92 };
+const juce::Colour BiohazardLookAndFeel::negative  { 0xffff6b6b };
 
 // ---- Legacy aliases -------------------------------------------------------
 const juce::Colour BiohazardLookAndFeel::bg          = BiohazardLookAndFeel::ink;
 const juce::Colour BiohazardLookAndFeel::panel       = BiohazardLookAndFeel::surface;
 const juce::Colour BiohazardLookAndFeel::metal       = BiohazardLookAndFeel::surfaceHi;
-const juce::Colour BiohazardLookAndFeel::metalHi     { 0xff202632 };
-const juce::Colour BiohazardLookAndFeel::metalLo     { 0xff040508 };
+const juce::Colour BiohazardLookAndFeel::metalHi     { 0xff262430 };
+const juce::Colour BiohazardLookAndFeel::metalLo     { 0xff020203 };
 const juce::Colour BiohazardLookAndFeel::toxic       = BiohazardLookAndFeel::accentA;
-const juce::Colour BiohazardLookAndFeel::toxicDim    { 0xff1d4a73 };
+const juce::Colour BiohazardLookAndFeel::toxicDim    { 0xff6b4e28 };
 const juce::Colour BiohazardLookAndFeel::coral       = BiohazardLookAndFeel::negative;
 const juce::Colour BiohazardLookAndFeel::textCol     = BiohazardLookAndFeel::text;
 const juce::Colour BiohazardLookAndFeel::gold        = BiohazardLookAndFeel::accentB;
-const juce::Colour BiohazardLookAndFeel::goldDim     { 0xff4a3773 };
+const juce::Colour BiohazardLookAndFeel::goldDim     { 0xff6b4e28 };
 const juce::Colour BiohazardLookAndFeel::blendAccent = BiohazardLookAndFeel::accentC;
-const juce::Colour BiohazardLookAndFeel::iceBlue     { 0xff7dc0ff };
-const juce::Colour BiohazardLookAndFeel::iceBlueDim  { 0xff2a5a80 };
+const juce::Colour BiohazardLookAndFeel::iceBlue     = BiohazardLookAndFeel::accentC;
+const juce::Colour BiohazardLookAndFeel::iceBlueDim  { 0xff2a6270 };
 
 namespace
 {
@@ -119,10 +121,47 @@ void BiohazardLookAndFeel::drawTracked (juce::Graphics& g, const juce::String& t
 void BiohazardLookAndFeel::drawPanel (juce::Graphics& g, juce::Rectangle<float> bounds,
                                       float radius, bool elevated)
 {
+    // Panels sit on a soft drop shadow -- 0 22px 80px rgba(0,0,0,.4) in the
+    // reference -- approximated with a few offset, fading rounded rects.
+    for (int i = 3; i >= 1; --i)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.10f));
+        g.fillRoundedRectangle (bounds.translated (0.0f, (float) i * 2.5f)
+                                      .expanded ((float) i * 1.5f), radius + (float) i);
+    }
     g.setColour (elevated ? surfaceHi : surface);
     g.fillRoundedRectangle (bounds, radius);
     g.setColour (line);
     g.drawRoundedRectangle (bounds.reduced (0.5f), radius, 1.0f);
+}
+
+void BiohazardLookAndFeel::drawStage (juce::Graphics& g, juce::Rectangle<float> bounds,
+                                      float radius, float glow)
+{
+    // The bed a visualiser sits on: darker than anything else on the page, with
+    // an amber bloom around it (0 0 90px rgba(244,179,94,.13)).
+    if (glow > 0.0f)
+    {
+        for (int i = 4; i >= 1; --i)
+        {
+            const float spread = (float) i * 5.0f;
+            g.setColour (accentA.withAlpha (0.030f * glow));
+            g.fillRoundedRectangle (bounds.expanded (spread), radius + spread * 0.6f);
+        }
+    }
+    g.setColour (stage);
+    g.fillRoundedRectangle (bounds, radius);
+    g.setColour (juce::Colours::white.withAlpha (0.08f));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), radius, 1.0f);
+}
+
+void BiohazardLookAndFeel::drawEyebrow (juce::Graphics& g, const juce::String& textToDraw,
+                                        juce::Rectangle<float> area, juce::Justification just)
+{
+    g.setColour (accentA);
+    // 0.74rem at 0.16em tracking, in the reference's terms.
+    g.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
+    drawTracked (g, textToDraw, area, just, 1.8f);
 }
 
 void BiohazardLookAndFeel::drawGlow (juce::Graphics& g, const juce::Path& shape,
@@ -237,9 +276,9 @@ void BiohazardLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, in
     }
 
     const float cy = (float) y + (float) height * 0.5f;
-    auto track = juce::Rectangle<float> ((float) x + 2.0f, cy - 2.0f, (float) width - 4.0f, 4.0f);
+    auto track = juce::Rectangle<float> ((float) x + 2.0f, cy - 3.5f, (float) width - 4.0f, 7.0f);
     g.setColour (juce::Colours::white.withAlpha (0.08f));
-    g.fillRoundedRectangle (track, 2.0f);
+    g.fillRoundedRectangle (track, track.getHeight() * 0.5f);
 
     // Bipolar sliders (mod depth) fill from the centre.
     const bool bipolar = slider.getMinimum() < -0.0001;
@@ -248,14 +287,12 @@ void BiohazardLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, in
                                           juce::jmax (2.0f, std::abs (sliderPos - origin)),
                                           track.getHeight());
     g.setColour (acc);
-    g.fillRoundedRectangle (filled, 2.0f);
+    g.fillRoundedRectangle (filled, filled.getHeight() * 0.5f);
 
     const float r = juce::jmin (7.0f, (float) height * 0.45f);
     auto thumb = juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre ({ sliderPos, cy });
-    g.setColour (slider.isMouseOverOrDragging() ? text : surfaceHi.brighter (0.35f));
+    g.setColour (slider.isMouseOverOrDragging() ? text : juce::Colour (0xffe8dccf));
     g.fillEllipse (thumb);
-    g.setColour (acc);
-    g.drawEllipse (thumb.reduced (0.8f), 1.4f);
 }
 
 // ---------------------------------------------------------------------------
@@ -289,20 +326,29 @@ void BiohazardLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button
     }
 
     const bool on = b.getToggleState();
-    const float radius = juce::jmin (bounds.getHeight() * 0.5f, 9.0f);
+    const float radius = juce::jmin (bounds.getHeight() * 0.5f, kControlRadius);
     bounds = bounds.reduced (0.5f);
+    // Hover lifts by a pixel, as in the reference.
+    if (highlighted && ! down)
+        bounds = bounds.translated (0.0f, -1.0f);
 
     if (on)
     {
-        g.setColour (acc.withAlpha (down ? 0.85f : 1.0f));
+        juce::ColourGradient grad (accentA, bounds.getX(), bounds.getY(),
+                                   accentB, bounds.getRight(), bounds.getBottom(), false);
+        g.setGradientFill (grad);
         g.fillRoundedRectangle (bounds, radius);
+        if (down)
+        {
+            g.setColour (juce::Colours::black.withAlpha (0.15f));
+            g.fillRoundedRectangle (bounds, radius);
+        }
     }
     else
     {
-        g.setColour (down ? surfaceHi.brighter (0.10f)
-                          : (highlighted ? surfaceHi.brighter (0.06f) : surfaceHi));
+        g.setColour (juce::Colours::white.withAlpha (down ? 0.14f : (highlighted ? 0.12f : 0.07f)));
         g.fillRoundedRectangle (bounds, radius);
-        g.setColour (highlighted ? acc.withAlpha (0.45f) : line);
+        g.setColour (lineHi);
         g.drawRoundedRectangle (bounds, radius, 1.0f);
     }
 }
@@ -314,14 +360,13 @@ void BiohazardLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& 
     const bool on = b.getToggleState();
     const bool chain = b.getComponentID() == "chain";
 
-    juce::Colour colour = on ? ink : text;
+    juce::Colour colour = on ? juce::Colour (0xff160d07) : text;   // the reference's ink-on-amber
     if (chain)
-        colour = on ? text : (highlighted ? text.withAlpha (0.85f) : textDim);
+        colour = on ? accentA : (highlighted ? text.withAlpha (0.9f) : textDim);
 
     g.setColour (b.isEnabled() ? colour : textDim.withAlpha (0.4f));
     g.setFont (getTextButtonFont (b, b.getHeight()));
-    if (chain && on)
-        g.setColour (acc.brighter (0.4f));
+    juce::ignoreUnused (acc);
 
     drawTracked (g, b.getButtonText(), b.getLocalBounds().toFloat(),
                  juce::Justification::centred, chain ? 2.0f : 1.2f);
@@ -346,28 +391,23 @@ void BiohazardLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButt
 
     if (on)
     {
-        g.setColour (acc.withAlpha (0.28f));
+        juce::ColourGradient grad (accentA, track.getX(), track.getY(),
+                                   accentB, track.getRight(), track.getBottom(), false);
+        g.setGradientFill (grad);
         g.fillRoundedRectangle (track, h * 0.5f);
-        g.setColour (acc);
-        g.drawRoundedRectangle (track.reduced (0.5f), h * 0.5f, 1.2f);
     }
     else
     {
-        g.setColour (surfaceHi);
+        g.setColour (juce::Colours::white.withAlpha (0.07f));
         g.fillRoundedRectangle (track, h * 0.5f);
-        g.setColour (highlighted ? acc.withAlpha (0.4f) : line);
+        g.setColour (highlighted ? accentA.withAlpha (0.45f) : lineHi);
         g.drawRoundedRectangle (track.reduced (0.5f), h * 0.5f, 1.0f);
     }
 
     const float kr = h * 0.5f - 3.0f;
     const float kx = on ? track.getRight() - kr - 3.0f : track.getX() + kr + 3.0f;
     auto knob = juce::Rectangle<float> (kr * 2.0f, kr * 2.0f).withCentre ({ kx, track.getCentreY() });
-    if (on)
-    {
-        juce::Path p; p.addEllipse (knob);
-        drawGlow (g, p, acc, 0.9f);
-    }
-    g.setColour (on ? acc : textDim);
+    g.setColour (on ? juce::Colour (0xff160d07) : textDim);
     g.fillEllipse (knob);
 
     auto textArea = bounds.withTrimmedLeft (w + 10.0f);
@@ -385,10 +425,10 @@ void BiohazardLookAndFeel::drawComboBox (juce::Graphics& g, int width, int heigh
 {
     auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height).reduced (0.5f);
     const bool hover = box.isMouseOver();
-    g.setColour (surfaceHi);
-    g.fillRoundedRectangle (bounds, 6.0f);
-    g.setColour (hover ? accent().withAlpha (0.45f) : line);
-    g.drawRoundedRectangle (bounds, 6.0f, 1.0f);
+    g.setColour (juce::Colours::white.withAlpha (hover ? 0.12f : 0.07f));
+    g.fillRoundedRectangle (bounds, kControlRadius);
+    g.setColour (hover ? accentA.withAlpha (0.5f) : lineHi);
+    g.drawRoundedRectangle (bounds, kControlRadius, 1.0f);
 
     // Chevron.
     const float cx = bounds.getRight() - 13.0f, cy = bounds.getCentreY();
@@ -412,9 +452,9 @@ void BiohazardLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width
 {
     auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
     g.setColour (surface);
-    g.fillRoundedRectangle (bounds, 8.0f);
+    g.fillRoundedRectangle (bounds, 16.0f);
     g.setColour (line);
-    g.drawRoundedRectangle (bounds.reduced (0.5f), 8.0f, 1.0f);
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 16.0f, 1.0f);
 }
 
 void BiohazardLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area,
@@ -479,16 +519,16 @@ void BiohazardLookAndFeel::fillTextEditorBackground (juce::Graphics& g, int widt
                                                      juce::TextEditor&)
 {
     auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height).reduced (0.5f);
-    g.setColour (surfaceHi);
-    g.fillRoundedRectangle (bounds, 6.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.07f));
+    g.fillRoundedRectangle (bounds, kControlRadius);
 }
 
 void BiohazardLookAndFeel::drawTextEditorOutline (juce::Graphics& g, int width, int height,
                                                   juce::TextEditor& editor)
 {
     auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height).reduced (0.5f);
-    g.setColour (editor.hasKeyboardFocus (true) ? accent().withAlpha (0.55f) : line);
-    g.drawRoundedRectangle (bounds, 6.0f, 1.0f);
+    g.setColour (editor.hasKeyboardFocus (true) ? accentA.withAlpha (0.6f) : lineHi);
+    g.drawRoundedRectangle (bounds, kControlRadius, 1.0f);
 }
 
 juce::Font BiohazardLookAndFeel::getLabelFont (juce::Label& l)
@@ -506,11 +546,15 @@ void BiohazardLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
         // Section headings and knob captions are set as tracked uppercase; the
         // componentID says which role a label is playing.
         const auto id = label.getComponentID();
-        if (id == "section" || id == "caption")
+        if (id == "section")
         {
-            g.setColour (id == "section" ? text : textDim);
-            drawTracked (g, label.getText(), area, label.getJustificationType(),
-                         id == "section" ? 2.2f : 1.4f);
+            drawEyebrow (g, label.getText(), area, label.getJustificationType());
+            return;
+        }
+        if (id == "caption")
+        {
+            g.setColour (textDim);
+            drawTracked (g, label.getText(), area, label.getJustificationType(), 1.2f);
             return;
         }
         g.setColour (label.findColour (juce::Label::textColourId));

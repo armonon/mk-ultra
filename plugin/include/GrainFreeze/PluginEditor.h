@@ -178,12 +178,9 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        const auto b = getLocalBounds().toFloat().reduced (1.0f);
-        // Background frame -- matches the morph pad styling so they read as a pair.
-        g.setColour (gf::BiohazardLookAndFeel::metal);
-        g.fillRoundedRectangle (b, 4.0f);
-        g.setColour (gf::BiohazardLookAndFeel::textCol.withAlpha (0.18f));
-        g.drawRoundedRectangle (b, 4.0f, 1.0f);
+        const auto b = getLocalBounds().toFloat().reduced (4.0f);
+        // A stage, like the morph pad, so the two read as a pair.
+        gf::BiohazardLookAndFeel::drawStage (g, b, 20.0f, 0.6f);
 
         if (count <= 0) return;
         for (int i = 0; i < count; ++i)
@@ -195,7 +192,7 @@ public:
             // Age fades the grain out near the end of its life.
             const float alpha = juce::jlimit (0.0f, 1.0f, 1.0f - s.age01) * 0.85f;
             const float r = 2.0f + 2.0f * s.amp;
-            g.setColour (gf::BiohazardLookAndFeel::toxic.withAlpha (alpha));
+            g.setColour (gf::BiohazardLookAndFeel::accentA.withAlpha (alpha));
             g.fillEllipse (x - r, y - r, r * 2, r * 2);
         }
     }
@@ -220,16 +217,15 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        auto b = getLocalBounds().toFloat().reduced (1.0f);
-        g.setColour (gf::BiohazardLookAndFeel::metal);
-        g.fillRoundedRectangle (b, 5.0f);
-        g.setColour (gf::BiohazardLookAndFeel::textCol.withAlpha (0.22f));
-        g.drawRoundedRectangle (b, 5.0f, 1.0f);
-        g.drawLine (b.getCentreX(), b.getY(), b.getCentreX(), b.getBottom(), 0.5f);
-        g.drawLine (b.getX(), b.getCentreY(), b.getRight(), b.getCentreY(), 0.5f);
+        auto b = getLocalBounds().toFloat().reduced (4.0f);
+        gf::BiohazardLookAndFeel::drawStage (g, b, 20.0f, 0.6f);
+        b = b.reduced (10.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.08f));
+        g.drawLine (b.getCentreX(), b.getY(), b.getCentreX(), b.getBottom(), 1.0f);
+        g.drawLine (b.getX(), b.getCentreY(), b.getRight(), b.getCentreY(), 1.0f);
 
-        g.setFont (juce::Font (juce::FontOptions (11.0f)));
-        g.setColour (gf::BiohazardLookAndFeel::textCol.withAlpha (0.55f));
+        g.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::bold)));
+        g.setColour (gf::BiohazardLookAndFeel::textDim);
         auto ib = b.toNearestInt();
         g.drawText ("A", ib.getX() + 5,      ib.getBottom() - 17, 16, 14, juce::Justification::centredLeft);
         g.drawText ("B", ib.getRight() - 21, ib.getBottom() - 17, 16, 14, juce::Justification::centredRight);
@@ -238,10 +234,15 @@ public:
 
         const float px = b.getX() + paramVal ("macroMorph")  * b.getWidth();
         const float py = b.getBottom() - paramVal ("macroMorphY") * b.getHeight();
-        g.setColour (gf::BiohazardLookAndFeel::toxic);
+        {
+            juce::Path puck;
+            puck.addEllipse (px - 8.0f, py - 8.0f, 16.0f, 16.0f);
+            gf::BiohazardLookAndFeel::drawGlow (g, puck, gf::BiohazardLookAndFeel::accentA, 1.4f);
+        }
+        g.setColour (gf::BiohazardLookAndFeel::accentA);
         g.fillEllipse (px - 7.0f, py - 7.0f, 14.0f, 14.0f);
-        g.setColour (juce::Colours::black.withAlpha (0.5f));
-        g.drawEllipse (px - 7.0f, py - 7.0f, 14.0f, 14.0f, 1.5f);
+        g.setColour (juce::Colour (0xff160d07));
+        g.fillEllipse (px - 3.0f, py - 3.0f, 6.0f, 6.0f);
     }
 
 private:

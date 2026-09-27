@@ -5,9 +5,12 @@
 namespace gf
 {
 
-// The plugin's visual language: near-black ground, one vivid accent, hairline
-// panels, flat thin-ring knobs and uppercase tracked labels. Everything is drawn
-// -- no bitmaps, no bevels, no metal -- so it stays crisp at every UI scale.
+// The plugin's visual language, taken from the Sattari Cymatic Generator: a
+// near-black ground with a warm bloom off to one side, translucent panels with
+// hairline borders and generous radii, cream text on taupe labels, amber as the
+// accent with coral for its gradient partner, and cyan reserved for readouts.
+// Everything is drawn -- no bitmaps, no bevels, no metal -- so it stays crisp at
+// every UI scale.
 //
 // (The class keeps its original name so every existing reference still resolves;
 // the "biohazard" era of brushed chrome and grunge textures is gone.)
@@ -15,16 +18,23 @@ class BiohazardLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     // ---- Design tokens ----------------------------------------------------
-    static const juce::Colour ink;        // page ground
-    static const juce::Colour surface;    // panel
-    static const juce::Colour surfaceHi;  // raised panel / control face
-    static const juce::Colour line;       // hairline borders (low-alpha white)
-    static const juce::Colour accentA;    // the accent: electric blue
-    static const juce::Colour accentB;    // gradient partner / secondary: violet
-    static const juce::Colour accentC;    // tertiary: teal
-    static const juce::Colour text;       // primary text
-    static const juce::Colour textDim;    // labels, secondary text
+    static const juce::Colour ink;        // page ground            #07070a
+    static const juce::Colour stage;      // canvas / visualiser bed #020203
+    static const juce::Colour surface;    // panel                   rgba(16,15,20,.82)
+    static const juce::Colour surfaceHi;  // control face            white @ 7%
+    static const juce::Colour line;       // hairline border         white @ 9%
+    static const juce::Colour lineHi;     // control border          white @ 12%
+    static const juce::Colour accentA;    // the accent: amber       #f4b35e
+    static const juce::Colour accentB;    // gradient partner: coral #ff6b6b
+    static const juce::Colour accentC;    // readouts: cyan          #67e8f9
+    static const juce::Colour text;       // cream                   #f7f0e8
+    static const juce::Colour textDim;    // taupe                   #a99e92
     static const juce::Colour negative;   // negative modulation / danger
+
+    // Radii, which are a big part of the look.
+    static constexpr float kPanelRadius   = 22.0f;
+    static constexpr float kStageRadius   = 26.0f;
+    static constexpr float kControlRadius = 12.0f;
 
     // ---- Legacy names, re-pointed at the tokens above so existing call sites
     // keep working. Prefer the tokens in new code.
@@ -61,9 +71,18 @@ public:
                              juce::Rectangle<float> area, juce::Justification just,
                              float tracking = 1.6f);
 
-    // A panel: flat fill plus a hairline. `elevated` lifts the fill one step.
+    // A panel: fill plus a hairline, with the drop shadow the reference uses.
     static void drawPanel (juce::Graphics& g, juce::Rectangle<float> bounds,
-                           float radius = 10.0f, bool elevated = false);
+                           float radius = kPanelRadius, bool elevated = false);
+
+    // A "stage": the near-black bed a visualiser sits on, with an amber bloom
+    // around it. This is the reference's signature move.
+    static void drawStage (juce::Graphics& g, juce::Rectangle<float> bounds,
+                           float radius = kStageRadius, float glow = 1.0f);
+
+    // Eyebrow: amber, uppercase, widely tracked. The reference's section label.
+    static void drawEyebrow (juce::Graphics& g, const juce::String& textToDraw,
+                             juce::Rectangle<float> area, juce::Justification just);
 
     // Soft bloom around a shape, for accent-lit elements.
     static void drawGlow (juce::Graphics& g, const juce::Path& shape,

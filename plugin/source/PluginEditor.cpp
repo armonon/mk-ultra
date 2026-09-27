@@ -412,13 +412,7 @@ void ModScope::paint (juce::Graphics& g)
 {
     using LF = gf::BiohazardLookAndFeel;
     auto b = getLocalBounds().toFloat().reduced (2.0f);
-    if (auto* lnf = bioLnF (*this))
-        lnf->drawPanelInset (g, b, 5.0f);
-    else
-    {
-        g.setColour (juce::Colours::black.withAlpha (0.3f));
-        g.fillRoundedRectangle (b, 4.0f);
-    }
+    LF::drawStage (g, b, 16.0f, 0.45f);
 
     const auto acc = bioLnF (*this) ? bioLnF (*this)->accent() : LF::toxic;
     const auto accDim = bioLnF (*this) ? bioLnF (*this)->accentDim() : LF::toxicDim;
@@ -448,13 +442,7 @@ void WaveformMemoryDisplay::paint (juce::Graphics& g)
 {
     using LF = gf::BiohazardLookAndFeel;
     auto b = getLocalBounds().toFloat().reduced (2.0f);
-    if (auto* lnf = bioLnF (*this))
-        lnf->drawPanelInset (g, b, 5.0f);
-    else
-    {
-        g.setColour (juce::Colours::black.withAlpha (0.28f));
-        g.fillRoundedRectangle (b, 4.0f);
-    }
+    LF::drawStage (g, b, 16.0f, 0.45f);
 
     const auto acc = bioLnF (*this) ? bioLnF (*this)->accent() : LF::toxic;
     const auto accDim = bioLnF (*this) ? bioLnF (*this)->accentDim() : LF::toxicDim;
@@ -482,13 +470,7 @@ void SpectrumDisplay::paint (juce::Graphics& g)
 {
     using LF = gf::BiohazardLookAndFeel;
     auto b = getLocalBounds().toFloat().reduced (2.0f);
-    if (auto* lnf = bioLnF (*this))
-        lnf->drawPanelInset (g, b, 5.0f);
-    else
-    {
-        g.setColour (juce::Colours::black.withAlpha (0.28f));
-        g.fillRoundedRectangle (b, 4.0f);
-    }
+    LF::drawStage (g, b, 16.0f, 0.45f);
 
     const auto acc = bioLnF (*this) ? bioLnF (*this)->accent() : LF::toxic;
 
@@ -2429,20 +2411,22 @@ void GrainFreezeEditor::paint (juce::Graphics& g)
     const auto acc = lnf.accent();
 
     {
-        juce::ColourGradient ground (juce::Colour (0xff0b0d12), bounds.getCentreX(), 0.0f,
-                                     LF::ink, bounds.getCentreX(), bounds.getHeight() * 0.75f, false);
+        // linear-gradient(135deg, #050506, #111018 45%, #050506)
+        juce::ColourGradient ground (juce::Colour (0xff050506), bounds.getX(), bounds.getY(),
+                                     juce::Colour (0xff050506), bounds.getRight(), bounds.getBottom(), false);
+        ground.addColour (0.45, juce::Colour (0xff111018));
         g.setGradientFill (ground);
         g.fillRect (bounds);
     }
 
-    // One bloom, high and wide, tinted by the accent. This is the only colour in
-    // the background and it is what makes the page feel lit rather than flat.
+    // radial-gradient(circle at 75% 20%, #24140d 0, transparent 32%) -- a warm
+    // bloom off to one side, which is what keeps the page from reading as flat.
     {
-        const auto centre = juce::Point<float> (bounds.getCentreX(), bounds.getHeight() * 0.16f);
-        const float r = bounds.getWidth() * 0.85f;
-        juce::ColourGradient bloom (acc.withAlpha (0.085f), centre.x, centre.y,
+        const juce::Point<float> centre (bounds.getWidth() * 0.75f, bounds.getHeight() * 0.20f);
+        const float r = bounds.getWidth() * 0.62f;
+        juce::ColourGradient bloom (juce::Colour (0xff24140d), centre.x, centre.y,
                                     juce::Colours::transparentBlack, centre.x + r, centre.y + r, true);
-        bloom.addColour (0.35, acc.withAlpha (0.030f));
+        bloom.addColour (0.55, juce::Colour (0xff24140d).withAlpha (0.35f));
         g.setGradientFill (bloom);
         g.fillRect (bounds);
     }

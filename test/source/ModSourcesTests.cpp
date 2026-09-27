@@ -265,3 +265,50 @@ TEST_CASE ("Every Mod Matrix target is really modulated", "[modsources]")
         CHECK (moved > 0.02f);
     }
 }
+
+TEST_CASE ("The Curve starts with a usable shape and follows the drawing", "[modsources]")
+{
+    gf::CurveSource curve;
+    curve.prepare (kSr);
+
+    // Out of the box it is a duck, not a flat line -- routing it has to do
+    // something before anyone has drawn anything.
+    const auto shape = curve.getShape();
+    CHECK (shape.count >= 3);
+    float lo = 1.0f, hi = -1.0f;
+    for (int i = 0; i < 64; ++i)
+    {
+        const float v = shape.valueAt ((float) i / 64.0f);
+        lo = juce::jmin (lo, v);
+        hi = juce::jmax (hi, v);
+    }
+    INFO ("default curve spans " << lo << " .. " << hi);
+    CHECK (hi - lo > 1.0f);
+
+    // A drawn shape is what comes out, and the loop is seamless at the ends.
+    gf::CurveSource::Shape drawn;
+    drawn.count = 3;
+    drawn.nodes[0] = { 0.0f, -1.0f, 0.0f };
+    drawn.nodes[1] = { 0.5f,  1.0f, 0.0f };
+    drawn.nodes[2] = { 1.0f, -1.0f, 0.0f };
+    curve.setShape (drawn);
+    CHECK (std::abs (curve.getShape().valueAt (0.5f) - 1.0f) < 0.01f);
+    CHECK (std::abs (curve.getShape().valueAt (0.25f) - 0.0f) < 0.05f);
+    CHECK (std::abs (curve.getShape().valueAt (0.0f) - curve.getShape().valueAt (1.0f)) < 0.01f);
+
+    // Tempo lock: at 120 bpm a one-bar loop is two seconds, so half a second in
+    // the phase is a quarter of the way round.
+    curve.advance ((int) (kSr * 0.5), 120.0, 1.0f, false, 0.0);
+    INFO ("phase after half a second of a one-bar loop: " << curve.getPhase());
+    CHECK (std::abs (curve.getPhase() - 0.25f) < 0.02f);
+
+    // A musical position locks it to the timeline rather than to elapsed time.
+    curve.advance (64, 120.0, 1.0f, true, 2.0);   // 2 beats into a 4-beat loop
+    CHECK (std::abs (curve.getPhase() - 0.5f) < 0.01f);
+
+    // And it round-trips through the string it is saved as.
+    const auto text = curve.toString();
+    gf::CurveSource other;
+    REQUIRE (other.fromString (text));
+    CHECK (std::abs (other.getShape().valueAt (0.5f) - 1.0f) < 0.01f);
+}

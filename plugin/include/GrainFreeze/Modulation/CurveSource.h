@@ -68,8 +68,12 @@ public:
         s.nodes[0] = { 0.0f,  1.0f, 0.4f };
         s.nodes[1] = { 0.55f, -1.0f, 0.0f };
         s.nodes[2] = { 1.0f, -1.0f, 0.0f };
-        setShape (s);
-        buffers[1] = buffers[0];
+        // Seed BOTH halves of the double buffer directly. Calling setShape here
+        // and then copying buffer 0 over buffer 1 clobbered the shape that had
+        // just gone live, which is why the default curve came up flat.
+        buffers[0] = s;
+        buffers[1] = s;
+        live.store (0, std::memory_order_release);
     }
 
     void prepare (double sampleRate)

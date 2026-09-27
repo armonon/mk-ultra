@@ -41,9 +41,9 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        auto b = getLocalBounds().toFloat();
-        LF::drawPanel (g, b, 10.0f);
-        auto plot = b.reduced (8.0f);
+        auto b = getLocalBounds().toFloat().reduced (4.0f);
+        LF::drawStage (g, b, 20.0f, 0.65f);
+        auto plot = b.reduced (12.0f);
         const float mid = plot.getCentreY();
 
         // ---- The sound itself.
