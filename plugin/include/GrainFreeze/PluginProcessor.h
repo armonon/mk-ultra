@@ -120,6 +120,12 @@ public:
     static constexpr int kSpectrumBins = 128;
     void getSpectrumSnapshot (std::array<float, kSpectrumBins>& out) const;
 
+    // The same bins with the frequency each one sits at, plus the loudest bin --
+    // what the cymatic dish needs to drive its modes through a resonance integral.
+    void getSpectrumBands (std::array<float, kSpectrumBins>& energy,
+                           std::array<float, kSpectrumBins>& hz,
+                           float& peakOut) const;
+
     // A/B compare controls + the two extra Morph-pad corners (C, D).
     void storeSlotA();
     void storeSlotB();

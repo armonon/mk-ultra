@@ -9,6 +9,7 @@
 #include "GrainFreeze/BiohazardLookAndFeel.h"
 #include "GrainFreeze/CurveEditor.h"
 #include "GrainFreeze/SourceDisplay.h"
+#include "GrainFreeze/CymaticPlate.h"
 #include "GrainFreeze/Biohazard.h"
 #include "GrainFreeze/UpdateChecker.h"
 #include "GrainFreeze/TourOverlay.h"
@@ -624,6 +625,9 @@ private:
     // ---- MOD SOURCES: the controls behind the matrix's own generators. LFO 2,
     // the tempo-synced step sequencer (16 steps, length + glide) and the random
     // sample & hold, plus the assignable CC number for the "MIDI CC" source.
+    // ---- A real cymatic dish, driven by what is going through the plugin.
+    gf::CymaticPlate cymaticPlate;
+
     // ---- The source the grains are reading, with the cloud drawn on it.
     std::unique_ptr<gf::SourceDisplay> sourceDisplay;
 

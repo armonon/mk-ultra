@@ -1333,6 +1333,13 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             proc.apvts, s + "Depth", modMatrixDepth[(size_t) i]);
     }
 
+    // ---- The cymatic dish ----------------------------------------------
+    cymaticPlate.setTooltip ("A modelled cymatic dish driven by what is going through the plugin. "
+                             "Its modes are the real eigenmodes of a rigid-walled circular plate, "
+                             "and the sand settles on the nodal lines of whichever ones your sound "
+                             "is exciting -- so the figure is the sound's own shape.");
+    addAndMakeVisible (cymaticPlate);
+
     // ---- The source display: Position and Spray, shown on the sound ----
     sourceDisplay = std::make_unique<gf::SourceDisplay>();
     sourceDisplay->setTooltip ("What the grain cloud is reading. The band is the window Position and "
@@ -1670,7 +1677,8 @@ GrainFreezeEditor::GrainFreezeEditor (GrainFreezeProcessor& p)
             &browseButton,
             &tabEntropy, &tabMachines, &tabPrettifier, &tabAir, &tabMix,
             &homeTextureOn, &homeSpaceOn, &airOn,
-            &morphPad, &morphPadLabel, &grainViz, &morphCapA, &morphCapB, &morphCapC, &morphCapD,
+            &morphPad, &morphPadLabel, &grainViz, &cymaticPlate,
+            &morphCapA, &morphCapB, &morphCapC, &morphCapD,
             // The Curve is part of the play surface, not a drawer.
             &curveTitle, &curveHint, &curveBarsBox, &curveSyncButton,
             &amountKnob, &amountLabel, &bounceButton,
@@ -1792,9 +1800,17 @@ void GrainFreezeEditor::timerCallback()
         }
     }
 
-    // Grain cloud viz: only refresh when HOME is showing AND audio is active.
-    if (currentTab == -1 && animating)
-        grainViz.refresh();
+    // The cymatic dish: step the model only while it is on screen and there is
+    // something to drive it with.
+    if (currentTab == -1 && cymaticPlate.isVisible() && (animating || cymaticPlate.isDriven()))
+    {
+        std::array<float, GrainFreezeProcessor::kSpectrumBins> energy {}, hz {};
+        float peak = 0.0f;
+        proc.getSpectrumBands (energy, hz, peak);
+        cymaticPlate.setSpectrum (energy.data(), hz.data(),
+                                  GrainFreezeProcessor::kSpectrumBins, peak);
+        cymaticPlate.advance();
+    }
 
     // The source display: the material, the read window, and the live cloud.
     if (currentTab == 0 && sourceDisplay != nullptr && sourceDisplay->isVisible())
@@ -2109,7 +2125,8 @@ void GrainFreezeEditor::updateTabVisibility()
     homeSpaceOn.setVisible (true);
     morphPad.setVisible (playSurface);
     morphPadLabel.setVisible (playSurface);
-    grainViz.setVisible (playSurface);
+    grainViz.setVisible (false);      // the dish tells this story better
+    cymaticPlate.setVisible (playSurface);
     for (auto* b : { &morphCapA, &morphCapB, &morphCapC, &morphCapD })
         b->setVisible (playSurface);
 
@@ -3087,7 +3104,7 @@ void GrainFreezeEditor::resized()
         auto pad = block.removeFromLeft (padSize).withHeight (padSize);
         morphPad.setBounds (pad);
         block.removeFromLeft (24);
-        grainViz.setBounds (block.removeFromLeft (padSize).withHeight (padSize));
+        cymaticPlate.setBounds (block.removeFromLeft (padSize).withHeight (padSize));
         auto capRow = juce::Rectangle<int> (pad.getX(), pad.getBottom() + 6, pad.getWidth(), 24);
         const int cw = (capRow.getWidth() - 18) / 4;
         morphCapA.setBounds (capRow.removeFromLeft (cw)); capRow.removeFromLeft (6);

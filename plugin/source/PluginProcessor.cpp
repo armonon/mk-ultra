@@ -2254,6 +2254,24 @@ void GrainFreezeProcessor::getSpectrumSnapshot (std::array<float, kSpectrumBins>
         out[(size_t) i] = spectrumBins[(size_t) i].load (std::memory_order_relaxed);
 }
 
+void GrainFreezeProcessor::getSpectrumBands (std::array<float, kSpectrumBins>& energy,
+                                             std::array<float, kSpectrumBins>& hz,
+                                             float& peakOut) const
+{
+    // The analyser lays its bins out log-spaced from 20 Hz to Nyquist; rebuild
+    // that mapping so a consumer knows what frequency each bin represents.
+    const float minHz = 20.0f;
+    const float maxHz = (float) (currentSampleRate * 0.5);
+    peakOut = 0.0f;
+    for (int b = 0; b < kSpectrumBins; ++b)
+    {
+        const float v = spectrumBins[(size_t) b].load (std::memory_order_relaxed);
+        energy[(size_t) b] = v * v;   // the integral wants power
+        hz[(size_t) b] = minHz * std::pow (maxHz / minHz, (float) b / (float) kSpectrumBins);
+        peakOut = juce::jmax (peakOut, v);
+    }
+}
+
 void GrainFreezeProcessor::getCurveEnvelope (std::array<float, 256>& out) const
 {
     for (int i = 0; i < 256; ++i)
