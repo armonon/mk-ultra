@@ -92,6 +92,11 @@ GrainFreezeProcessor::GrainFreezeProcessor()
     // becomes "1", and the dial scales the distance from the defaults.
     presets.onPresetLoaded = [this]
     {
+        // A preset may carry a drawn Curve; if it does not, go back to default.
+        if (const auto shape = apvts.state.getProperty ("curveShape").toString(); shape.isNotEmpty())
+            curve.fromString (shape);
+        else
+            curve.setShape (gf::CurveSource().getShape());
         captureAmountAnchor();
         if (auto* p = apvts.getParameter ("presetAmount"))
             p->setValueNotifyingHost (p->getNormalisableRange().convertTo0to1 (1.0f));

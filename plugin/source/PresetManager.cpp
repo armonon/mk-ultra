@@ -52,6 +52,13 @@ bool PresetManager::applyFactory (const juce::String& name)
         if (auto* p = apvts.getParameter (fpp.id))
             p->setValueNotifyingHost (p->getNormalisableRange().convertTo0to1 (fpp.value));
 
+    // The Curve is patch data, not a parameter, so it travels in the state tree.
+    // A preset that does not draw one clears it back to the default shape rather
+    // than inheriting whatever the last preset drew.
+    apvts.state.setProperty ("curveShape",
+                             found->curve != nullptr ? juce::String (found->curve) : juce::String(),
+                             nullptr);
+
     currentPreset = name;
     return true;
 }

@@ -11,7 +11,44 @@ namespace gf
 {
 
 struct FactoryParam { const char* id; float value; };
-struct FactoryPreset { const char* name; std::vector<FactoryParam> params; };
+
+// A preset is its parameter overrides plus, optionally, a drawn Curve shape.
+// The Curve is patch data rather than a parameter (it is a list of nodes, not a
+// number), so it rides along as the same string the state tree stores.
+struct FactoryPreset
+{
+    const char* name;
+    std::vector<FactoryParam> params;
+    const char* curve = nullptr;   // nullptr = leave the Curve at its default
+};
+
+// Curve shapes, in CurveSource's serialised form: count, then x,y,tension per
+// node. Written out rather than computed so a preset reads as what it draws.
+namespace curves
+{
+    // Falling ramp, then hold: the classic sidechain duck.
+    inline constexpr const char* duck =
+        "4,0.0000,1.0000,0.450,0.3200,-1.0000,0.000,0.8000,-1.0000,-0.400,1.0000,1.0000,0.000";
+    // Hard on/off eighths.
+    inline constexpr const char* gate8 =
+        "6,0.0000,1.0000,0.980,0.2500,1.0000,-0.980,0.2600,-1.0000,0.980,0.5000,-1.0000,-0.980,"
+        "0.5100,1.0000,0.980,1.0000,1.0000,0.000";
+    // Slow swell and release.
+    inline constexpr const char* swell =
+        "3,0.0000,-1.0000,0.600,0.7000,1.0000,-0.550,1.0000,-1.0000,0.000";
+    // Four descending steps.
+    inline constexpr const char* stairs =
+        "9,0.0000,1.0000,0.950,0.2500,1.0000,0.950,0.2600,0.3300,0.950,0.5000,0.3300,0.950,"
+        "0.5100,-0.3300,0.950,0.7500,-0.3300,0.950,0.7600,-1.0000,0.950,0.9900,-1.0000,0.000,"
+        "1.0000,1.0000,0.000";
+    // One long rise across the whole loop.
+    inline constexpr const char* rise =
+        "3,0.0000,-1.0000,0.350,0.9200,1.0000,0.000,1.0000,-1.0000,0.000";
+    // Two quick stabs, then space.
+    inline constexpr const char* stabs =
+        "7,0.0000,1.0000,0.900,0.1200,-1.0000,0.000,0.2500,1.0000,0.900,0.3700,-1.0000,0.000,"
+        "0.9000,-1.0000,0.000,0.9700,1.0000,0.000,1.0000,1.0000,0.000";
+}
 
 // The patch applied on a fresh insert (first impression), also selectable.
 inline const char* kDefaultPresetName = "Default - MK Signature";
@@ -322,6 +359,203 @@ inline const std::vector<FactoryPreset>& factoryPresets()
             { "damageOn", 1 }, { "damageClip", 3 /*Fold*/ }, { "damageAmount", 0.5f }, { "damageMix", 0.85f },
             { "damageBits", 6.0f }, { "damageMix", 0.85f },
             { "duckOn", 1 }, { "duckAmount", 0.5f }, { "duckRelease", 100.0f }, { "mixOutput", 0.50f } } },
+
+        // ================================================================
+        // LOCKED - grains spawned on the hits in the incoming audio rather
+        // than from a clock. This is the thing no other granular does: on a
+        // loop the texture stays inside the groove instead of smearing it.
+        // Play these on drums, percussion loops, or a rhythmic vocal.
+        // ================================================================
+        { "Locked - Ghost Hats", {
+            // Short grains on every hit including the quiet ones, lifted into the air band.
+            { "textureGrainOn", 1 }, { "grainTrigger", 1 }, { "transientSense", 0.82f },
+            { "transientGrains", 2 }, { "grainSize", 46 }, { "grainShape", 0.18f },
+            { "pitch", 12 }, { "spray", 40 }, { "spread", 0.75f }, { "textureGrainMix", 0.55f },
+            { "airOn", 1 }, { "airCrossover", 4200.0f }, { "airMix", 0.55f },
+            { "airExciterOn", 1 }, { "airExciterDrive", 0.45f }, { "airExciterMix", 0.6f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.35f },
+            { "beautySpaceMix", 0.4f }, { "dryLevel", 0.9f },
+            { "mixOutput", 0.67f } } },
+
+        { "Locked - Snare Bloom", {
+            // Each hit opens into a pitched cloud that decays with the drum.
+            { "textureGrainOn", 1 }, { "grainTrigger", 1 }, { "transientSense", 0.45f },
+            { "transientGrains", 6 }, { "grainSize", 260 }, { "grainShape", 0.88f },
+            { "pitch", 7 }, { "pitchJitter", 5 }, { "spray", 260 }, { "spread", 0.9f },
+            { "textureGrainMix", 0.7f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.8f },
+            { "duckOn", 1 }, { "duckAmount", 0.7f }, { "duckAttack", 3.0f }, { "duckRelease", 220.0f },
+            { "dryLevel", 0.85f }, { "mixOutput", 0.61f } } },
+
+        { "Locked - Broken Toy", {
+            // Transient-locked and destroyed: every hit arrives already broken.
+            { "textureGrainOn", 1 }, { "grainTrigger", 1 }, { "transientSense", 0.6f },
+            { "transientGrains", 3 }, { "grainSize", 80 }, { "grainShape", 0.12f },
+            { "pitch", -5 }, { "pitchJitter", 9 }, { "spray", 90 }, { "textureGrainMix", 0.6f },
+            { "damageOn", 1 }, { "damageClip", 2 /*Hard*/ }, { "damageAmount", 0.45f },
+            { "damageBits", 5.0f }, { "damageRate", 8.0f }, { "damageMix", 0.8f },
+            { "dryLevel", 0.75f }, { "mixOutput", 0.30f } } },
+
+        { "Locked - Iron Lung", {
+            // Big slow grains on the hits, with the Ducker letting the source breathe
+            // back through the texture -- the pairing this plugin was built around.
+            { "textureGrainOn", 1 }, { "grainTrigger", 1 }, { "transientSense", 0.35f },
+            { "transientGrains", 5 }, { "grainSize", 720 }, { "grainShape", 0.62f },
+            { "pitch", -12 }, { "spray", 500 }, { "spread", 0.85f }, { "textureGrainMix", 0.8f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.92f },
+            { "prettyReverbDamping", 0.55f },
+            { "duckOn", 1 }, { "duckAmount", 0.85f }, { "duckThreshold", 0.06f },
+            { "duckAttack", 2.0f }, { "duckRelease", 420.0f },
+            { "dryLevel", 1.0f }, { "mixOutput", 0.59f } } },
+
+        { "Locked - Tape Skip", {
+            // Hits trigger grains; the Time Breaker throws slices of them backwards.
+            { "textureGrainOn", 1 }, { "grainTrigger", 1 }, { "transientSense", 0.55f },
+            { "transientGrains", 4 }, { "grainSize", 150 }, { "spray", 120 }, { "textureGrainMix", 0.65f },
+            { "timeBreakerOn", 1 }, { "timeBreakerMix", 0.8f }, { "timeBreakerSync", 1 },
+            { "timeBreakerDivision", 5 /*1/16*/ }, { "stutterChance", 0.45f }, { "reverseChance", 0.5f },
+            { "damageOn", 1 }, { "damageClip", 1 /*Tape*/ }, { "damageAmount", 0.28f }, { "damageMix", 0.5f },
+            { "dryLevel", 0.6f }, { "mixOutput", 0.50f } } },
+
+        // ================================================================
+        // DRAWN - the Curve is doing the work. Open the play surface to see
+        // the shape each one is drawing, and drag its points to reshape the
+        // sound. Everything here is locked to the host timeline.
+        // ================================================================
+        { "Drawn - Pump", {
+            // The shape ducks the wet on the beat and lets it swell back between.
+            { "textureGrainOn", 1 }, { "grainSize", 300 }, { "density", 45 }, { "spray", 200 },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.75f },
+            { "echoOn", 1 }, { "echoTimeMs", 375 }, { "echoMix", 0.3f },
+            { "dryWet", 0.62f }, { "curveBars", 2 /*1 Bar*/ }, { "curveSync", 1 },
+            { "modSlot1Source", 21 /*Curve*/ }, { "modSlot1Target", 26 /*Dry/Wet*/ }, { "modSlot1Depth", 0.8f },
+            { "mixOutput", 0.73f } }, curves::duck },
+
+        { "Drawn - Gate Cathedral", {
+            // A huge reverb chopped into eighths by the drawn gate.
+            { "textureGrainOn", 1 }, { "grainSize", 800 }, { "density", 26 }, { "pitch", 12 },
+            { "spray", 700 }, { "spread", 0.95f }, { "output", 0.75f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.96f },
+            { "beautySpaceMix", 0.9f },
+            { "curveBars", 2 /*1 Bar*/ }, { "curveSync", 1 },
+            { "modSlot1Source", 21 }, { "modSlot1Target", 8 /*Output*/ }, { "modSlot1Depth", 1.0f },
+            { "mixOutput", 0.68f } }, curves::gate8 },
+
+        { "Drawn - Rising Tide", {
+            // Four bars of the grain cloud thickening, then dropping away. A riser
+            // you can redraw instead of automating.
+            { "textureGrainOn", 1 }, { "grainSize", 180 }, { "density", 90 }, { "pitch", 0 },
+            { "spray", 400 }, { "spread", 0.8f }, { "textureGrainMix", 0.8f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.9f },
+            { "curveBars", 4 /*4 Bars*/ }, { "curveSync", 1 },
+            { "modSlot1Source", 21 }, { "modSlot1Target", 2 /*Density*/ }, { "modSlot1Depth", 0.55f },
+            { "modSlot2Source", 21 }, { "modSlot2Target", 3 /*Pitch*/ }, { "modSlot2Depth", 0.18f },
+            { "mixOutput", 1.06f } }, curves::rise },
+
+        { "Drawn - Filter Steps", {
+            // The drawn staircase walks the Squelch filter down the top band.
+            { "textureGrainOn", 1 }, { "grainSize", 120 }, { "density", 70 }, { "spray", 150 },
+            { "airOn", 1 }, { "airCrossover", 1400.0f }, { "airMix", 0.9f },
+            { "airSquelchOn", 1 }, { "airSquelchMode", 1 /*Band*/ }, { "airSquelchHz", 5000.0f },
+            { "airSquelchRes", 0.72f },
+            { "curveBars", 2 }, { "curveSync", 1 },
+            { "modSlot1Source", 21 }, { "modSlot1Target", 24 /*Squelch Cutoff*/ }, { "modSlot1Depth", 0.62f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.5f },
+            { "mixOutput", 1.09f } }, curves::stairs },
+
+        { "Drawn - Stabs", {
+            // Two quick hits of destruction per bar, drawn rather than automated.
+            { "textureGrainOn", 1 }, { "grainSize", 90 }, { "density", 80 }, { "spray", 60 },
+            { "damageOn", 1 }, { "damageClip", 4 /*Diode*/ }, { "damageAmount", 0.15f },
+            { "damageBits", 16.0f }, { "damageMix", 0.9f },
+            { "curveBars", 2 }, { "curveSync", 1 },
+            { "modSlot1Source", 21 }, { "modSlot1Target", 20 /*Damage Amount*/ }, { "modSlot1Depth", 0.85f },
+            { "beautySpaceOn", 1 }, { "echoOn", 1 }, { "echoTimeMs", 250 }, { "echoMix", 0.25f },
+            { "mixOutput", 0.87f } }, curves::stabs },
+
+        // ================================================================
+        // MOTION - the matrix's own generators: the step sequencer, the
+        // second LFO, the random sample & hold, and the mod wheel.
+        // ================================================================
+        { "Motion - Stutter Grid", {
+            // The step sequencer opens and closes the Time Breaker on a 1/16 grid.
+            { "textureGrainOn", 1 }, { "grainSize", 140 }, { "density", 60 }, { "spray", 120 },
+            { "timeBreakerOn", 1 }, { "timeBreakerMix", 0.9f }, { "timeBreakerSync", 1 },
+            { "timeBreakerDivision", 5 /*1/16*/ }, { "stutterChance", 0.3f },
+            { "stepSeqDivision", 5 /*1/16*/ }, { "stepSeqLength", 8 }, { "stepSeqSmooth", 0.0f },
+            { "modSlot1Source", 14 /*Step Seq*/ }, { "modSlot1Target", 28 /*Stutter Chance*/ },
+            { "modSlot1Depth", 0.85f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.45f },
+            { "mixOutput", 1.30f } } },
+
+        { "Motion - Dice", {
+            // A random value every few beats, thrown at the grain pitch.
+            { "textureGrainOn", 1 }, { "grainSize", 200 }, { "density", 38 }, { "spray", 250 },
+            { "spread", 0.85f }, { "modRandomRate", 3.5f },
+            { "modSlot1Source", 15 /*Random*/ }, { "modSlot1Target", 3 /*Pitch*/ }, { "modSlot1Depth", 0.16f },
+            { "modSlot2Source", 15 }, { "modSlot2Target", 1 /*Grain Size*/ }, { "modSlot2Depth", 0.25f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.8f },
+            { "echoOn", 1 }, { "echoTimeMs", 500 }, { "echoFeedback", 0.45f }, { "echoMix", 0.3f },
+            { "mixOutput", 0.91f } } },
+
+        { "Motion - Slow Tide", {
+            // LFO 2 on a one-bar cycle, opening the stereo field and the air band
+            // together so the sound breathes sideways.
+            { "textureGrainOn", 1 }, { "grainSize", 520 }, { "density", 30 }, { "spray", 450 },
+            { "spread", 0.7f }, { "lfo2Sync", 1 /*1/1*/ }, { "lfo2Shape", 0 },
+            { "modSlot1Source", 13 /*LFO 2*/ }, { "modSlot1Target", 27 /*Mix Width*/ }, { "modSlot1Depth", 0.45f },
+            { "modSlot2Source", 13 }, { "modSlot2Target", 23 /*Air Mix*/ }, { "modSlot2Depth", 0.5f },
+            { "airOn", 1 }, { "airCrossover", 3000.0f }, { "airMix", 0.5f },
+            { "airShelfOn", 1 }, { "airShelfAmount", 0.4f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.88f },
+            { "mixOutput", 0.95f } } },
+
+        { "Motion - Wheel Wrecker", {
+            // Nothing happens until you push the mod wheel; then it falls apart.
+            { "textureGrainOn", 1 }, { "grainSize", 170 }, { "density", 55 }, { "spray", 180 },
+            { "damageOn", 1 }, { "damageClip", 0 /*Tube*/ }, { "damageAmount", 0.08f },
+            { "damageBits", 16.0f }, { "damageMix", 0.85f },
+            { "modSlot1Source", 18 /*Mod Wheel*/ }, { "modSlot1Target", 20 /*Damage Amount*/ },
+            { "modSlot1Depth", 0.9f },
+            { "modSlot2Source", 18 }, { "modSlot2Target", 21 /*Damage Bits*/ }, { "modSlot2Depth", -0.8f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.6f },
+            { "mixOutput", 1.03f } } },
+
+        // ================================================================
+        // AIR - more of the top-band page, which had only three.
+        // ================================================================
+        { "Air - Glass Rails", {
+            // A resonant band sliding on the input envelope, with a tuned comb above it.
+            { "textureGrainOn", 1 }, { "grainSize", 90 }, { "density", 65 }, { "textureGrainMix", 0.4f },
+            { "airOn", 1 }, { "airCrossover", 1800.0f }, { "airMix", 0.85f },
+            { "airSquelchOn", 1 }, { "airSquelchMode", 1 }, { "airSquelchHz", 3200.0f },
+            { "airSquelchRes", 0.88f }, { "airSquelchEnv", 0.7f },
+            { "airDelayOn", 1 }, { "airDelayMs", 7.0f }, { "airDelayFeedback", 0.78f }, { "airDelayMix", 0.5f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.7f },
+            { "mixOutput", 1.19f } } },
+
+        { "Air - Static Halo", {
+            // Exciter and dynamic shelf together: a bright ring that only appears
+            // on the loud parts, swept slowly by the phaser.
+            { "textureGrainOn", 1 }, { "grainSize", 380 }, { "density", 34 }, { "pitch", 12 },
+            { "spray", 300 }, { "textureGrainMix", 0.5f },
+            { "airOn", 1 }, { "airCrossover", 5000.0f }, { "airMix", 0.7f },
+            { "airExciterOn", 1 }, { "airExciterDrive", 0.7f }, { "airExciterMix", 0.65f },
+            { "airShelfOn", 1 }, { "airShelfHz", 9000.0f }, { "airShelfAmount", 0.62f },
+            { "airShelfThreshold", 0.18f },
+            { "airPhaserOn", 1 }, { "airPhaserRate", 0.08f }, { "airPhaserDepth", 0.8f }, { "airPhaserMix", 0.4f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.85f },
+            { "mixOutput", 1.09f } } },
+
+        { "Air - Breath", {
+            // Barely there: the top band opens with the player and closes again.
+            { "textureGrainOn", 1 }, { "grainSize", 300 }, { "density", 28 }, { "textureGrainMix", 0.3f },
+            { "airOn", 1 }, { "airCrossover", 6500.0f }, { "airMix", 0.42f },
+            { "airSquelchOn", 1 }, { "airSquelchMode", 2 /*High*/ }, { "airSquelchHz", 7000.0f },
+            { "airSquelchRes", 0.3f }, { "airSquelchEnv", 0.85f },
+            { "airShelfOn", 1 }, { "airShelfHz", 11000.0f }, { "airShelfAmount", 0.35f },
+            { "beautySpaceOn", 1 }, { "prettyReverbOn", 1 }, { "prettyReverbSize", 0.55f },
+            { "dryLevel", 1.0f }, { "mixOutput", 0.55f } } },
     };
     return presets;
 }

@@ -80,3 +80,70 @@ TEST_CASE ("Every factory preset loads, makes sound, and changes the signal", "[
         CHECK (diffRatio > 0.05f);           // actually does something to the signal
     }
 }
+
+TEST_CASE ("A preset can carry a drawn Curve, and clears it when it does not", "[presets]")
+{
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    auto procOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& proc = *procOwner;
+
+    const auto defaultShape = proc.curve.getShape();
+
+    // "Drawn - Pump" draws its own shape, and routes the Curve at Dry/Wet.
+    REQUIRE (proc.presets.loadPreset ("Drawn - Pump"));
+    const auto drawn = proc.curve.getShape();
+    INFO ("default has " << defaultShape.count << " nodes, the preset's has " << drawn.count);
+    CHECK (drawn.count != defaultShape.count);
+    CHECK (proc.apvts.getRawParameterValue ("modSlot1Source")->load() == 21.0f);   // Curve
+    CHECK (proc.apvts.getRawParameterValue ("modSlot1Target")->load() == 26.0f);   // Dry/Wet
+
+    // The shape really is a shape: it spans a useful range across the loop.
+    float lo = 1.0f, hi = -1.0f;
+    for (int i = 0; i < 128; ++i)
+    {
+        const float v = drawn.valueAt ((float) i / 128.0f);
+        lo = juce::jmin (lo, v); hi = juce::jmax (hi, v);
+    }
+    CHECK (hi - lo > 1.0f);
+
+    // A preset that draws nothing puts the Curve back rather than inheriting the
+    // last one's drawing.
+    REQUIRE (proc.presets.loadPreset ("Default - MK Signature"));
+    CHECK (proc.curve.getShape().count == defaultShape.count);
+}
+
+TEST_CASE ("The new presets use the machinery they are meant to show off", "[presets]")
+{
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    auto procOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& proc = *procOwner;
+
+    auto valueOf = [&proc] (const char* id)
+    {
+        auto* p = proc.apvts.getRawParameterValue (id);
+        return p != nullptr ? p->load() : -1.0f;
+    };
+
+    // Every "Locked" preset is transient-triggered -- that is what the name means.
+    for (auto& fp : gf::factoryPresets())
+    {
+        const juce::String name (fp.name);
+        if (! name.startsWith ("Locked - ")) continue;
+        INFO (name);
+        REQUIRE (proc.presets.loadPreset (name));
+        CHECK (valueOf ("grainTrigger") > 0.5f);
+    }
+
+    // Every "Drawn" preset carries a curve and points a slot at it.
+    for (auto& fp : gf::factoryPresets())
+    {
+        const juce::String name (fp.name);
+        if (! name.startsWith ("Drawn - ")) continue;
+        INFO (name);
+        CHECK (fp.curve != nullptr);
+        REQUIRE (proc.presets.loadPreset (name));
+        const bool routed = valueOf ("modSlot1Source") == 21.0f
+                         || valueOf ("modSlot2Source") == 21.0f;
+        CHECK (routed);
+    }
+}
