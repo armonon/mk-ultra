@@ -299,6 +299,7 @@ private:
         gf::ParamId        id {};
         juce::String       paramID;
         std::unique_ptr<SliderAttachment> attachment;
+        std::unique_ptr<ButtonAttachment> lockAttach;   // the lock is a real parameter
         std::unique_ptr<ModRing>          ring;
     };
 

@@ -113,8 +113,20 @@ public:
 
     explicit Randomizer (juce::AudioProcessorValueTreeState& state) : apvts (state) {}
 
-    void setLocked (ParamId id, bool locked) { locks[(size_t) id] = locked; }
-    bool isLocked  (ParamId id) const         { return locks[(size_t) id]; }
+    // The lock lives in the APVTS, not in here, so it is saved with the session
+    // and travels with a preset. It used to sit in a private array, which meant a
+    // lock quietly disappeared the moment the plugin was reloaded.
+    void setLocked (ParamId id, bool locked)
+    {
+        if (auto* p = apvts.getParameter (juce::String (paramIdString (id)) + "Lock"))
+            p->setValueNotifyingHost (locked ? 1.0f : 0.0f);
+    }
+    bool isLocked (ParamId id) const
+    {
+        if (auto* v = apvts.getRawParameterValue (juce::String (paramIdString (id)) + "Lock"))
+            return v->load() > 0.5f;
+        return false;
+    }
 
     // Roll a new preset within musical ranges, skipping locked parameters.
     void randomize()
@@ -138,7 +150,7 @@ public:
         for (int i = firstId; i <= lastId; ++i)
         {
             const auto id = (ParamId) i;
-            if (locks[(size_t) i]) continue;
+            if (isLocked ((ParamId) i)) continue;
 
             auto r = musicalRange (id);
             const float width = (r.hi - r.lo);
@@ -205,7 +217,6 @@ private:
     float rand01() { return dist (rng); }
 
     juce::AudioProcessorValueTreeState& apvts;
-    std::array<bool, kNumModParams> locks { false };
     std::mt19937 rng { std::random_device{}() };
     std::uniform_real_distribution<float> dist { 0.0f, 1.0f };
 };

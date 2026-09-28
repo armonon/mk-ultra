@@ -1914,7 +1914,9 @@ void GrainFreezeEditor::addKnob (LabeledKnob& k, gf::ParamId id, const juce::Str
 
     k.lock.setComponentID ("lock"); // drawn as a padlock by the LookAndFeel
     k.lock.setTooltip (juce::String::fromUTF8 ("Lock this control \xe2\x80\x94 keeps it fixed when you Randomize"));
-    k.lock.onClick = [this, &k] { proc.randomizer.setLocked (k.id, k.lock.getToggleState()); };
+    // Attached, not just handled: the lock is a parameter now, so the button
+    // shows the right state when a session is restored.
+    k.lockAttach = std::make_unique<ButtonAttachment> (proc.apvts, paramID + "Lock", k.lock);
     addAndMakeVisible (k.lock);
 
     k.modButton.setComponentID ("settings"); // drawn as a bare gear icon

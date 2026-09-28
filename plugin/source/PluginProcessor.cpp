@@ -684,18 +684,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     {
         layout.add (std::make_unique<AudioParameterInt> (ParameterID { id, 1 }, name, minValue, maxValue, defaultValue));
     };
-    auto addMachine = [&] (const juce::String& stem, const juce::String& name, bool defaultOn)
+    // Not every machine has a Mix or an Amount: declaring them uniformly left a
+    // handful that nothing reads sitting in the host's automation list.
+    auto addMachine = [&] (const juce::String& stem, const juce::String& name, bool defaultOn,
+                           bool withMix = true, bool withAmount = true)
     {
         addBool  (stem + "On",     name + " On", defaultOn);
-        addFloat (stem + "Mix",    name + " Mix",    NormalisableRange<float> (0.0f, 1.0f, 0.001f), defaultOn ? 1.0f : 0.0f);
-        addFloat (stem + "Amount", name + " Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), defaultOn ? 0.5f : 0.0f);
-        addBool  (stem + "ModOn",  name + " Mod On", true);
-        addBool  (stem + "Lock",   name + " Randomize Lock", false);
-    };
-    auto addModLock = [&] (const juce::String& stem, const juce::String& name)
-    {
-        addBool (stem + "ModOn", name + " Mod On", true);
-        addBool (stem + "Lock",  name + " Randomize Lock", false);
+        if (withMix)
+            addFloat (stem + "Mix",    name + " Mix",    NormalisableRange<float> (0.0f, 1.0f, 0.001f), defaultOn ? 1.0f : 0.0f);
+        if (withAmount)
+            addFloat (stem + "Amount", name + " Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), defaultOn ? 0.5f : 0.0f);
     };
 
     layout.group ("global", "Global");
@@ -715,8 +713,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addMachine ("textureGrain", "Texture / Grain", true);
     addMachine ("identityLoss", "Identity Loss", true);
     addMachine ("spectral", "Spectral", false);
-    addMachine ("pitchFormant", "Pitch / Formant", false);
-    addMachine ("timeBreaker", "Time Breaker", false);
+    addMachine ("pitchFormant", "Pitch / Formant", false, true, false);
+    addMachine ("timeBreaker", "Time Breaker", false, true, false);
     addBool   ("timeBreakerSync", "Time Breaker Sync", false);
     addChoice ("timeBreakerDivision", "Time Breaker Division",
                StringArray { "1/1", "1/2", "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" }, 3);
@@ -862,167 +860,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
     addFloat  ("airDelayFeedback",  "Air Delay Feedback", NormalisableRange<float> (0.0f, 0.95f, 0.001f), 0.35f);
     addFloat  ("airDelayMix",       "Air Delay Mix",      NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.4f);
     layout.group ("motion", "Motion");
-    addMachine ("motionMatrix", "Motion Matrix", true);
-    addFloat ("analyzerScopeMix", "Analyzer / Scopes Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
-    addFloat ("analyzerScopeAmount", "Analyzer / Scopes Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f);
-    addBool ("analyzerScopeModOn", "Analyzer / Scopes Mod On", true);
-    addBool ("analyzerScopeLock", "Analyzer / Scopes Randomize Lock", false);
+    addMachine ("motionMatrix", "Motion Matrix", true, false, false);   // neither is read
 
     layout.group ("identity", "Identity & Mutation");
     addFloat ("identityLoss", "Identity Loss", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addInt ("mutationSeed", "Mutation Seed", 0, 999999, 0);
-    addChoice ("mutationMode", "Mutation Mode",
-               StringArray { "Beautiful", "Glitch", "Horror", "Alien", "Dream", "Broken", "Machine", "Cinematic", "Identity Loss" }, 0);
-    addBool ("mutationTempoSync", "Mutation Tempo Sync", false);
-    addFloat ("mutationSmoothing", "Mutation Smoothing", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.25f);
 
-    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
-    for (const auto& stemAndName : {
-        std::pair<const char*, const char*> { "echo", "Echo" },
-        { "reverb", "Reverb" },
-        { "chorus", "Chorus" },
-        { "beauty", "Beauty" },
-        { "polish", "Polish" },
-    })
-        addModLock (stemAndName.first, stemAndName.second);
 
     layout.group ("grain", "Grain Detail");
-    addBool ("grainReverseOn", "Grain Reverse On", false);
-    addFloat ("grainReverseChance", "Grain Reverse Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("grainSkew", "Grain Skew", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("grainChaos", "Grain Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("grainStartJitter", "Grain Start Jitter", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("grainStretch", "Grain Stretch", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("grainBlur", "Grain Blur", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("grainFeedbackOn", "Grain Feedback On", false);
-    addFloat ("grainFeedback", "Grain Feedback", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("grainFilterOn", "Grain Filter On", false);
-    addChoice ("grainFilterType", "Grain Filter Type", StringArray { "LP", "BP", "HP", "Notch", "Comb" }, 0);
-    addFloat ("grainFilterCutoff", "Grain Filter Cutoff", NormalisableRange<float> (20.0f, 20000.0f, 1.0f, 0.35f), 12000.0f);
-    addFloat ("grainFilterResonance", "Grain Filter Resonance", NormalisableRange<float> (0.1f, 12.0f, 0.001f), 0.7f);
-    addFloat ("grainFilterChaos", "Grain Filter Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("grainDrive", "Grain Drive", NormalisableRange<float> (0.0f, 24.0f, 0.001f), 0.0f);
-    addBool ("grainOctaveCloudOn", "Grain Octave Cloud On", false);
-    addFloat ("grainOctaveCloud", "Grain Octave Cloud", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("grainAmpChaos", "Grain Amp Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
-    for (const auto& stemAndName : {
-        std::pair<const char*, const char*> { "grainReverse", "Grain Reverse" },
-        { "grainFeedback", "Grain Feedback" },
-        { "grainFilter", "Grain Filter" },
-        { "grainOctaveCloud", "Grain Octave Cloud" },
-        { "grainStretch", "Grain Stretch" },
-    })
-        addModLock (stemAndName.first, stemAndName.second);
 
     layout.group ("spectral", "Spectral");
-    addBool ("spectralWarpOn", "Spectral Warp On", false);
-    addFloat ("spectralWarp", "Spectral Warp", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("spectralSmearOn", "Spectral Smear On", false);
-    addFloat ("spectralSmear", "Spectral Smear", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("spectralTilt", "Spectral Tilt", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("spectralMaskOn", "Spectral Mask On", false);
-    addFloat ("spectralMask", "Spectral Mask", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("spectralShuffleOn", "Spectral Shuffle On", false);
-    addFloat ("spectralShuffle", "Spectral Shuffle", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("spectralPhaseChaos", "Spectral Phase Chaos", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("spectralRobot", "Spectral Robot", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("spectralVowel", "Spectral Vowel", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("spectralResonance", "Spectral Resonance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addChoice ("spectralQuality", "Spectral Quality", StringArray { "Eco", "Live", "Studio", "Render" }, 1);
-    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
-    for (const auto& stemAndName : {
-        std::pair<const char*, const char*> { "spectralWarp", "Spectral Warp" },
-        { "spectralSmear", "Spectral Smear" },
-        { "spectralShuffle", "Spectral Shuffle" },
-        { "spectralMask", "Spectral Mask" },
-        { "spectralRobot", "Spectral Robot" },
-    })
-        addModLock (stemAndName.first, stemAndName.second);
 
     layout.group ("pitch", "Pitch & Formant");
-    addFloat ("pitchSpread", "Pitch Spread", NormalisableRange<float> (0.0f, 48.0f, 0.001f), 0.0f);
-    addBool ("pitchQuantizeOn", "Pitch Quantize On", false);
-    addFloat ("pitchQuantize", "Pitch Quantize", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("pitchRandomOn", "Pitch Random On", false);
-    addFloat ("pitchRandom", "Pitch Random", NormalisableRange<float> (0.0f, 48.0f, 0.001f), 0.0f);
-    addBool ("formantShiftOn", "Formant Shift On", false);
-    addFloat ("formantShift", "Formant Shift", NormalisableRange<float> (-24.0f, 24.0f, 0.001f), 0.0f);
-    addFloat ("formantSmear", "Formant Smear", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("ringModOn", "Ring Mod On", false);
-    addFloat ("ringModFreq", "Ring Mod Frequency", NormalisableRange<float> (0.1f, 8000.0f, 0.001f, 0.35f), 220.0f);
-    addFloat ("ringModMix", "Ring Mod Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("frequencyShiftOn", "Frequency Shift On", false);
-    addFloat ("frequencyShiftHz", "Frequency Shift Hz", NormalisableRange<float> (-5000.0f, 5000.0f, 0.001f), 0.0f);
-    addFloat ("frequencyShiftMix", "Frequency Shift Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("inharmonicity", "Inharmonicity", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
-    for (const auto& stemAndName : {
-        std::pair<const char*, const char*> { "formantShift", "Formant Shift" },
-        { "ringMod", "Ring Mod" },
-        { "frequencyShift", "Frequency Shift" },
-        { "pitchRandom", "Pitch Random" },
-        { "pitchQuantize", "Pitch Quantize" },
-    })
-        addModLock (stemAndName.first, stemAndName.second);
 
     layout.group ("glitch", "Time & Glitch");
-    addBool ("stutterOn", "Stutter On", false);
     addFloat ("stutterRate", "Stutter Rate", NormalisableRange<float> (0.25f, 64.0f, 0.001f), 8.0f);
     addFloat ("stutterSize", "Stutter Size", NormalisableRange<float> (1.0f, 1000.0f, 1.0f), 80.0f);
     addFloat ("stutterChance", "Stutter Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("gateChance", "Gate Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
     addFloat ("reverseChance", "Reverse Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("reverseChanceOn", "Reverse Chance On", false);
-    addFloat ("tapeStopAmount", "Tape Stop Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("tapeStopOn", "Tape Stop On", false);
-    addFloat ("tapeStartAmount", "Tape Start Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("scrubSpeed", "Scrub Speed", NormalisableRange<float> (-4.0f, 4.0f, 0.001f), 1.0f);
-    addFloat ("scrubJitter", "Scrub Jitter", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("bufferJumpOn", "Buffer Jump On", false);
-    addFloat ("bufferJumpChance", "Buffer Jump Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("bufferJumpSize", "Buffer Jump Size", NormalisableRange<float> (1.0f, 4000.0f, 1.0f), 250.0f);
-    addBool ("gateOn", "Gate On", false);
-    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
-    for (const auto& stemAndName : {
-        std::pair<const char*, const char*> { "stutter", "Stutter" },
-        { "reverseChance", "Reverse Chance" },
-        { "tapeStop", "Tape Stop" },
-        { "bufferJump", "Buffer Jump" },
-        { "gate", "Gate" },
-    })
-        addModLock (stemAndName.first, stemAndName.second);
 
     layout.group ("destroy", "Lo-Fi & Destroy");
-    addBool ("bitCrushOn", "Bit Crush On", false);
-    addFloat ("bitDepth", "Bit Depth", NormalisableRange<float> (1.0f, 24.0f, 0.001f), 16.0f);
-    addBool ("sampleRateOn", "Sample Rate On", false);
-    addFloat ("sampleRateHz", "Sample Rate Hz", NormalisableRange<float> (250.0f, 48000.0f, 1.0f, 0.45f), 48000.0f);
-    addFloat ("sampleRateMix", "Sample Rate Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("aliasMix", "Alias Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("wavefoldOn", "Wavefold On", false);
-    addFloat ("wavefoldAmount", "Wavefold Amount", NormalisableRange<float> (0.0f, 24.0f, 0.001f), 0.0f);
-    addFloat ("wavefoldSymmetry", "Wavefold Symmetry", NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("rectifyAmount", "Rectify Amount", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("zeroCrossMangle", "Zero Cross Mangle", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("dropoutOn", "Dropout On", false);
-    addFloat ("dropoutChance", "Dropout Chance", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("dropoutLength", "Dropout Length", NormalisableRange<float> (1.0f, 1000.0f, 1.0f), 20.0f);
-    addFloat ("digitalClipping", "Digital Clipping", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addFloat ("speakerBreakup", "Speaker Breakup", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("speakerBreakupOn", "Speaker Breakup On", false);
-    addFloat ("codecCrush", "Codec Crush", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f);
-    addBool ("codecCrushOn", "Codec Crush On", false);
-    layout.group ("locks", "Randomize Locks");   // UI plumbing, not sound
-    for (const auto& stemAndName : {
-        std::pair<const char*, const char*> { "bitCrush", "Bit Crush" },
-        { "sampleRate", "Sample Rate" },
-        { "wavefold", "Wavefold" },
-        { "dropout", "Dropout" },
-        { "codecCrush", "Codec Crush" },
-        { "speakerBreakup", "Speaker Breakup" },
-    })
-        addModLock (stemAndName.first, stemAndName.second);
 
     // Modulation parameters, per modulatable knob. These live in the APVTS so
     // they are automatable AND captured by the .preset files automatically.
@@ -1034,12 +890,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainFreezeProcessor::create
         for (int i = 0; i < id.length(); ++i)
         {
             const auto c = id[i];
-            if (i == 0)                              out << juce::CharacterFunctions::toUpperCase (c);
+            if (i == 0)                                        out << juce::CharacterFunctions::toUpperCase (c);
             else if (juce::CharacterFunctions::isUpperCase (c)) out << ' ' << c;
-            else                                     out << c;
+            else                                               out << c;
         }
         return out;
     };
+
+    // A lock per modulatable knob, keyed the same way the randomizer keys them.
+    // These are the locks the UI actually sets: the old per-machine "<stem>Lock"
+    // parameters were declared for a UI that was never built, did not line up
+    // with the knobs, and nothing ever read them -- so a lock was silently lost
+    // the moment you reloaded the session.
+    layout.group ("locks", "Randomize Locks");
+    for (int i = 0; i < gf::kNumModParams; ++i)
+    {
+        const auto base = juce::String (gf::paramIdString ((gf::ParamId) i));
+        addBool (base + "Lock", prettyName (base) + " Randomize Lock", false);
+    }
+
     for (int i = 0; i < gf::kNumModParams; ++i)
     {
         const auto base = juce::String (gf::paramIdString ((gf::ParamId) i));
@@ -2393,6 +2262,9 @@ void GrainFreezeProcessor::preserveLocked (const std::function<void()>& op)
         const char* id = gf::paramIdString ((gf::ParamId) i);
         if (auto* p = apvts.getParameter (id))
             p->setValueNotifyingHost (apvts.getParameterRange (id).convertTo0to1 (saved[(size_t) i].second));
+        // The lock is a parameter too, and the operation just reset it, so put it
+        // back -- a lock means "never changed except by my own hand".
+        randomizer.setLocked ((gf::ParamId) i, true);
     }
 }
 

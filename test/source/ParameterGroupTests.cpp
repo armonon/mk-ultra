@@ -58,3 +58,52 @@ TEST_CASE ("Every parameter lives in a sensibly sized group", "[params]")
         CHECK (n <= 64);
     }
 }
+
+TEST_CASE ("A randomize lock is a parameter, so it survives a reload", "[params]")
+{
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    auto aOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& a = *aOwner;
+
+    // Every modulatable knob has a lock, keyed the way the randomizer keys it.
+    for (int i = 0; i < gf::kNumModParams; ++i)
+    {
+        const juce::String id = juce::String (gf::paramIdString ((gf::ParamId) i)) + "Lock";
+        INFO (id);
+        CHECK (a.apvts.getParameter (id) != nullptr);
+    }
+
+    a.randomizer.setLocked (gf::ParamId::grainSize, true);
+    CHECK (a.randomizer.isLocked (gf::ParamId::grainSize));
+    CHECK_FALSE (a.randomizer.isLocked (gf::ParamId::density));
+
+    // A locked knob is not touched by Randomize...
+    const float before = a.apvts.getRawParameterValue ("grainSize")->load();
+    a.randomizer.randomize();
+    CHECK (a.apvts.getRawParameterValue ("grainSize")->load() == before);
+
+    // ...and the lock itself comes back with the session.
+    juce::MemoryBlock blob;
+    a.getStateInformation (blob);
+    auto bOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& b = *bOwner;
+    b.setStateInformation (blob.getData(), (int) blob.getSize());
+    CHECK (b.randomizer.isLocked (gf::ParamId::grainSize));
+    CHECK_FALSE (b.randomizer.isLocked (gf::ParamId::density));
+}
+
+TEST_CASE ("A lock survives loading a preset", "[params]")
+{
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    auto procOwner = std::make_unique<GrainFreezeProcessor>();
+    auto& proc = *procOwner;
+
+    fx::setParam (proc, "grainSize", 777.0f);
+    proc.randomizer.setLocked (gf::ParamId::grainSize, true);
+
+    proc.preserveLocked ([&proc] { proc.presets.loadPreset ("Destroyed - Meltdown"); });
+
+    INFO ("grainSize after loading a preset with it locked");
+    CHECK (std::abs (proc.apvts.getRawParameterValue ("grainSize")->load() - 777.0f) < 1.0f);
+    CHECK (proc.randomizer.isLocked (gf::ParamId::grainSize));   // still locked afterwards
+}
